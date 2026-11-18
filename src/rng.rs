@@ -35,3 +35,31 @@ impl SplitMix64 {
         min + (max - min) * self.next_f32()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn same_seed_repeats_sequence_and_different_seeds_diverge() {
+        let mut a = SplitMix64::new(12345);
+        let mut b = SplitMix64::new(12345);
+        let mut c = SplitMix64::new(54321);
+
+        let mut diffs = 0usize;
+        for _ in 0..64 {
+            let va = a.next_u64();
+            let vb = b.next_u64();
+            let vc = c.next_u64();
+            assert_eq!(va, vb);
+            if va != vc {
+                diffs += 1;
+            }
+            let f = a.next_f32();
+            assert!((0.0..1.0).contains(&f));
+            let _ = b.next_f32();
+            let _ = c.next_f32();
+        }
+        assert!(diffs > 60);
+    }
+}
