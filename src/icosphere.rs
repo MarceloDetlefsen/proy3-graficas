@@ -6,6 +6,9 @@
 //! medios por arista proyectados a la esfera unitaria para niveles 0..=5.
 
 use raylib::prelude::Vector3;
+use std::collections::HashMap;
+
+pub const MAX_ICOSPHERE_LEVEL: usize = 5;
 
 #[derive(Clone, Debug)]
 pub struct IcoMesh {
@@ -41,4 +44,55 @@ pub fn base_icosahedron() -> IcoMesh {
     ];
 
     IcoMesh { positions, indices }
+}
+
+fn midpoint_index(
+    a: usize,
+    b: usize,
+    positions: &mut Vec<Vector3>,
+    cache: &mut HashMap<(usize, usize), usize>,
+) -> usize {
+    let key = if a < b { (a, b) } else { (b, a) };
+    if let Some(&idx) = cache.get(&key) {
+        return idx;
+    }
+    let mid = ((positions[a] + positions[b]) * 0.5).normalize();
+    let idx = positions.len();
+    positions.push(mid);
+    cache.insert(key, idx);
+    idx
+}
+
+/// Subdivide cada triángulo en 4 usando caché de puntos medios por arista y
+/// proyectando los nuevos vértices sobre la esfera unitaria.
+pub fn subdivide_icosphere(mesh: &IcoMesh) -> IcoMesh {
+    let mut positions = mesh.positions.clone();
+    let mut indices = Vec::with_capacity(mesh.indices.len() * 4);
+    let mut cache = HashMap::new();
+
+    for tri in mesh.indices.as_chunks::<3>().0 {
+        let (i0, i1, i2) = (tri[0], tri[1], tri[2]);
+        let m01 = midpoint_index(i0, i1, &mut positions, &mut cache);
+        let m12 = midpoint_index(i1, i2, &mut positions, &mut cache);
+        let m20 = midpoint_index(i2, i0, &mut positions, &mut cache);
+
+        indices.extend_from_slice(&[
+            i0, m01, m20,
+            i1, m12, m01,
+            i2, m20, m12,
+            m01, m12, m20,
+        ]);
+    }
+
+    IcoMesh { positions, indices }
+}
+
+/// Construye la icosfera en el nivel de subdivisión `level` (limitado a `0..=5`).
+pub fn icosphere_level(level: usize) -> IcoMesh {
+    let clamped = level.min(MAX_ICOSPHERE_LEVEL);
+    let mut mesh = base_icosahedron();
+    for _ in 0..clamped {
+        mesh = subdivide_icosphere(&mesh);
+    }
+    mesh
 }
