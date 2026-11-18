@@ -36,3 +36,41 @@ impl PhysicsStepper {
         steps
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use raylib::prelude::Vector3;
+
+    fn simulate_trajectory(fps: usize) -> (Vector3, Vector3, usize) {
+        let mut stepper = PhysicsStepper::new();
+        let mut pos = Vector3::zero();
+        let mut vel = Vector3::zero();
+        let accel = Vector3::new(3.5, -1.2, -8.0);
+        let frame_dt = 1.0 / fps as f32 + 1e-6;
+        let mut total_steps = 0usize;
+
+        for _ in 0..fps {
+            total_steps += stepper.step(frame_dt, |dt| {
+                vel += accel * dt;
+                pos += vel * dt;
+            });
+        }
+        (pos, vel, total_steps)
+    }
+
+    #[test]
+    fn same_input_produces_same_trajectory_at_30_60_and_144_fps() {
+        let (p30, v30, s30) = simulate_trajectory(30);
+        let (p60, v60, s60) = simulate_trajectory(60);
+        let (p144, v144, s144) = simulate_trajectory(144);
+
+        assert_eq!(s30, 120);
+        assert_eq!(s60, 120);
+        assert_eq!(s144, 120);
+        assert!((p30 - p60).length() < 1e-5);
+        assert!((p30 - p144).length() < 1e-5);
+        assert!((v30 - v60).length() < 1e-5);
+        assert!((v30 - v144).length() < 1e-5);
+    }
+}
