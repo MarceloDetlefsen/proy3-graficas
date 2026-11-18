@@ -142,6 +142,7 @@ fn render(
     vertex_array: &[vertex::Vertex],
     mode: TriangleMode,
     shader: Shader,
+    backface_culling: bool,
 ) -> FrameSample {
     let t_vtx = std::time::Instant::now();
     let transformed_vertices: Vec<vertex::Vertex> = vertex_array
@@ -161,7 +162,7 @@ fn render(
     let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
     let t_rast = std::time::Instant::now();
-    let fragments = rasterize(&triangles, mode, true);
+    let fragments = rasterize(&triangles, mode, backface_culling);
     let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
     let frag_count = fragments.len();
 
@@ -261,6 +262,7 @@ fn main() {
             &vertex_array,
             TriangleMode::FilledBarycentric,
             options.shader,
+            true,
         );
         if let Some(parent) = options.output.parent() {
             fs::create_dir_all(parent).expect("No se pudo crear el directorio de captura");
@@ -289,6 +291,7 @@ fn main() {
     let mut noise_frequency = 4.0_f32;
     let mut rocky_debug_view = 3_i32;
     let mut light_angle = 0.0_f32;
+    let mut backface_culling = true;
     let orbit_speed = 1.8_f32;
     let light_speed = 1.8_f32;
     let mut perf_stats = PerfStats::new();
@@ -299,6 +302,9 @@ fn main() {
         time += dt;
         if window.is_key_pressed(KeyboardKey::KEY_F3) {
             perf_stats.enabled = !perf_stats.enabled;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_C) {
+            backface_culling = !backface_culling;
         }
         if window.is_key_pressed(KeyboardKey::KEY_W) {
             mode = TriangleMode::Wireframe;
@@ -378,7 +384,14 @@ fn main() {
         let t_clear = std::time::Instant::now();
         framebuffer.clear();
         let clear_ms = t_clear.elapsed().as_secs_f64() * 1000.0;
-        let mut sample = render(&mut framebuffer, &uniforms, &vertex_array, mode, shader);
+        let mut sample = render(
+            &mut framebuffer,
+            &uniforms,
+            &vertex_array,
+            mode,
+            shader,
+            backface_culling,
+        );
         sample.fb_ms += clear_ms;
         if capture_requested {
             let capture_path = next_capture_path();
@@ -387,13 +400,11 @@ fn main() {
         }
         let debug_label = if debug_noise { " | DEBUG FBM" } else { "" };
         let label = format!(
-            "{}{} | Rocky: {} | Luz: ({:.2},{:.2},{:.2}) | Noise freq: {:.2}",
+            "{}{} | Rocky: {} | Cull(C): {} | Noise: {:.2}",
             shader_name(shader),
             debug_label,
             ["altura", "bioma", "grietas", "color"][rocky_debug_view as usize],
-            light_dir.x,
-            light_dir.y,
-            light_dir.z,
+            if backface_culling { "ON" } else { "OFF" },
             noise_frequency,
         );
         let overlay = if perf_stats.enabled {
