@@ -125,6 +125,8 @@ mod tests {
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: 0,
+            normal_mapping: true,
+            debug_normals: false,
             viewport_width: 800,
             viewport_height: 600,
             noise: crate::noise::Noise::new(0),
