@@ -282,9 +282,8 @@ fn height_color(height: f32) -> Vector3 {
     }
 }
 
-pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
+pub fn sample_static_with_height(noise: &Noise, dir: Vector3, height: f32) -> [f32; 7] {
     let p = dir.normalize();
-    let height = height_field(noise, p);
     let sea = sea_mask(noise, p, height);
     let biome = biome_mask(noise, p);
     let crack = crack_mask(noise, p);
@@ -298,34 +297,23 @@ pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
     [albedo.x, albedo.y, albedo.z, height, sea, crack, biome]
 }
 
-fn tangent_pair(p: Vector3) -> (Vector3, Vector3) {
-    let ref_axis = if p.y.abs() < 0.9 {
-        Vector3::new(0.0, 1.0, 0.0)
-    } else {
-        Vector3::new(1.0, 0.0, 0.0)
-    };
-    let t1 = ref_axis.cross(p).normalize();
-    let t2 = p.cross(t1).normalize();
-    (t1, t2)
+pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
+    let p = dir.normalize();
+    let height = height_field(noise, p);
+    sample_static_with_height(noise, p, height)
 }
 
-fn bumped_normal_from_heights(
-    fragment: &Fragment,
-    uniforms: &Uniforms,
-    height: f32,
-    h1: f32,
-    h2: f32,
-) -> Vector3 {
+fn mapped_normal(fragment: &Fragment, uniforms: &Uniforms, tangent_normal: [f32; 3]) -> Vector3 {
+    let n_world = fragment.normal.normalize();
     let p = fragment.object_pos.normalize();
-    let (t1, t2) = tangent_pair(p);
-    let g1 = (h1 - height) / BUMP_DELTA;
-    let g2 = (h2 - height) / BUMP_DELTA;
-    let gradient = (t1 * g1 + t2 * g2) * BUMP_GRADIENT_SCALE;
-    // La altura aumenta en la dirección del gradiente; la normal de una superficie
-    // elevada se inclina contra él. Este signo mantiene las crestas claras hacia la luz.
-    let bump_fade = noise::smoothstep(0.12, 0.48, crate::shaders::surface_mu(fragment, uniforms));
-    let object_normal = (p - gradient * BUMP_STRENGTH * bump_fade).normalize();
-    uniforms.model_matrix.transform_normal(object_normal)
+    let (t_obj, b_obj) = crate::icosphere::spherical_tangent_basis(p, p);
+    let t_world = uniforms.model_matrix.transform_normal(t_obj);
+    let b_world = uniforms.model_matrix.transform_normal(b_obj);
+    let fade = noise::smoothstep(0.10, 0.45, crate::shaders::surface_mu(fragment, uniforms));
+    let nx = tangent_normal[0] * fade;
+    let ny = tangent_normal[1] * fade;
+    let nz = (1.0 - fade) + tangent_normal[2] * fade;
+    (t_world * nx + b_world * ny + n_world * nz).normalize()
 }
 
 fn lit_cloud_color(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
@@ -337,18 +325,30 @@ pub fn shade_from_static(
     fragment: &Fragment,
     uniforms: &Uniforms,
     s: [f32; 7],
-    bump_heights: (f32, f32),
+    tangent_normal: [f32; 3],
 ) -> Vector3 {
     let [r, g, b, height, sea, crack, biome] = s;
+    if uniforms.debug_normals {
+        let normal = if uniforms.normal_mapping && sea <= 0.5 {
+            mapped_normal(fragment, uniforms, tangent_normal)
+        } else {
+            fragment.normal.normalize()
+        };
+        return Vector3::new(
+            normal.x * 0.5 + 0.5,
+            normal.y * 0.5 + 0.5,
+            normal.z * 0.5 + 0.5,
+        );
+    }
     match uniforms.rocky_debug_view {
         1 => Vector3::new(biome, biome, biome),
         2 => Vector3::new(crack, crack, crack),
         3 => {
             let base = Vector3::new(r, g, b);
-            let normal = if sea > 0.5 {
+            let normal = if !uniforms.normal_mapping || sea > 0.5 {
                 fragment.normal.normalize()
             } else {
-                bumped_normal_from_heights(fragment, uniforms, height, bump_heights.0, bump_heights.1)
+                mapped_normal(fragment, uniforms, tangent_normal)
             };
             let diffuse = diffuse_factor(normal, uniforms);
             let mut surface = base * (AMBIENT + (1.0 - AMBIENT) * diffuse);
@@ -377,16 +377,13 @@ pub fn shade_from_static(
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     print_statistics_once(&uniforms.noise);
     let p = fragment.object_pos.normalize();
-    let (t1, t2) = tangent_pair(p);
     if let Some(baked) = uniforms.baked.as_ref() {
-        let s = baked.rocky.sample_dir(p);
-        let h1 = baked.rocky.sample_dir(p + t1 * BUMP_DELTA)[3];
-        let h2 = baked.rocky.sample_dir(p + t2 * BUMP_DELTA)[3];
-        shade_from_static(fragment, uniforms, s, (h1, h2))
+        let (u, v) = crate::surface_map::direction_to_uv(p);
+        let s = baked.rocky.sample_uv(u, v);
+        let tn = baked.rocky_normals.sample_uv(u, v);
+        shade_from_static(fragment, uniforms, s, tn)
     } else {
         let s = sample_static(&uniforms.noise, p);
-        let h1 = height_field(&uniforms.noise, p + t1 * BUMP_DELTA);
-        let h2 = height_field(&uniforms.noise, p + t2 * BUMP_DELTA);
-        shade_from_static(fragment, uniforms, s, (h1, h2))
+        shade_from_static(fragment, uniforms, s, [0.0, 0.0, 1.0])
     }
 }

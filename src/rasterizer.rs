@@ -369,10 +369,14 @@ fn shade_band(
     color_band: &mut [u8],
     default_shader: Shader,
     uniforms: &Uniforms,
+    inv_vp: Option<&crate::math::Mat4>,
 ) -> usize {
     let band_height = tri_id_band.len() / width;
     let y0 = band_idx * TILE_SIZE;
     let mut calls = 0usize;
+    let vp_w = uniforms.viewport_width.max(1) as f32;
+    let vp_h = uniforms.viewport_height.max(1) as f32;
+    let sky_seed = uniforms.noise.seed();
 
     for local_y in 0..band_height {
         let py = (y0 + local_y) as f32 + 0.5;
@@ -381,6 +385,22 @@ fn shade_band(
             let idx = row_offset + x;
             let tri_id = tri_id_band[idx];
             if tri_id == INVALID_TRI_ID {
+                if let Some(inv) = inv_vp {
+                    let dir = crate::sky::view_direction_for_pixel(
+                        x as f32,
+                        (y0 + local_y) as f32,
+                        vp_w,
+                        vp_h,
+                        inv,
+                        uniforms.camera_pos,
+                    );
+                    let sc = crate::sky::sample_sky(dir, sky_seed, uniforms.time);
+                    let c_idx = idx * 4;
+                    color_band[c_idx] = (sc.x.clamp(0.0, 1.0) * 255.0) as u8;
+                    color_band[c_idx + 1] = (sc.y.clamp(0.0, 1.0) * 255.0) as u8;
+                    color_band[c_idx + 2] = (sc.z.clamp(0.0, 1.0) * 255.0) as u8;
+                    color_band[c_idx + 3] = 255;
+                }
                 continue;
             }
             let tri_usize = tri_id as usize;
@@ -428,9 +448,34 @@ pub fn shade_visibility_tiled_materials(
     uniforms: &Uniforms,
     threads: usize,
 ) -> (usize, usize) {
+    shade_visibility_tiled_inner(
+        triangles,
+        materials,
+        framebuffer,
+        default_shader,
+        uniforms,
+        threads,
+        true,
+    )
+}
+
+fn shade_visibility_tiled_inner(
+    triangles: &[ScreenTriangle],
+    materials: &[TriMaterial],
+    framebuffer: &mut Framebuffer,
+    default_shader: Shader,
+    uniforms: &Uniforms,
+    threads: usize,
+    draw_sky: bool,
+) -> (usize, usize) {
     let width = framebuffer.width as usize;
     let band_elems = TILE_SIZE * width;
     let thread_count = threads.max(1);
+    let inv_vp = if draw_sky {
+        (uniforms.projection_matrix * uniforms.view_matrix).inverse()
+    } else {
+        None
+    };
 
     if thread_count == 1 {
         let mut calls = 0usize;
@@ -449,6 +494,7 @@ pub fn shade_visibility_tiled_materials(
                 color_band,
                 default_shader,
                 uniforms,
+                inv_vp.as_ref(),
             );
         }
         return (calls, calls);
@@ -485,6 +531,7 @@ pub fn shade_visibility_tiled_materials(
                         color_band,
                         default_shader,
                         uniforms,
+                        inv_vp.as_ref(),
                     );
                 }
                 total_calls.fetch_add(local_calls, Ordering::Relaxed);
@@ -503,7 +550,7 @@ pub fn shade_visibility_tiled(
     uniforms: &Uniforms,
     threads: usize,
 ) -> (usize, usize) {
-    shade_visibility_tiled_materials(triangles, &[], framebuffer, shader, uniforms, threads)
+    shade_visibility_tiled_inner(triangles, &[], framebuffer, shader, uniforms, threads, false)
 }
 
 #[allow(dead_code)]
@@ -697,6 +744,8 @@ mod tests {
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: 3,
+            normal_mapping: true,
+            debug_normals: false,
             viewport_width: 64,
             viewport_height: 64,
             noise: Noise::new(0),
@@ -754,6 +803,8 @@ mod tests {
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: 3,
+            normal_mapping: true,
+            debug_normals: false,
             viewport_width: 160,
             viewport_height: 140,
             noise: Noise::new(0),
@@ -820,6 +871,8 @@ mod tests {
                 debug_noise: false,
                 noise_frequency: 4.0,
                 rocky_debug_view: 3,
+            normal_mapping: true,
+            debug_normals: false,
                 viewport_width: 160,
                 viewport_height: 120,
                 noise: noise.clone(),

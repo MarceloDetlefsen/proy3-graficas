@@ -18,6 +18,7 @@ mod scene;
 mod shaders;
 mod ship;
 mod sim;
+mod sky;
 mod surface_map;
 mod vertex;
 
@@ -59,6 +60,8 @@ pub struct Uniforms {
     pub debug_noise: bool,
     pub noise_frequency: f32,
     pub rocky_debug_view: i32,
+    pub normal_mapping: bool,
+    pub debug_normals: bool,
     pub viewport_width: i32,
     pub viewport_height: i32,
     pub noise: Noise,
@@ -318,6 +321,8 @@ fn main() {
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: options.view,
+            normal_mapping: true,
+            debug_normals: false,
             viewport_width: internal_width,
             viewport_height: internal_height,
             noise: noise.clone(),
@@ -385,16 +390,28 @@ fn main() {
     let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
     let mut follow_mode = true;
     window.disable_cursor();
-    let bodies = solar_system();
+    let mut bodies = solar_system();
     let icosphere_lods = icosphere::build_icosphere_lods();
+    let mut body_caches: Vec<icosphere::DeformedIcosphereCache> = bodies
+        .iter()
+        .map(|b| {
+            icosphere::DeformedIcosphereCache::new(
+                b.surface.deformation_amplitude,
+                b.surface.noise_frequency,
+            )
+        })
+        .collect();
     let mut body_lods = vec![3_usize; bodies.len()];
     let mut forced_lod: Option<usize> = None;
+    let mut last_rebuild_ms = 0.0_f64;
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
     let mut debug_noise = false;
     let mut noise_frequency = 4.0_f32;
     let mut rocky_debug_view = 3_i32;
+    let mut normal_mapping = true;
+    let mut debug_normals = false;
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
     let mut frustum_culling = true;
@@ -522,17 +539,58 @@ fn main() {
         if window.is_key_pressed(KeyboardKey::KEY_V) {
             rocky_debug_view = (rocky_debug_view + 1) % 4;
         }
+        if window.is_key_pressed(KeyboardKey::KEY_B) {
+            normal_mapping = !normal_mapping;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_Y) {
+            debug_normals = !debug_normals;
+        }
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
         }
         if window.is_key_down(KeyboardKey::KEY_U) {
             light_angle += light_speed * dt;
         }
+        let mut rebuild_surface = false;
         if window.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) {
-            noise_frequency = (noise_frequency - 0.25).max(0.25);
+            noise_frequency = (noise_frequency - 0.5).max(0.5);
+            rebuild_surface = true;
         }
         if window.is_key_pressed(KeyboardKey::KEY_RIGHT_BRACKET) {
-            noise_frequency = (noise_frequency + 0.25).min(20.0);
+            noise_frequency = (noise_frequency + 0.5).min(20.0);
+            rebuild_surface = true;
+        }
+        let mut amp_delta = 0.0_f32;
+        if window.is_key_pressed(KeyboardKey::KEY_COMMA) {
+            amp_delta = -0.03;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_PERIOD) {
+            amp_delta = 0.03;
+        }
+        if amp_delta != 0.0 || rebuild_surface {
+            let t_reb = std::time::Instant::now();
+            for (i, body) in bodies.iter_mut().enumerate() {
+                if matches!(body.shader, Shader::Rocky) {
+                    body.surface.deformation_amplitude =
+                        (body.surface.deformation_amplitude + amp_delta).clamp(0.0, 0.40);
+                    body.surface.max_deformation =
+                        body.radius * body.surface.deformation_amplitude;
+                    body.surface.noise_frequency = noise_frequency;
+                    body_caches[i].invalidate(
+                        body.surface.deformation_amplitude,
+                        body.surface.noise_frequency,
+                    );
+                }
+            }
+            if rebuild_surface {
+                baked = Arc::new(BakedMaps::bake_with_frequency(
+                    &noise,
+                    DEFAULT_BAKE_WIDTH,
+                    DEFAULT_BAKE_HEIGHT,
+                    noise_frequency,
+                ));
+            }
+            last_rebuild_ms = t_reb.elapsed().as_secs_f64() * 1000.0;
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
         if !follow_mode {
@@ -657,6 +715,8 @@ fn main() {
             debug_noise,
             noise_frequency,
             rocky_debug_view,
+            normal_mapping,
+            debug_normals,
             viewport_width: internal_width,
             viewport_height: internal_height,
             noise: noise.clone(),
@@ -693,7 +753,7 @@ fn main() {
                 ),
             };
             body_lods[body_idx] = level;
-            let body_mesh = &icosphere_lods[level];
+            let body_mesh = body_caches[body_idx].get_or_build(level, &noise);
             let body_tris = body_mesh.len() / 3;
             tris_before_cull += body_tris;
             if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
@@ -895,6 +955,18 @@ fn main() {
             tris_before_cull,
             tris_after_cull,
         ));
+        let rocky_amp = bodies
+            .iter()
+            .find(|b| matches!(b.shader, Shader::Rocky))
+            .map_or(0.0, |b| b.surface.deformation_amplitude);
+        overlay.push(format!(
+            "Deform(,/.): Amp={:.2} Freq([/])={:.1} ({:.2} ms) | Norm(B):{} Debug(Y):{}",
+            rocky_amp,
+            noise_frequency,
+            last_rebuild_ms,
+            if normal_mapping { "ON" } else { "OFF" },
+            if debug_normals { "ON" } else { "OFF" },
+        ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
         }
@@ -912,6 +984,8 @@ fn main() {
                 "G           : Activar / desactivar gravedad".to_string(),
                 "L           : Modo control (Auto/Local/Global)".to_string(),
                 "Z / X / M   : Forzar LOD / Frustum / Wireframe".to_string(),
+                ", . / [ ]   : Amplitud / Frecuencia deform.".to_string(),
+                "B / Y       : Normal map / Debug normales".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);

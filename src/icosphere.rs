@@ -5,6 +5,8 @@
 //! hacia afuera (CCW), y lo subdivide recursivamente usando una caché de puntos
 //! medios por arista proyectados a la esfera unitaria para niveles 0..=5.
 
+use crate::noise::Noise;
+use crate::surface_map::planet_height;
 use crate::vertex::Vertex;
 use raylib::prelude::Vector3;
 use std::collections::HashMap;
@@ -107,16 +109,69 @@ pub fn spherical_uv(unit_pos: Vector3) -> [f32; 2] {
     [u, v]
 }
 
+/// Calcula la base tangente `(tangent, bitangent)` ortonormal a `normal` a partir
+/// de la dirección esférica `dir` (tangente de longitud y respaldo en los polos).
+pub fn spherical_tangent_basis(dir: Vector3, normal: Vector3) -> (Vector3, Vector3) {
+    let n = normal.normalize();
+    let lon_raw = Vector3::new(-dir.z, 0.0, dir.x);
+    let t_raw = if lon_raw.length_sqr() > 1e-8 {
+        lon_raw
+    } else if n.x.abs() < 0.9 {
+        Vector3::new(1.0, 0.0, 0.0)
+    } else {
+        Vector3::new(0.0, 0.0, 1.0)
+    };
+    let t_ortho = t_raw - n * n.dot(t_raw);
+    let tangent = if t_ortho.length_sqr() > 1e-8 {
+        t_ortho.normalize()
+    } else {
+        Vector3::new(0.0, 0.0, 1.0).cross(n).normalize()
+    };
+    let bitangent = n.cross(tangent).normalize();
+    (tangent, bitangent)
+}
+
 impl IcoMesh {
+    /// Recalcula normales suaves por vértice promediando las normales de caras adyacentes.
+    pub fn compute_smooth_normals(&self) -> Vec<Vector3> {
+        let mut accum = vec![Vector3::zero(); self.positions.len()];
+        for tri in self.indices.as_chunks::<3>().0 {
+            let p0 = self.positions[tri[0]];
+            let p1 = self.positions[tri[1]];
+            let p2 = self.positions[tri[2]];
+            let face_n = (p1 - p0).cross(p2 - p0);
+            accum[tri[0]] += face_n;
+            accum[tri[1]] += face_n;
+            accum[tri[2]] += face_n;
+        }
+        accum
+            .into_iter()
+            .zip(self.positions.iter())
+            .map(|(n, &p)| {
+                if n.length_sqr() > 1e-12 {
+                    n.normalize()
+                } else {
+                    p.normalize()
+                }
+            })
+            .collect()
+    }
+
     /// Expande la malla indexada en un arreglo de vértices por triángulo con
-    /// normales suaves unitarias y coordenadas esféricas.
+    /// normales suaves recalculadas y coordenadas esféricas.
     pub fn to_vertex_array(&self) -> Vec<Vertex> {
+        let normals = self.compute_smooth_normals();
         let vertices: Vec<Vertex> = self
             .positions
             .iter()
-            .map(|&pos| {
-                let normal = pos.normalize();
-                Vertex::with_uv(normal, normal, spherical_uv(normal))
+            .zip(normals.iter())
+            .map(|(&pos, &normal)| {
+                let dir = pos.normalize();
+                let (tangent, bitangent) = spherical_tangent_basis(dir, normal);
+                let mut v = Vertex::with_uv(pos, normal, spherical_uv(dir));
+                v.tangent = tangent;
+                v.bitangent = bitangent;
+                v
             })
             .collect();
         self.indices
@@ -137,6 +192,77 @@ pub fn build_icosphere_lods() -> Vec<Vec<Vertex>> {
         }
     }
     levels
+}
+
+/// Desplaza cada vértice de la icosfera unitaria en dirección radial según `planet_height`.
+pub fn deform_icosphere(
+    unit_mesh: &IcoMesh,
+    noise: &Noise,
+    amplitude: f32,
+    frequency: f32,
+) -> IcoMesh {
+    if amplitude.abs() <= 1e-6 {
+        return unit_mesh.clone();
+    }
+    let positions = unit_mesh
+        .positions
+        .iter()
+        .map(|&p| {
+            let dir = p.normalize();
+            let h = planet_height(noise, dir, frequency);
+            dir * (1.0 + amplitude * h)
+        })
+        .collect();
+    IcoMesh {
+        positions,
+        indices: unit_mesh.indices.clone(),
+    }
+}
+
+/// Caché perezoso por nivel de subdivisión para mallas deformadas.
+#[derive(Clone, Debug)]
+pub struct DeformedIcosphereCache {
+    unit_meshes: [Option<IcoMesh>; MAX_ICOSPHERE_LEVEL + 1],
+    deformed_arrays: [Option<Vec<Vertex>>; MAX_ICOSPHERE_LEVEL + 1],
+    amplitude: f32,
+    frequency: f32,
+}
+
+impl DeformedIcosphereCache {
+    pub fn new(amplitude: f32, frequency: f32) -> Self {
+        Self {
+            unit_meshes: std::array::from_fn(|_| None),
+            deformed_arrays: std::array::from_fn(|_| None),
+            amplitude,
+            frequency,
+        }
+    }
+
+    pub fn invalidate(&mut self, amplitude: f32, frequency: f32) {
+        self.amplitude = amplitude;
+        self.frequency = frequency;
+        self.deformed_arrays.fill(None);
+    }
+
+    fn ensure_unit_mesh(&mut self, level: usize) -> &IcoMesh {
+        let lvl = level.min(MAX_ICOSPHERE_LEVEL);
+        if self.unit_meshes[lvl].is_none() {
+            self.unit_meshes[lvl] = Some(icosphere_level(lvl));
+        }
+        self.unit_meshes[lvl].as_ref().unwrap()
+    }
+
+    pub fn get_or_build(&mut self, level: usize, noise: &Noise) -> &[Vertex] {
+        let lvl = level.min(MAX_ICOSPHERE_LEVEL);
+        if self.deformed_arrays[lvl].is_none() {
+            let amp = self.amplitude;
+            let freq = self.frequency;
+            let unit = self.ensure_unit_mesh(lvl);
+            let deformed = deform_icosphere(unit, noise, amp, freq);
+            self.deformed_arrays[lvl] = Some(deformed.to_vertex_array());
+        }
+        self.deformed_arrays[lvl].as_deref().unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -173,6 +299,37 @@ mod tests {
             if level < MAX_ICOSPHERE_LEVEL {
                 mesh = subdivide_icosphere(&mesh);
             }
+        }
+    }
+
+    #[test]
+    fn tangent_basis_is_orthonormal_at_equator_midlatitudes_and_poles() {
+        let dirs = [
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(-1.0, 0.0, 0.0),
+            Vector3::new(0.5, 0.6, -0.624).normalize(),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(0.0, -1.0, 0.0),
+        ];
+        for dir in dirs {
+            let (t, b) = spherical_tangent_basis(dir, dir);
+            assert!((t.length() - 1.0).abs() < 1e-5);
+            assert!((b.length() - 1.0).abs() < 1e-5);
+            assert!(t.dot(dir).abs() < 1e-5);
+            assert!(b.dot(dir).abs() < 1e-5);
+            assert!(t.dot(b).abs() < 1e-5);
+            assert!((t.cross(b).dot(dir) - 1.0).abs() < 1e-5);
+        }
+
+        let noise = Noise::new(0);
+        let deformed = deform_icosphere(&icosphere_level(2), &noise, 0.12, 4.0);
+        for v in deformed.to_vertex_array() {
+            assert!((v.tangent.length() - 1.0).abs() < 1e-5);
+            assert!((v.bitangent.length() - 1.0).abs() < 1e-5);
+            assert!(v.tangent.dot(v.normal).abs() < 1e-5);
+            assert!(v.bitangent.dot(v.normal).abs() < 1e-5);
+            assert!(v.tangent.dot(v.bitangent).abs() < 1e-5);
         }
     }
 }

@@ -5,6 +5,7 @@ use raylib::prelude::Vector3;
 /// Generador inmutable de ruido de gradiente 3D en `f32` con tabla de permutación.
 #[derive(Clone, Debug)]
 pub struct Noise {
+    seed: u32,
     perm: [u8; 512],
 }
 
@@ -24,7 +25,11 @@ impl Noise {
         for i in 0..512 {
             perm[i] = p[i & 255];
         }
-        Self { perm }
+        Self { seed, perm }
+    }
+
+    pub fn seed(&self) -> u32 {
+        self.seed
     }
 
     #[inline]
