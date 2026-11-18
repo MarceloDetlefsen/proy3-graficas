@@ -159,6 +159,38 @@ pub fn apply_controls_in_frame(
     ship.velocity += ref_vel;
 }
 
+/// Alinea suavemente el vector `up` de la nave con la normal superficial del
+/// cuerpo cercano sin alterar la dirección `forward` hacia donde apunta el jugador.
+pub fn align_up_to_surface(
+    ship: &mut Ship,
+    mode: NavMode,
+    bodies: &[Body],
+    time: f32,
+    dt: f32,
+) {
+    let NavMode::Local(idx) = mode else {
+        return;
+    };
+    let Some(body) = bodies.get(idx) else {
+        return;
+    };
+    if dt <= 0.0 {
+        return;
+    }
+    let diff = ship.position - body_position_at(body, time);
+    let dist_sq = diff.length_sqr();
+    if dist_sq <= 1e-8 {
+        return;
+    }
+    let target_up = diff * (1.0 / dist_sq.sqrt());
+    let blend = 1.0 - (-2.5 * dt).exp();
+    let candidate = ship.up + (target_up - ship.up) * blend;
+    if ship.forward.cross(candidate).length_sqr() > 1e-6 {
+        ship.up = candidate.normalize();
+        ship.orthonormalize();
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
