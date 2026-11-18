@@ -390,6 +390,7 @@ fn main() {
     let mut rocky_debug_view = 3_i32;
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
+    let frustum_culling = true;
     let res_scales = [2_u32, 3, 1];
     let mut res_scale_idx = 0_usize; // 1/2 por defecto (400x300)
     let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
@@ -655,9 +656,15 @@ fn main() {
         let t_vtx = std::time::Instant::now();
         render_buffers.screen_triangles.clear();
         render_buffers.tri_materials.clear();
+        let vp = uniforms.projection_matrix * uniforms.view_matrix;
+        let frustum = culling::Frustum::from_vp(&vp);
         let sun_pos = body_position_at(&bodies[0], sim_clock.time);
         for body in &bodies {
             let body_pos = body_position_at(body, sim_clock.time);
+            if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
+            {
+                continue;
+            }
             let to_sun = sun_pos - body_pos;
             let body_light = if to_sun.length_sqr() > 1e-6 {
                 to_sun.normalize()
@@ -683,28 +690,30 @@ fn main() {
         }
 
         // Dibujar nave (LOD0)
-        let ship_to_sun = sun_pos - ship.position;
-        let ship_light = if ship_to_sun.length_sqr() > 1e-6 {
-            ship_to_sun.normalize()
-        } else {
-            light_dir
-        };
-        uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
-        let before_ship = render_buffers.screen_triangles.len();
-        append_screen_triangles(
-            &ship_vertex_array,
-            &uniforms,
-            &mut render_buffers.clip_vertices,
-            &mut render_buffers.screen_triangles,
-        );
-        let added_ship = render_buffers.screen_triangles.len() - before_ship;
-        render_buffers.tri_materials.resize(
-            before_ship + added_ship,
-            TriMaterial {
-                shader: Shader::Ship,
-                light_dir: ship_light,
-            },
-        );
+        if !frustum_culling || frustum.intersects_sphere(ship.position, ship.radius * 1.5) {
+            let ship_to_sun = sun_pos - ship.position;
+            let ship_light = if ship_to_sun.length_sqr() > 1e-6 {
+                ship_to_sun.normalize()
+            } else {
+                light_dir
+            };
+            uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
+            let before_ship = render_buffers.screen_triangles.len();
+            append_screen_triangles(
+                &ship_vertex_array,
+                &uniforms,
+                &mut render_buffers.clip_vertices,
+                &mut render_buffers.screen_triangles,
+            );
+            let added_ship = render_buffers.screen_triangles.len() - before_ship;
+            render_buffers.tri_materials.resize(
+                before_ship + added_ship,
+                TriMaterial {
+                    shader: Shader::Ship,
+                    light_dir: ship_light,
+                },
+            );
+        }
         let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
         let (raster_ms, shading_ms, fragments, shader_calls, visible_pixels) = match mode {
