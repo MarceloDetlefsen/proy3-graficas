@@ -253,7 +253,7 @@ fn main() {
 
     let noise = Noise::new(0);
     let bake_start = std::time::Instant::now();
-    let baked = BakedMaps::bake(&noise, DEFAULT_BAKE_WIDTH, DEFAULT_BAKE_HEIGHT);
+    let mut baked = BakedMaps::bake(&noise, DEFAULT_BAKE_WIDTH, DEFAULT_BAKE_HEIGHT);
     println!(
         "Mapas estáticos horneados ({}x{}) en {:.2} ms",
         DEFAULT_BAKE_WIDTH,
@@ -341,6 +341,16 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_C) {
             backface_culling = !backface_culling;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_K) {
+            let t_bake = std::time::Instant::now();
+            baked = BakedMaps::bake(&noise, DEFAULT_BAKE_WIDTH, DEFAULT_BAKE_HEIGHT);
+            println!(
+                "Mapas re-horneados ({}x{}) en {:.2} ms",
+                DEFAULT_BAKE_WIDTH,
+                DEFAULT_BAKE_HEIGHT,
+                t_bake.elapsed().as_secs_f64() * 1000.0
+            );
         }
         if window.is_key_pressed(KeyboardKey::KEY_R) {
             res_scale_idx = (res_scale_idx + 1) % res_scales.len();
