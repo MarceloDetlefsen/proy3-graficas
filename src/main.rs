@@ -4,6 +4,7 @@ mod culling;
 mod fragment;
 mod framebuffer;
 mod icosphere;
+mod lod;
 mod math;
 mod mesh_lod;
 mod nav;
