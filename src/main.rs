@@ -21,6 +21,7 @@ mod ship;
 mod sim;
 mod sky;
 mod surface_map;
+mod surface_scatter;
 mod vertex;
 
 use camera::{Camera, FollowCamera};
