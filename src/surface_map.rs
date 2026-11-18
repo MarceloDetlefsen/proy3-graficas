@@ -87,3 +87,55 @@ impl<const N: usize> EquirectMap<N> {
         self.sample_uv(u, v)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cardinal_directions_round_trip_and_sample_accurately() {
+        let map = EquirectMap::from_fn(128, 64, |dir| [dir.x, dir.y, dir.z]);
+        let cardinals = [
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(-1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(0.0, -1.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(0.0, 0.0, -1.0),
+        ];
+
+        for dir in cardinals {
+            let (u, v) = direction_to_uv(dir);
+            let back = uv_to_direction(u, v);
+            assert!(
+                (back - dir).length() < 1e-5,
+                "Round-trip falló para {dir:?}: {back:?}"
+            );
+
+            let s = map.sample_dir(dir);
+            let sampled = Vector3::new(s[0], s[1], s[2]);
+            assert!(
+                (sampled - dir).length() < 0.08,
+                "Muestreo cardinal falló en {dir:?}: {sampled:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn seam_and_poles_are_continuous_without_jumps() {
+        let map = EquirectMap::from_fn(256, 128, |dir| [dir.x * 0.5 + 0.5, dir.y * 0.5 + 0.5]);
+
+        // Costura en -X (u cruza entre ~1.0 y ~0.0)
+        let a = map.sample_dir(Vector3::new(-1.0, 0.2, 0.001));
+        let b = map.sample_dir(Vector3::new(-1.0, 0.2, -0.001));
+        assert!((a[0] - b[0]).abs() < 0.01 && (a[1] - b[1]).abs() < 0.01);
+
+        // Polos (+Y y -Y)
+        let north_a = map.sample_dir(Vector3::new(0.01, 1.0, 0.0));
+        let north_b = map.sample_dir(Vector3::new(-0.01, 1.0, 0.0));
+        assert!(north_a[0].is_finite() && (north_a[1] - north_b[1]).abs() < 0.01);
+
+        let south = map.sample_dir(Vector3::new(0.0, -1.0, 0.0));
+        assert!(south[0].is_finite() && south[1].is_finite());
+    }
+}
