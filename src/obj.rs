@@ -78,39 +78,37 @@ pub fn load_obj(path: &str) -> io::Result<Obj> {
             "v" => {
                 if let (Some(x_str), Some(y_str), Some(z_str)) =
                     (parts.next(), parts.next(), parts.next())
-                {
-                    if let (Ok(x), Ok(y), Ok(z)) = (
+                    && let (Ok(x), Ok(y), Ok(z)) = (
                         x_str.parse::<f32>(),
                         y_str.parse::<f32>(),
                         z_str.parse::<f32>(),
-                    ) {
-                        vertices.push(Vector3::new(x, y, z));
-                    }
+                    )
+                {
+                    vertices.push(Vector3::new(x, y, z));
                 }
             }
             "vn" => {
                 if let (Some(x_str), Some(y_str), Some(z_str)) =
                     (parts.next(), parts.next(), parts.next())
-                {
-                    if let (Ok(x), Ok(y), Ok(z)) = (
+                    && let (Ok(x), Ok(y), Ok(z)) = (
                         x_str.parse::<f32>(),
                         y_str.parse::<f32>(),
                         z_str.parse::<f32>(),
-                    ) {
-                        source_normals.push(Vector3::new(x, y, z));
-                    }
+                    )
+                {
+                    source_normals.push(Vector3::new(x, y, z));
                 }
             }
             "f" => {
                 let mut face = Vec::new();
                 for part in parts {
                     let vertex_idx_str = part.split('/').next().unwrap_or("");
-                    if let Ok(idx_1based) = vertex_idx_str.parse::<usize>() {
-                        if idx_1based > 0 {
-                            let index = idx_1based - 1;
-                            indices.push(index);
-                            face.push(index);
-                        }
+                    if let Ok(idx_1based) = vertex_idx_str.parse::<usize>()
+                        && idx_1based > 0
+                    {
+                        let index = idx_1based - 1;
+                        indices.push(index);
+                        face.push(index);
                     }
                 }
                 if face.len() >= 3 {
