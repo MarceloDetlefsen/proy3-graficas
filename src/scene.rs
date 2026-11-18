@@ -133,6 +133,25 @@ pub fn solar_system() -> Vec<Body> {
                 max_deformation: 1.1 * 0.04,
             },
         },
+        Body {
+            name: "Abismo",
+            kind: BodyKind::Planet,
+            radius: 1.3,
+            mass: 15.0,
+            orbit_radius: 47.6,
+            orbit_period: 95.0,
+            phase: 2.8,
+            orbit_inclination: -0.05,
+            rotation_period: 50.0,
+            axial_tilt: 0.06,
+            shader: Shader::Abismo,
+            surface: SurfaceParams {
+                seed: 22,
+                noise_frequency: 14.0,
+                deformation_amplitude: 0.015,
+                max_deformation: 1.3 * 0.015,
+            },
+        },
     ]
 }
 
