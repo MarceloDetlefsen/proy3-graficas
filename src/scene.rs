@@ -247,4 +247,19 @@ mod tests {
         assert!((ldir.length() - 1.0).abs() < 1e-5);
         assert!(ldir.dot(sun_pos - zebes_pos) > 0.0);
     }
+
+    #[test]
+    fn gas_giant_tau_ceti_has_orbit_and_animated_bands() {
+        let bodies = solar_system();
+        let tau = &bodies[2];
+        assert_eq!(tau.name, "Tau Ceti");
+        assert!(matches!(tau.shader, Shader::GasGiant));
+        assert!(tau.orbit_radius > 0.0 && tau.orbit_period > 0.0);
+        assert!(tau.rotation_period > 0.0);
+        assert_eq!(tau.surface.deformation_amplitude, 0.0);
+
+        let p0 = body_position_at(tau, 0.0);
+        let p1 = body_position_at(tau, 10.0);
+        assert!((p1 - p0).length() > 1.0);
+    }
 }
