@@ -4,6 +4,13 @@ use raylib::prelude::Vector3;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FaceCorner {
+    pub pos: usize,
+    pub tex: Option<usize>,
+    pub normal: Option<usize>,
+}
+
 #[derive(Debug, Clone)]
 pub struct Obj {
     pub vertices: Vec<Vector3>,
