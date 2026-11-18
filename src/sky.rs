@@ -95,6 +95,56 @@ pub fn sky_star_intensity(dir: Vector3, seed: u32) -> f32 {
     (dim.intensity * 0.65 + bright.intensity * 1.15).clamp(0.0, 1.0)
 }
 
+/// Mapea un valor `t in [0, 1]` a color estelar por temperatura (naranja -> blanco -> azulado).
+pub fn star_temperature_color(t: f32) -> Vector3 {
+    let t = t.clamp(0.0, 1.0);
+    if t < 0.5 {
+        let k = t * 2.0;
+        Vector3::new(
+            1.0,
+            0.72 + (0.98 - 0.72) * k,
+            0.48 + (0.95 - 0.48) * k,
+        )
+    } else {
+        let k = (t - 0.5) * 2.0;
+        Vector3::new(
+            1.0 + (0.68 - 1.0) * k,
+            0.98 + (0.84 - 0.98) * k,
+            0.95 + (1.0 - 0.95) * k,
+        )
+    }
+}
+
+/// Parpadeo suave dependiente del tiempo y del hash de la estrella.
+#[inline]
+pub fn star_twinkle(hash: u32, time: f32) -> f32 {
+    let speed = 1.5 + 2.5 * hash_to_f32(hash ^ (hash >> 11));
+    let phase = std::f32::consts::TAU * hash_to_f32(hash.wrapping_mul(31));
+    0.78 + 0.22 * (time * speed + phase).sin()
+}
+
+/// Evalúa el color final del fondo estelar en `dir` con temperatura y parpadeo.
+pub fn sample_sky(dir: Vector3, seed: u32, time: f32) -> Vector3 {
+    let mut color = SPACE_BG;
+    for (layer_seed, grid, density, radius, gain) in [
+        (seed, 110.0, 0.045, 0.22, 0.75),
+        (seed.wrapping_add(17), 55.0, 0.025, 0.20, 1.25),
+    ] {
+        let star = star_layer_sample(dir, layer_seed, grid, density, radius);
+        if star.intensity > 0.0 {
+            let temp = hash_to_f32(star.hash ^ (star.hash >> 5));
+            let tint = star_temperature_color(temp);
+            let twinkle = star_twinkle(star.hash, time);
+            color += tint * (star.intensity * gain * twinkle);
+        }
+    }
+    Vector3::new(
+        color.x.clamp(0.0, 1.0),
+        color.y.clamp(0.0, 1.0),
+        color.z.clamp(0.0, 1.0),
+    )
+}
+
 /// Reconstruye la dirección unitaria del rayo de vista para el centro del píxel `(x, y)`.
 pub fn view_direction_for_pixel(
     x: f32,
