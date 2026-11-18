@@ -2,6 +2,7 @@ mod camera;
 mod clipping;
 mod fragment;
 mod framebuffer;
+mod icosphere;
 mod math;
 mod mesh_lod;
 mod nav;
