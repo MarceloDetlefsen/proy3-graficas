@@ -221,3 +221,30 @@ pub fn build_model_matrix(obj: &Obj, yaw: f32, pitch: f32, scale: f32) -> Mat4 {
             -model_center.z,
         ))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rocky_planet_zebes_has_orbit_deformation_and_light_direction() {
+        let bodies = solar_system();
+        let sol = &bodies[0];
+        let zebes = &bodies[1];
+        assert!(matches!(sol.shader, Shader::Star));
+        assert_eq!(sol.orbit_radius, 0.0);
+        assert!(sol.rotation_period > 0.0);
+
+        assert_eq!(zebes.name, "Zebes");
+        assert!(matches!(zebes.shader, Shader::Rocky));
+        assert!(zebes.orbit_radius > 0.0 && zebes.orbit_period > 0.0);
+        assert!(zebes.surface.deformation_amplitude > 0.0);
+        assert!(effective_radius(zebes) > zebes.radius);
+
+        let sun_pos = body_position_at(sol, 5.0);
+        let zebes_pos = body_position_at(zebes, 5.0);
+        let ldir = body_light_dir(zebes_pos, sun_pos, Vector3::new(0.0, 1.0, 0.0));
+        assert!((ldir.length() - 1.0).abs() < 1e-5);
+        assert!(ldir.dot(sun_pos - zebes_pos) > 0.0);
+    }
+}
