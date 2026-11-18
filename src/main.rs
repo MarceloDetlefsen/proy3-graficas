@@ -10,6 +10,7 @@ mod primitive;
 mod rasterizer;
 mod scene;
 mod shaders;
+mod sim;
 mod surface_map;
 mod vertex;
 
