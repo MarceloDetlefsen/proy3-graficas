@@ -172,3 +172,80 @@ impl Mul<Mat4> for Mat4 {
         self.mul_mat4(&rhs)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::f32::consts::FRAC_PI_2;
+
+    fn assert_vec4_near(a: Vec4, b: Vec4, eps: f32) {
+        assert!(
+            (a.x - b.x).abs() <= eps
+                && (a.y - b.y).abs() <= eps
+                && (a.z - b.z).abs() <= eps
+                && (a.w - b.w).abs() <= eps,
+            "esperado {:?}, obtenido {:?}",
+            b,
+            a
+        );
+    }
+
+    #[test]
+    fn identity_preserves_vector_and_matrix() {
+        let id = Mat4::identity();
+        let v = Vec4::new(3.0, -2.0, 5.0, 1.0);
+        assert_vec4_near(id * v, v, 1e-6);
+
+        let t = Mat4::translation(Vector3::new(1.0, 2.0, 3.0));
+        assert_eq!(id * t, t);
+        assert_eq!(t * id, t);
+    }
+
+    #[test]
+    fn translation_moves_point_but_not_direction() {
+        let t = Mat4::translation(Vector3::new(4.0, -5.0, 6.0));
+        let point = Vec4::from_point(Vector3::new(1.0, 2.0, 3.0));
+        let dir = Vec4::from_dir(Vector3::new(1.0, 2.0, 3.0));
+
+        assert_vec4_near(t * point, Vec4::new(5.0, -3.0, 9.0, 1.0), 1e-6);
+        assert_vec4_near(t * dir, dir, 1e-6);
+    }
+
+    #[test]
+    fn rotations_follow_right_hand_rule() {
+        let rx = Mat4::rotation_x(FRAC_PI_2);
+        let ry = Mat4::rotation_y(FRAC_PI_2);
+        let rz = Mat4::rotation_z(FRAC_PI_2);
+
+        // +Y rotado +90° alrededor de +X va hacia +Z
+        assert_vec4_near(
+            rx * Vec4::from_point(Vector3::new(0.0, 1.0, 0.0)),
+            Vec4::new(0.0, 0.0, 1.0, 1.0),
+            1e-6,
+        );
+        // +Z rotado +90° alrededor de +Y va hacia +X
+        assert_vec4_near(
+            ry * Vec4::from_point(Vector3::new(0.0, 0.0, 1.0)),
+            Vec4::new(1.0, 0.0, 0.0, 1.0),
+            1e-6,
+        );
+        // +X rotado +90° alrededor de +Z va hacia +Y
+        assert_vec4_near(
+            rz * Vec4::from_point(Vector3::new(1.0, 0.0, 0.0)),
+            Vec4::new(0.0, 1.0, 0.0, 1.0),
+            1e-6,
+        );
+    }
+
+    #[test]
+    fn composition_applies_scale_then_rotation_then_translation() {
+        let s = Mat4::scale(Vector3::new(2.0, 2.0, 2.0));
+        let r = Mat4::rotation_z(FRAC_PI_2);
+        let t = Mat4::translation(Vector3::new(10.0, 0.0, 0.0));
+        let m = t * r * s;
+
+        let p = Vec4::from_point(Vector3::new(1.0, 0.0, 0.0));
+        // Escala (2,0,0) -> rota Z 90° (0,2,0) -> traslada (10,2,0)
+        assert_vec4_near(m * p, Vec4::new(10.0, 2.0, 0.0, 1.0), 1e-6);
+    }
+}
