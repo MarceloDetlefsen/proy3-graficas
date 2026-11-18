@@ -250,7 +250,8 @@ pub fn load_obj_from_reader<R: BufRead>(reader: R) -> io::Result<Obj> {
 
 #[cfg(test)]
 mod tests {
-    use super::load_obj;
+    use super::{load_obj, load_obj_from_reader};
+    use raylib::prelude::Vector3;
 
     #[test]
     fn sphere_counts_and_smooth_normals_are_valid() {
@@ -264,5 +265,57 @@ mod tests {
                 .iter()
                 .all(|&c| (obj.corner_normal(c).length() - 1.0).abs() <= 1e-4)
         );
+    }
+
+    #[test]
+    fn parses_face_formats_negative_indices_ngons_and_per_corner_normals() {
+        let data = "\
+v 0 0 0
+v 1 0 0
+v 1 1 0
+v 0 1 0
+v 0.5 2 0
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.0 1.0
+vn 0 0 1
+vn 0 1 0
+# formato v/vt/vn en quad (2 triángulos)
+f 1/1/1 2/2/1 3/3/1 4/4/1
+# formato v//vn con índices negativos y distinta normal en vértice 1
+f -5//-1 -4//-1 -3//-1
+# formato v/vt y v puro en pentágono (3 triángulos)
+f 1/1 2/2 3 4/4 5
+";
+        let obj = load_obj_from_reader(std::io::Cursor::new(data.as_bytes()))
+            .expect("OBJ sintético debe cargar");
+
+        // 2 tris (quad) + 1 tri + 3 tris (pentágono) = 6 triángulos = 18 esquinas
+        assert_eq!(obj.corner_indices.len(), 18);
+        assert_eq!(obj.indices.len(), 18);
+        assert_eq!(obj.texcoords.len(), 4);
+        assert_eq!(obj.source_normals.len(), 2);
+
+        // Quad triangulado en abanico: [0,1,2] y [0,2,3]
+        assert_eq!(obj.indices[0..6], [0, 1, 2, 0, 2, 3]);
+        assert_eq!(obj.corner_indices[0].tex, Some(0));
+        assert_eq!(obj.corner_indices[0].normal, Some(0));
+
+        // Segundo triángulo usa índices negativos (-5 -> 0, -4 -> 1, -3 -> 2, vn -1 -> 1)
+        assert_eq!(obj.indices[6..9], [0, 1, 2]);
+        assert_eq!(obj.corner_indices[6].tex, None);
+        assert_eq!(obj.corner_indices[6].normal, Some(1));
+        assert!(
+            (obj.corner_normal(obj.corner_indices[0]) - Vector3::new(0.0, 0.0, 1.0)).length()
+                < 1e-5
+        );
+        assert!(
+            (obj.corner_normal(obj.corner_indices[6]) - Vector3::new(0.0, 1.0, 0.0)).length()
+                < 1e-5
+        );
+
+        // Pentágono: 3 triángulos en abanico [0,1,2], [0,2,3], [0,3,4]
+        assert_eq!(obj.indices[9..18], [0, 1, 2, 0, 2, 3, 0, 3, 4]);
     }
 }
