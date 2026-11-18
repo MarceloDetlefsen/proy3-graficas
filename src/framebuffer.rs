@@ -26,8 +26,8 @@ impl Framebuffer {
             background_color.b,
             background_color.a,
         ];
-        for px in color_pixels.chunks_exact_mut(4) {
-            px.copy_from_slice(&bg);
+        for px in color_pixels.as_chunks_mut::<4>().0 {
+            *px = bg;
         }
 
         Self {
@@ -42,19 +42,16 @@ impl Framebuffer {
     }
 
     pub fn clear(&mut self) {
-        let len = (self.width * self.height) as usize;
-        let mut next = vec![0u8; len * 4];
         let bg = [
             self.background_color.r,
             self.background_color.g,
             self.background_color.b,
             self.background_color.a,
         ];
-        for px in next.chunks_exact_mut(4) {
-            px.copy_from_slice(&bg);
+        for px in self.color_pixels.as_chunks_mut::<4>().0 {
+            *px = bg;
         }
-        self.color_pixels = next;
-        self.depth_buffer = vec![f32::INFINITY; len];
+        self.depth_buffer.fill(f32::INFINITY);
     }
 
     pub fn set_pixel(&mut self, x: i32, y: i32, color: Color) {
