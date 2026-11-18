@@ -26,8 +26,8 @@ pub const WARP3_AMP: f32 = 0.055;
 pub const PATTERN_LOW: f32 = 0.18;
 // Percentil alto del patrón usado para expandir el contraste a [0,1].
 pub const PATTERN_HIGH: f32 = 0.82;
-// Centro normalizado del vórtice, ubicado hacia el hemisferio frontal (-z).
-pub const VORTEX_CENTER: [f32; 3] = [-0.22, -0.22, -0.95];
+// Centro normalizado del vórtice, ubicado hacia el hemisferio frontal (+z).
+pub const VORTEX_CENTER: [f32; 3] = [-0.22, -0.22, 0.95];
 // Radio angular aproximado del gran vórtice naranja.
 pub const VORTEX_RADIUS: f32 = 0.60;
 // Radio de influencia de la rotación sobre las bandas vecinas.
