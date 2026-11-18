@@ -28,9 +28,7 @@ use rasterizer::{
     shade_visibility_tiled_materials,
 };
 use raylib::prelude::*;
-use scene::{
-    body_position_at, body_static_model_matrix, build_model_matrix, solar_system,
-};
+use scene::{body_model_matrix_at, body_position_at, build_model_matrix, solar_system};
 use shaders::{Shader, shader_name};
 use sim::SimClock;
 use surface_map::{BakedMaps, DEFAULT_BAKE_HEIGHT, DEFAULT_BAKE_WIDTH};
@@ -506,7 +504,7 @@ fn main() {
             } else {
                 light_dir
             };
-            uniforms.model_matrix = body_static_model_matrix(&obj, body);
+            uniforms.model_matrix = body_model_matrix_at(&obj, body, sim_clock.time);
             let before = render_buffers.screen_triangles.len();
             append_screen_triangles(
                 &vertex_array,

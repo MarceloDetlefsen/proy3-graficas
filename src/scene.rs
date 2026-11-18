@@ -127,7 +127,7 @@ pub fn body_static_position(body: &Body) -> Vector3 {
     )
 }
 
-pub fn body_static_model_matrix(obj: &Obj, body: &Body) -> Mat4 {
+pub fn body_model_matrix_at(obj: &Obj, body: &Body, time: f32) -> Mat4 {
     let (min, max) = obj.bounds();
     let max_extent = (max.x - min.x)
         .max(max.y - min.y)
@@ -135,9 +135,15 @@ pub fn body_static_model_matrix(obj: &Obj, body: &Body) -> Mat4 {
         .max(1e-4);
     let unit_scale = (body.radius * 2.0) / max_extent;
     let center = (min + max) * 0.5;
-    let pos = body_static_position(body);
+    let pos = body_position_at(body, time);
+    let spin = if body.rotation_period.abs() > 1e-6 {
+        std::f32::consts::TAU * (time / body.rotation_period)
+    } else {
+        0.0
+    };
     Mat4::translation(pos)
         * Mat4::rotation_z(body.axial_tilt)
+        * Mat4::rotation_y(spin)
         * Mat4::scale(Vector3::new(unit_scale, unit_scale, unit_scale))
         * Mat4::translation(Vector3::new(-center.x, -center.y, -center.z))
 }
