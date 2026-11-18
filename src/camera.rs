@@ -41,6 +41,7 @@ pub struct FollowCamera {
     pub distance: f32,
     pub height: f32,
     pub look_ahead: f32,
+    pub stiffness: f32,
     pub current_pos: Vector3,
     pub current_target: Vector3,
     pub current_up: Vector3,
@@ -53,6 +54,7 @@ impl FollowCamera {
             distance,
             height,
             look_ahead: 4.0,
+            stiffness: 8.0,
             current_pos: pos,
             current_target: target,
             current_up: up,
@@ -70,6 +72,15 @@ impl FollowCamera {
         (pos, target, ship.up)
     }
 
+    pub fn update(&mut self, ship: &Ship, dt: f32) {
+        let (desired_pos, desired_target, desired_up) =
+            Self::desired_pose_raw(ship, self.distance, self.height, self.look_ahead);
+        let alpha = 1.0 - (-self.stiffness * dt.max(0.0)).exp();
+        self.current_pos += (desired_pos - self.current_pos) * alpha;
+        self.current_target += (desired_target - self.current_target) * alpha;
+        self.current_up = (self.current_up + (desired_up - self.current_up) * alpha).normalize();
+    }
+
     pub fn snap(&mut self, ship: &Ship) {
         let (pos, target, up) =
             Self::desired_pose_raw(ship, self.distance, self.height, self.look_ahead);
@@ -78,7 +89,7 @@ impl FollowCamera {
         self.current_up = up;
     }
 
-    pub fn to_camera(&self, fov_y: f32, near: f32, far: f32) -> Camera {
+    pub fn to_camera(self, fov_y: f32, near: f32, far: f32) -> Camera {
         Camera {
             position: self.current_pos,
             target: self.current_target,
