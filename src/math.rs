@@ -155,6 +155,36 @@ impl Mat4 {
         )
         .normalize()
     }
+
+    pub fn look_at(eye: Vector3, target: Vector3, up: Vector3) -> Self {
+        let forward = (target - eye).normalize();
+        let right = forward.cross(up).normalize();
+        let camera_up = right.cross(forward);
+
+        Self::from_cols(
+            [right.x, camera_up.x, -forward.x, 0.0],
+            [right.y, camera_up.y, -forward.y, 0.0],
+            [right.z, camera_up.z, -forward.z, 0.0],
+            [
+                -right.dot(eye),
+                -camera_up.dot(eye),
+                forward.dot(eye),
+                1.0,
+            ],
+        )
+    }
+
+    pub fn perspective(fov_y_rad: f32, aspect: f32, near: f32, far: f32) -> Self {
+        let focal = 1.0 / (fov_y_rad * 0.5).tan();
+        let inv_range = 1.0 / (near - far);
+
+        Self::from_cols(
+            [focal / aspect, 0.0, 0.0, 0.0],
+            [0.0, focal, 0.0, 0.0],
+            [0.0, 0.0, (far + near) * inv_range, -1.0],
+            [0.0, 0.0, 2.0 * far * near * inv_range, 0.0],
+        )
+    }
 }
 
 impl Mul<Vec4> for Mat4 {
