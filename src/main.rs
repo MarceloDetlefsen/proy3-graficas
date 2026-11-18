@@ -723,7 +723,7 @@ fn main() {
             }
         });
 
-        cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
+        cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 220.0);
 
         let aspect = internal_width as f32 / internal_height as f32;
         let cam = if follow_mode {

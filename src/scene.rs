@@ -209,6 +209,25 @@ pub fn solar_system() -> Vec<Body> {
                 max_deformation: 1.2 * 0.02,
             },
         },
+        Body {
+            name: "Fundido",
+            kind: BodyKind::Planet,
+            radius: 1.0,
+            mass: 9.0,
+            orbit_radius: 115.6,
+            orbit_period: 210.0,
+            phase: 5.3,
+            orbit_inclination: -0.06,
+            rotation_period: 45.0,
+            axial_tilt: 0.08,
+            shader: Shader::Fundido,
+            surface: SurfaceParams {
+                seed: 66,
+                noise_frequency: 3.0,
+                deformation_amplitude: 0.12,
+                max_deformation: 1.0 * 0.12,
+            },
+        },
     ]
 }
 
