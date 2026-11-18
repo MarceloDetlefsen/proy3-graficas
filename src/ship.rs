@@ -19,6 +19,15 @@ pub struct Ship {
     pub up: Vector3,
     pub scale: f32,
     pub radius: f32,
+    pub max_accel: f32,
+    pub boost_multiplier: f32,
+    pub max_speed: f32,
+    pub damping: f32,
+    pub brake_damping: f32,
+    pub angular_velocity: Vector3,
+    pub angular_accel: f32,
+    pub angular_damping: f32,
+    pub max_angular_speed: f32,
 }
 
 fn rotate_around_axis(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
@@ -37,7 +46,76 @@ impl Ship {
             up: Vector3::new(0.0, 1.0, 0.0),
             scale: 0.7,
             radius: 0.7,
+            max_accel: 12.0,
+            boost_multiplier: 2.2,
+            max_speed: 18.0,
+            damping: 0.45,
+            brake_damping: 4.5,
+            angular_velocity: Vector3::zero(),
+            angular_accel: 7.5,
+            angular_damping: 5.5,
+            max_angular_speed: 2.4,
         }
+    }
+
+    /// Aplica empuje progresivo hacia adelante (`throttle > 0`) o atrás (`throttle < 0`)
+    /// limitando la aceleración y la velocidad máxima resultante.
+    pub fn apply_thrust(&mut self, throttle: f32, boost: bool, dt: f32) {
+        let t = throttle.clamp(-1.0, 1.0);
+        if t.abs() <= 1e-6 || dt <= 0.0 {
+            return;
+        }
+        let mult = if boost { self.boost_multiplier } else { 1.0 };
+        self.velocity += self.forward * (t * self.max_accel * mult * dt);
+        let speed_limit = self.max_speed * mult;
+        let speed_sq = self.velocity.length_sqr();
+        if speed_sq > speed_limit * speed_limit {
+            self.velocity = self.velocity.normalize() * speed_limit;
+        }
+    }
+
+    /// Aplica amortiguación progresiva a la velocidad lineal, reforzada al frenar.
+    pub fn apply_damping(&mut self, braking: bool, dt: f32) {
+        if dt <= 0.0 {
+            return;
+        }
+        let rate = if braking { self.brake_damping } else { self.damping }.max(0.0);
+        let factor = (-rate * dt).exp();
+        self.velocity *= factor;
+        if braking && self.velocity.length_sqr() < 1e-6 {
+            self.velocity = Vector3::zero();
+        }
+    }
+
+    /// Acumula velocidad angular en cabeceo, guiñada y alabeo con amortiguación y tope.
+    pub fn apply_angular_input(&mut self, pitch_in: f32, yaw_in: f32, roll_in: f32, dt: f32) {
+        if dt <= 0.0 {
+            return;
+        }
+        self.angular_velocity.x += pitch_in.clamp(-1.0, 1.0) * self.angular_accel * dt;
+        self.angular_velocity.y += yaw_in.clamp(-1.0, 1.0) * self.angular_accel * dt;
+        self.angular_velocity.z += roll_in.clamp(-1.0, 1.0) * self.angular_accel * dt;
+
+        let factor = (-self.angular_damping.max(0.0) * dt).exp();
+        self.angular_velocity *= factor;
+
+        let cap = self.max_angular_speed;
+        self.angular_velocity.x = self.angular_velocity.x.clamp(-cap, cap);
+        self.angular_velocity.y = self.angular_velocity.y.clamp(-cap, cap);
+        self.angular_velocity.z = self.angular_velocity.z.clamp(-cap, cap);
+    }
+
+    /// Integra posición y orientación (Euler semi-implícito) y re-ortonormaliza la base.
+    pub fn integrate_pose(&mut self, dt: f32) {
+        if dt <= 0.0 {
+            return;
+        }
+        self.position += self.velocity * dt;
+        self.rotate_local(
+            self.angular_velocity.y * dt,
+            self.angular_velocity.x * dt,
+            self.angular_velocity.z * dt,
+        );
     }
 
     pub fn orthonormalize(&mut self) {

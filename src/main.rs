@@ -4,9 +4,11 @@ mod fragment;
 mod framebuffer;
 mod math;
 mod mesh_lod;
+mod nav;
 mod noise;
 mod obj;
 mod perf;
+mod physics;
 mod primitive;
 mod rasterizer;
 mod scene;
@@ -364,6 +366,11 @@ fn main() {
     let ship_vertex_array: Vec<vertex::Vertex> =
         ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
     let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
+    let mut physics_stepper = physics::PhysicsStepper::new();
+    let mut nav_state = nav::NavState::new();
+    let mut gravity_enabled = true;
+    let mut gravity_mag = 0.0_f32;
+    let mut show_help = false;
     let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
     let mut follow_mode = true;
     window.disable_cursor();
@@ -412,8 +419,17 @@ fn main() {
         if window.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
             follow_cam.recenter();
         }
-        if window.is_key_pressed(KeyboardKey::KEY_SPACE) {
+        if window.is_key_pressed(KeyboardKey::KEY_TAB) {
             sim_clock.toggle_pause();
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_H) {
+            show_help = !show_help;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_G) {
+            gravity_enabled = !gravity_enabled;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_L) {
+            nav_state.cycle_override();
         }
         if window.is_key_pressed(KeyboardKey::KEY_MINUS) {
             time_scale_idx = time_scale_idx.saturating_sub(1);
@@ -478,7 +494,7 @@ fn main() {
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
         }
-        if window.is_key_down(KeyboardKey::KEY_L) {
+        if window.is_key_down(KeyboardKey::KEY_U) {
             light_angle += light_speed * dt;
         }
         if window.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) {
@@ -488,56 +504,101 @@ fn main() {
             noise_frequency = (noise_frequency + 0.25).min(20.0);
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
-        if window.is_key_down(KeyboardKey::KEY_LEFT) {
-            cam_yaw -= orbit_speed * dt;
+        if !follow_mode {
+            if window.is_key_down(KeyboardKey::KEY_LEFT) {
+                cam_yaw -= orbit_speed * dt;
+            }
+            if window.is_key_down(KeyboardKey::KEY_RIGHT) {
+                cam_yaw += orbit_speed * dt;
+            }
+            if window.is_key_down(KeyboardKey::KEY_UP) {
+                cam_pitch = (cam_pitch + orbit_speed * dt).min(1.5);
+            }
+            if window.is_key_down(KeyboardKey::KEY_DOWN) {
+                cam_pitch = (cam_pitch - orbit_speed * dt).max(-1.5);
+            }
         }
-        if window.is_key_down(KeyboardKey::KEY_RIGHT) {
-            cam_yaw += orbit_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_UP) {
-            cam_pitch = (cam_pitch + orbit_speed * dt).min(1.5);
-        }
-        if window.is_key_down(KeyboardKey::KEY_DOWN) {
-            cam_pitch = (cam_pitch - orbit_speed * dt).max(-1.5);
-        }
-        // Controles provisionales de teclado para la nave (dependientes de dt).
-        let ship_speed = 10.0_f32;
-        let turn_speed = 1.8_f32;
+
+        // Controles de vuelo con paso de tiempo fijo.
+        let mut throttle = 0.0_f32;
         if window.is_key_down(KeyboardKey::KEY_W) {
-            ship.position += ship.forward * (ship_speed * dt);
+            throttle += 1.0;
         }
         if window.is_key_down(KeyboardKey::KEY_S) {
-            ship.position -= ship.forward * (ship_speed * dt);
+            throttle -= 1.0;
         }
+        let boost = window.is_key_down(KeyboardKey::KEY_LEFT_SHIFT);
+        let braking = window.is_key_down(KeyboardKey::KEY_SPACE);
+
         let mut yaw_in = 0.0_f32;
         let mut pitch_in = 0.0_f32;
         let mut roll_in = 0.0_f32;
-        if window.is_key_down(KeyboardKey::KEY_A) {
-            yaw_in += turn_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_D) {
-            yaw_in -= turn_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_Z) {
-            pitch_in += turn_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_X) {
-            pitch_in -= turn_speed * dt;
+        if follow_mode {
+            if window.is_key_down(KeyboardKey::KEY_LEFT) {
+                yaw_in += 1.0;
+            }
+            if window.is_key_down(KeyboardKey::KEY_RIGHT) {
+                yaw_in -= 1.0;
+            }
+            if window.is_key_down(KeyboardKey::KEY_UP) {
+                pitch_in += 1.0;
+            }
+            if window.is_key_down(KeyboardKey::KEY_DOWN) {
+                pitch_in -= 1.0;
+            }
+            let mouse_delta = window.get_mouse_delta();
+            yaw_in = (yaw_in - mouse_delta.x * 0.04).clamp(-1.0, 1.0);
+            pitch_in = (pitch_in - mouse_delta.y * 0.04).clamp(-1.0, 1.0);
         }
         if window.is_key_down(KeyboardKey::KEY_Q) {
-            roll_in -= turn_speed * dt;
+            roll_in -= 1.0;
         }
         if window.is_key_down(KeyboardKey::KEY_E) {
-            roll_in += turn_speed * dt;
+            roll_in += 1.0;
         }
-        ship.rotate_local(yaw_in, pitch_in, roll_in);
+
+        let mut collision_body: Option<usize> = None;
+        let controls = nav::FlightControls {
+            throttle,
+            boost,
+            braking,
+        };
+        physics_stepper.step(dt, |sub_dt| {
+            nav_state.update_mode(ship.position, &bodies, sim_clock.time);
+            nav::apply_controls_in_frame(
+                &mut ship,
+                nav_state.mode,
+                &bodies,
+                sim_clock.time,
+                controls,
+                sub_dt,
+            );
+            let (_, turn_scale) =
+                nav::local_flight_scales(ship.position, nav_state.mode, &bodies, sim_clock.time);
+            ship.apply_angular_input(
+                pitch_in * turn_scale,
+                yaw_in * turn_scale,
+                roll_in * turn_scale,
+                sub_dt,
+            );
+            gravity_mag = physics::integrate_ship_with_gravity(
+                &mut ship,
+                &bodies,
+                sim_clock.time,
+                sub_dt,
+                gravity_enabled,
+            );
+            nav::align_up_to_surface(&mut ship, nav_state.mode, &bodies, sim_clock.time, sub_dt);
+            if let Some(idx) = physics::resolve_body_collisions(&mut ship, &bodies, sim_clock.time)
+            {
+                collision_body = Some(idx);
+            }
+        });
 
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
 
         let aspect = internal_width as f32 / internal_height as f32;
         let cam = if follow_mode {
-            let delta = window.get_mouse_delta();
-            follow_cam.apply_mouse_look(delta.x, delta.y, 0.003);
             follow_cam.update(&ship, dt);
             follow_cam.to_camera(45.0_f32.to_radians(), 0.1, 300.0)
         } else {
@@ -687,19 +748,57 @@ fn main() {
             println!("Captura guardada en {}", capture_path.display());
         }
         let label = format!(
-            "Sistema Solar ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Cull(C): {}",
+            "Sistema Solar ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Ayuda(H)",
             bodies.len(),
             sim_clock.time,
             sim_clock.scale,
             if sim_clock.paused { " PAUSA" } else { "" },
             if follow_mode { "Seguir" } else { "Libre" },
-            if backface_culling { "ON" } else { "OFF" },
         );
-        let overlay = if perf_stats.enabled {
-            perf_stats.overlay_lines()
-        } else {
-            Vec::new()
+        let mode_str = match nav_state.mode {
+            nav::NavMode::Global => "Global".to_string(),
+            nav::NavMode::Local(idx) => format!("Local({})", bodies[idx].name),
         };
+        let override_str = match nav_state.override_mode {
+            nav::NavOverride::Auto => "Auto",
+            nav::NavOverride::ForceLocal => "ForzarLocal",
+            nav::NavOverride::ForceGlobal => "ForzarGlobal",
+        };
+        let alt_str = match nav_state.nearest {
+            Some(n) => format!("{:.2} u ({})", n.altitude.max(0.0), bodies[n.body_index].name),
+            None => "--".to_string(),
+        };
+        let mut overlay = Vec::new();
+        overlay.push(format!(
+            "Vel: {:.2} u/s | Gravedad(G): {} ({:.2} u/s^2)",
+            ship.velocity.length(),
+            if gravity_enabled { "ON" } else { "OFF" },
+            gravity_mag,
+        ));
+        overlay.push(format!(
+            "Modo(L): {} [{}] | Altitud: {}",
+            mode_str, override_str, alt_str
+        ));
+        if let Some(idx) = collision_body {
+            overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
+        }
+        if perf_stats.enabled {
+            overlay.extend(perf_stats.overlay_lines());
+        }
+        if show_help {
+            overlay.extend([
+                "--- Controles de vuelo (H para cerrar) ---".to_string(),
+                "W / S       : Empuje adelante / atras".to_string(),
+                "Shift       : Impulso (boost)".to_string(),
+                "Espacio     : Frenado progresivo".to_string(),
+                "Mouse/Flech.: Cabeceo y guinada".to_string(),
+                "Q / E       : Alabeo (roll)".to_string(),
+                "G           : Activar / desactivar gravedad".to_string(),
+                "L           : Modo control (Auto/Local/Global)".to_string(),
+                "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
+                "Tab / - =   : Pausa / Escala de tiempo".to_string(),
+            ]);
+        }
         let t_pres = std::time::Instant::now();
         framebuffer.draw_in_window(&mut window, &thread, &label, &overlay);
         sample.present_ms = t_pres.elapsed().as_secs_f64() * 1000.0;
