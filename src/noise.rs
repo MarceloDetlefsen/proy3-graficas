@@ -105,6 +105,24 @@ impl Noise {
 
         (lerp(y1, y2, w) * 0.5 + 0.5).clamp(0.0, 1.0)
     }
+
+    pub fn fbm(&self, p: Vector3, octaves: usize, lacunarity: f32, gain: f32) -> f32 {
+        fractal(octaves, lacunarity, gain, |frequency| {
+            self.noise3(p * frequency)
+        })
+    }
+
+    pub fn ridged(&self, p: Vector3, octaves: usize, lacunarity: f32, gain: f32) -> f32 {
+        fractal(octaves, lacunarity, gain, |frequency| {
+            1.0 - (self.noise3(p * frequency) * 2.0 - 1.0).abs()
+        })
+    }
+
+    pub fn turbulence(&self, p: Vector3, octaves: usize, lacunarity: f32, gain: f32) -> f32 {
+        fractal(octaves, lacunarity, gain, |frequency| {
+            (self.noise3(p * frequency) * 2.0 - 1.0).abs()
+        })
+    }
 }
 
 static NOISE: OnceLock<NoiseTools> = OnceLock::new();
