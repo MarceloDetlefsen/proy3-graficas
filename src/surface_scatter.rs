@@ -9,8 +9,11 @@
 use raylib::prelude::Vector3;
 
 use crate::icosphere::spherical_tangent_basis;
+use crate::math::Mat4;
 use crate::noise::Noise;
 use crate::rng::SplitMix64;
+use crate::scene::Body;
+use crate::surface_map::planet_height;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SurfacePropKind {
@@ -99,6 +102,98 @@ pub fn filter_candidates_by_noise(
         }
     }
     out
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SurfaceInstance {
+    pub kind: SurfacePropKind,
+    pub local_pos: Vector3,
+    pub local_normal: Vector3,
+    pub local_matrix: Mat4,
+    pub bounding_radius: f32,
+}
+
+/// Calcula la posición sobre la superficie deformada (con leve hundimiento) y
+/// la normal geométrica local en la dirección `dir`.
+pub fn surface_point_and_normal(body: &Body, dir: Vector3, noise: &Noise) -> (Vector3, Vector3) {
+    let p = dir.normalize();
+    let amp = body.surface.deformation_amplitude;
+    let freq = body.surface.noise_frequency;
+    let r = body.radius * (1.0 + amp * planet_height(noise, p, freq));
+    let sink = 0.02 * body.radius;
+    let local_pos = p * (r - sink);
+
+    if amp.abs() <= 1e-6 {
+        return (local_pos, p);
+    }
+
+    let (t, b) = spherical_tangent_basis(p, p);
+    let eps = 0.015_f32;
+    let dt = (p + t * eps).normalize();
+    let db = (p + b * eps).normalize();
+    let rt = body.radius * (1.0 + amp * planet_height(noise, dt, freq));
+    let rb = body.radius * (1.0 + amp * planet_height(noise, db, freq));
+
+    let pos0 = p * r;
+    let post = dt * rt;
+    let posb = db * rb;
+    let mut normal = (post - pos0).cross(posb - pos0);
+    if normal.length_sqr() <= 1e-10 {
+        normal = p;
+    } else {
+        if normal.dot(p) < 0.0 {
+            normal = -normal;
+        }
+        normal = normal.normalize();
+    }
+    (local_pos, normal)
+}
+
+/// Construye la matriz local de una instancia orientando `+Y` hacia `normal`,
+/// con rotación `yaw` alrededor de `normal` y escala uniforme `world_scale`.
+pub fn instance_local_matrix(
+    local_pos: Vector3,
+    normal: Vector3,
+    yaw: f32,
+    world_scale: f32,
+) -> Mat4 {
+    let up = normal.normalize();
+    let (t0, b0) = spherical_tangent_basis(up, up);
+    let (s, c) = yaw.sin_cos();
+    let right = (t0 * c + b0 * s).normalize();
+    let forward = up.cross(right).normalize();
+    let neg_fwd = -forward;
+
+    Mat4::from_cols(
+        [right.x * world_scale, right.y * world_scale, right.z * world_scale, 0.0],
+        [up.x * world_scale, up.y * world_scale, up.z * world_scale, 0.0],
+        [neg_fwd.x * world_scale, neg_fwd.y * world_scale, neg_fwd.z * world_scale, 0.0],
+        [local_pos.x, local_pos.y, local_pos.z, 1.0],
+    )
+}
+
+/// Construye las instancias colocadas sobre un cuerpo celeste dado.
+pub fn build_body_instances(
+    body: &Body,
+    candidates: &[SurfaceCandidate],
+    noise: &Noise,
+) -> Vec<SurfaceInstance> {
+    candidates
+        .iter()
+        .map(|cand| {
+            let (local_pos, local_normal) = surface_point_and_normal(body, cand.dir, noise);
+            let world_scale = cand.scale * body.radius;
+            let local_matrix =
+                instance_local_matrix(local_pos, local_normal, cand.yaw, world_scale);
+            SurfaceInstance {
+                kind: cand.kind,
+                local_pos,
+                local_normal,
+                local_matrix,
+                bounding_radius: world_scale * 1.25,
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
