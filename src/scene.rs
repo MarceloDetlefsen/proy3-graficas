@@ -190,6 +190,25 @@ pub fn solar_system() -> Vec<Body> {
                 max_deformation: 0.05,
             },
         },
+        Body {
+            name: "Ocho",
+            kind: BodyKind::Planet,
+            radius: 1.2,
+            mass: 13.0,
+            orbit_radius: 98.6,
+            orbit_period: 180.0,
+            phase: 3.7,
+            orbit_inclination: 0.05,
+            rotation_period: 80.0,
+            axial_tilt: 0.12,
+            shader: Shader::Ocho,
+            surface: SurfaceParams {
+                seed: 55,
+                noise_frequency: 3.0,
+                deformation_amplitude: 0.02,
+                max_deformation: 1.2 * 0.02,
+            },
+        },
     ]
 }
 
