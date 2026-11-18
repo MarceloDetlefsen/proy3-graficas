@@ -150,3 +150,41 @@ pub fn decimate_to_target(
 
     best
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::obj::load_obj;
+
+    #[test]
+    fn decimation_reduces_triangles_and_preserves_bounding_box() {
+        let obj = load_obj("assets/ship.obj").expect("ship.obj debe cargar");
+        let (verts, indices) = obj.to_indexed_mesh();
+        let orig_tris = indices.len() / 3;
+        let (orig_min, orig_max) = mesh_bounds(&verts);
+        let orig_span = (orig_max - orig_min).length();
+
+        let (v0, i0) = decimate_to_target(&verts, &indices, 3000);
+        let (v1, i1) = decimate_to_target(&verts, &indices, 800);
+        let (v2, i2) = decimate_to_target(&verts, &indices, 150);
+
+        let t0 = i0.len() / 3;
+        let t1 = i1.len() / 3;
+        let t2 = i2.len() / 3;
+        println!("Ship fallback LODs -> orig: {orig_tris}, lod0: {t0}, lod1: {t1}, lod2: {t2}");
+
+        assert!(t0 < orig_tris && t0 > t1 && t1 > t2 && t2 > 0);
+
+        for dec_verts in [&v0, &v1, &v2] {
+            let (dmin, dmax) = mesh_bounds(dec_verts);
+            assert!(dmin.x >= orig_min.x - 1e-4 && dmax.x <= orig_max.x + 1e-4);
+            assert!(dmin.y >= orig_min.y - 1e-4 && dmax.y <= orig_max.y + 1e-4);
+            assert!(dmin.z >= orig_min.z - 1e-4 && dmax.z <= orig_max.z + 1e-4);
+            let dec_span = (dmax - dmin).length();
+            assert!(
+                dec_span >= orig_span * 0.75,
+                "Caja envolvente colapsada: {dec_span} vs {orig_span}"
+            );
+        }
+    }
+}
