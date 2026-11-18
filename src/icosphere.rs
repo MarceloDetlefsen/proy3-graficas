@@ -110,15 +110,42 @@ pub fn spherical_uv(unit_pos: Vector3) -> [f32; 2] {
 }
 
 impl IcoMesh {
+    /// Recalcula normales suaves por vértice promediando las normales de caras adyacentes.
+    pub fn compute_smooth_normals(&self) -> Vec<Vector3> {
+        let mut accum = vec![Vector3::zero(); self.positions.len()];
+        for tri in self.indices.as_chunks::<3>().0 {
+            let p0 = self.positions[tri[0]];
+            let p1 = self.positions[tri[1]];
+            let p2 = self.positions[tri[2]];
+            let face_n = (p1 - p0).cross(p2 - p0);
+            accum[tri[0]] += face_n;
+            accum[tri[1]] += face_n;
+            accum[tri[2]] += face_n;
+        }
+        accum
+            .into_iter()
+            .zip(self.positions.iter())
+            .map(|(n, &p)| {
+                if n.length_sqr() > 1e-12 {
+                    n.normalize()
+                } else {
+                    p.normalize()
+                }
+            })
+            .collect()
+    }
+
     /// Expande la malla indexada en un arreglo de vértices por triángulo con
-    /// normales suaves unitarias y coordenadas esféricas.
+    /// normales suaves recalculadas y coordenadas esféricas.
     pub fn to_vertex_array(&self) -> Vec<Vertex> {
+        let normals = self.compute_smooth_normals();
         let vertices: Vec<Vertex> = self
             .positions
             .iter()
-            .map(|&pos| {
+            .zip(normals.iter())
+            .map(|(&pos, &normal)| {
                 let dir = pos.normalize();
-                Vertex::with_uv(pos, dir, spherical_uv(dir))
+                Vertex::with_uv(pos, normal, spherical_uv(dir))
             })
             .collect();
         self.indices
