@@ -16,6 +16,7 @@ pub const MAX_SUBSTEPS: usize = 8;
 /// aceleración sea aproximadamente la mitad del empuje máximo de la nave.
 pub const GRAVITY_G: f32 = 7.2;
 pub const GRAVITY_SOFTENING_FACTOR: f32 = 0.5;
+pub const MAX_GRAVITY_ACCEL: f32 = 15.0;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PhysicsStepper {
@@ -62,6 +63,30 @@ pub fn gravity_acceleration(pos: Vector3, bodies: &[Body], time: f32) -> Vector3
         total += delta * (mag / dist);
     }
     total
+}
+
+/// Integra la aceleración gravitatoria (con tope `MAX_GRAVITY_ACCEL`) sobre la
+/// velocidad de la nave y avanza su pose con Euler semi-implícito.
+/// Devuelve la magnitud efectiva de gravedad aplicada.
+pub fn integrate_ship_with_gravity(
+    ship: &mut crate::ship::Ship,
+    bodies: &[Body],
+    time: f32,
+    dt: f32,
+    gravity_enabled: bool,
+) -> f32 {
+    let mut mag = 0.0;
+    if gravity_enabled && dt > 0.0 {
+        let mut g = gravity_acceleration(ship.position, bodies, time);
+        mag = g.length();
+        if mag > MAX_GRAVITY_ACCEL {
+            g *= MAX_GRAVITY_ACCEL / mag;
+            mag = MAX_GRAVITY_ACCEL;
+        }
+        ship.velocity += g * dt;
+    }
+    ship.integrate_pose(dt);
+    mag
 }
 
 #[cfg(test)]
