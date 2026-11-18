@@ -125,6 +125,8 @@ mod tests {
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: 0,
+            viewport_width: 800,
+            viewport_height: 600,
         }
     }
 

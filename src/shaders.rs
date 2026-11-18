@@ -4,7 +4,6 @@ use crate::Uniforms;
 use crate::fragment::Fragment;
 use crate::math::Vec4;
 use crate::noise;
-use crate::rasterizer::{VIEWPORT_HEIGHT, VIEWPORT_WIDTH};
 use crate::vertex::Vertex;
 
 mod gas_giant;
@@ -33,8 +32,8 @@ pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     let ndc_y = clip.y * inv_w;
     let ndc_z = clip.z * inv_w;
 
-    let screen_x = (ndc_x * 0.5 + 0.5) * VIEWPORT_WIDTH as f32;
-    let screen_y = (0.5 - ndc_y * 0.5) * VIEWPORT_HEIGHT as f32;
+    let screen_x = (ndc_x * 0.5 + 0.5) * uniforms.viewport_width as f32;
+    let screen_y = (0.5 - ndc_y * 0.5) * uniforms.viewport_height as f32;
     let depth = ndc_z * 0.5 + 0.5;
 
     let mut result = vertex.clone();

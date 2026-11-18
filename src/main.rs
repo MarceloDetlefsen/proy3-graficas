@@ -18,7 +18,7 @@ use math::Mat4;
 use obj::load_obj;
 use perf::{FrameSample, PerfStats};
 use primitive::primitive_assembly;
-use rasterizer::{TriangleMode, VIEWPORT_HEIGHT, VIEWPORT_WIDTH, rasterize};
+use rasterizer::{TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize};
 use raylib::prelude::*;
 use scene::build_model_matrix;
 use shaders::{Shader, fragment_shader, shader_name, vertex_shader};
@@ -35,6 +35,8 @@ pub struct Uniforms {
     pub debug_noise: bool,
     pub noise_frequency: f32,
     pub rocky_debug_view: i32,
+    pub viewport_width: i32,
+    pub viewport_height: i32,
 }
 
 struct CaptureOptions {
@@ -162,7 +164,13 @@ fn render(
     let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
     let t_rast = std::time::Instant::now();
-    let fragments = rasterize(&triangles, mode, backface_culling);
+    let fragments = rasterize(
+        &triangles,
+        mode,
+        backface_culling,
+        framebuffer.width as i32,
+        framebuffer.height as i32,
+    );
     let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
     let frag_count = fragments.len();
 
@@ -227,11 +235,13 @@ fn main() {
         .max(max.z - min.z)
         .max(1e-4);
     let base_scale = 2.0 / max_extent;
-    let aspect = VIEWPORT_WIDTH as f32 / VIEWPORT_HEIGHT as f32;
+    let internal_width = WINDOW_WIDTH;
+    let internal_height = WINDOW_HEIGHT;
+    let aspect = internal_width as f32 / internal_height as f32;
 
     let mut framebuffer = Framebuffer::new(
-        VIEWPORT_WIDTH as u32,
-        VIEWPORT_HEIGHT as u32,
+        internal_width as u32,
+        internal_height as u32,
         Color::new(15, 18, 28, 255),
     );
 
@@ -254,6 +264,8 @@ fn main() {
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: options.view,
+            viewport_width: internal_width,
+            viewport_height: internal_height,
         };
         framebuffer.clear();
         render(
@@ -276,7 +288,7 @@ fn main() {
     }
 
     let (mut window, thread) = raylib::init()
-        .size(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+        .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title("Proyecto 3 - Base del sistema solar")
         .build();
     window.set_target_fps(60);
@@ -379,6 +391,8 @@ fn main() {
             debug_noise,
             noise_frequency,
             rocky_debug_view,
+            viewport_width: internal_width,
+            viewport_height: internal_height,
         };
 
         let t_clear = std::time::Instant::now();

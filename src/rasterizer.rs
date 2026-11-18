@@ -8,13 +8,15 @@ pub enum TriangleMode {
     FilledBarycentric,
 }
 
-pub const VIEWPORT_WIDTH: i32 = 800;
-pub const VIEWPORT_HEIGHT: i32 = 600;
+pub const WINDOW_WIDTH: i32 = 800;
+pub const WINDOW_HEIGHT: i32 = 600;
 
 pub fn rasterize(
     triangles: &[[Vertex; 3]],
     mode: TriangleMode,
     backface_culling: bool,
+    width: i32,
+    height: i32,
 ) -> Vec<Fragment> {
     let mut fragments = Vec::new();
 
@@ -22,7 +24,7 @@ pub fn rasterize(
         let triangle_fragments = match mode {
             TriangleMode::Wireframe => triangle_wireframe(&tri[0], &tri[1], &tri[2]),
             TriangleMode::FilledBarycentric => {
-                triangle_barycentric(&tri[0], &tri[1], &tri[2], backface_culling)
+                triangle_barycentric(&tri[0], &tri[1], &tri[2], backface_culling, width, height)
             }
         };
         fragments.extend(triangle_fragments);

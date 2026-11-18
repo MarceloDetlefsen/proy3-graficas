@@ -1,7 +1,6 @@
 use raylib::prelude::Vector2;
 
 use crate::fragment::Fragment;
-use crate::rasterizer::{VIEWPORT_HEIGHT, VIEWPORT_WIDTH};
 use crate::vertex::Vertex;
 
 pub const DEGENERATE_EPS: f32 = 1e-6;
@@ -64,6 +63,8 @@ pub fn triangle_barycentric(
     b: &Vertex,
     c: &Vertex,
     backface_culling: bool,
+    viewport_width: i32,
+    viewport_height: i32,
 ) -> Vec<Fragment> {
     // La función de arista puede redondear distinto a la interpolación de x
     // de scanline cuando el centro cae casi exactamente sobre un borde.
@@ -81,13 +82,13 @@ pub fn triangle_barycentric(
     let min_y = pa.1.min(pb.1).min(pc.1).floor() as i32;
     let max_y = pa.1.max(pb.1).max(pc.1).ceil() as i32;
 
-    let start_x = min_x.clamp(0, VIEWPORT_WIDTH - 1);
-    let end_x = max_x.clamp(0, VIEWPORT_WIDTH - 1);
-    let start_y = min_y.clamp(0, VIEWPORT_HEIGHT - 1);
-    let end_y = max_y.clamp(0, VIEWPORT_HEIGHT - 1);
+    let start_x = min_x.clamp(0, viewport_width - 1);
+    let end_x = max_x.clamp(0, viewport_width - 1);
+    let start_y = min_y.clamp(0, viewport_height - 1);
+    let end_y = max_y.clamp(0, viewport_height - 1);
 
     let estimated_capacity =
-        ((area.abs() * 0.5) as usize).min((VIEWPORT_WIDTH * VIEWPORT_HEIGHT) as usize);
+        ((area.abs() * 0.5) as usize).min((viewport_width * viewport_height) as usize);
     let mut fragments = Vec::with_capacity(estimated_capacity);
 
     for y in start_y..=end_y {
