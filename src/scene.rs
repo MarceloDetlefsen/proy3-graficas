@@ -16,6 +16,7 @@ pub enum BodyKind {
 pub struct SurfaceParams {
     pub seed: u32,
     pub noise_frequency: f32,
+    pub max_deformation: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -51,6 +52,7 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 0,
                 noise_frequency: 4.0,
+                max_deformation: 0.0,
             },
         },
         Body {
@@ -68,6 +70,7 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 0,
                 noise_frequency: 4.0,
+                max_deformation: 0.0,
             },
         },
         Body {
@@ -85,6 +88,7 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 0,
                 noise_frequency: 4.0,
+                max_deformation: 0.0,
             },
         },
         Body {
@@ -102,9 +106,14 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 1,
                 noise_frequency: 4.0,
+                max_deformation: 0.0,
             },
         },
     ]
+}
+
+pub fn effective_radius(body: &Body) -> f32 {
+    body.radius + body.surface.max_deformation.max(0.0)
 }
 
 pub fn body_position_at(body: &Body, time: f32) -> Vector3 {

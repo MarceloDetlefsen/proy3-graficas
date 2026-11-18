@@ -8,7 +8,7 @@
 
 use raylib::prelude::Vector3;
 
-use crate::scene::{body_position_at, Body};
+use crate::scene::{body_position_at, effective_radius, Body};
 
 pub const FIXED_DT: f32 = 1.0 / 120.0;
 pub const MAX_SUBSTEPS: usize = 8;
@@ -87,6 +87,46 @@ pub fn integrate_ship_with_gravity(
     }
     ship.integrate_pose(dt);
     mag
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct BodyCollision {
+    pub body_index: usize,
+    pub normal: Vector3,
+    pub penetration: f32,
+}
+
+/// Detecta colisión esfera contra esfera entre la nave y cada cuerpo celeste,
+/// considerando `effective_radius(body)` y `ship.radius`.
+pub fn detect_body_collision(
+    ship: &crate::ship::Ship,
+    bodies: &[Body],
+    time: f32,
+) -> Option<BodyCollision> {
+    let mut deepest: Option<BodyCollision> = None;
+    for (idx, body) in bodies.iter().enumerate() {
+        let center = body_position_at(body, time);
+        let diff = ship.position - center;
+        let min_dist = effective_radius(body) + ship.radius;
+        let dist_sq = diff.length_sqr();
+        if dist_sq < min_dist * min_dist {
+            let dist = dist_sq.sqrt();
+            let normal = if dist > 1e-6 {
+                diff * (1.0 / dist)
+            } else {
+                Vector3::new(0.0, 1.0, 0.0)
+            };
+            let penetration = min_dist - dist;
+            if deepest.is_none_or(|best| penetration > best.penetration) {
+                deepest = Some(BodyCollision {
+                    body_index: idx,
+                    normal,
+                    penetration,
+                });
+            }
+        }
+    }
+    deepest
 }
 
 #[cfg(test)]
