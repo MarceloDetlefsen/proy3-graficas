@@ -15,4 +15,3 @@ debug = "line-tables-only"
 
 [dependencies]
 raylib = { version = "6.0.0", features = ["SUPPORT_IMAGE_GENERATION"] }
-noise = "0.9"
