@@ -301,4 +301,35 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn tangent_basis_is_orthonormal_at_equator_midlatitudes_and_poles() {
+        let dirs = [
+            Vector3::new(1.0, 0.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            Vector3::new(-1.0, 0.0, 0.0),
+            Vector3::new(0.5, 0.6, -0.624).normalize(),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(0.0, -1.0, 0.0),
+        ];
+        for dir in dirs {
+            let (t, b) = spherical_tangent_basis(dir, dir);
+            assert!((t.length() - 1.0).abs() < 1e-5);
+            assert!((b.length() - 1.0).abs() < 1e-5);
+            assert!(t.dot(dir).abs() < 1e-5);
+            assert!(b.dot(dir).abs() < 1e-5);
+            assert!(t.dot(b).abs() < 1e-5);
+            assert!((t.cross(b).dot(dir) - 1.0).abs() < 1e-5);
+        }
+
+        let noise = Noise::new(0);
+        let deformed = deform_icosphere(&icosphere_level(2), &noise, 0.12, 4.0);
+        for v in deformed.to_vertex_array() {
+            assert!((v.tangent.length() - 1.0).abs() < 1e-5);
+            assert!((v.bitangent.length() - 1.0).abs() < 1e-5);
+            assert!(v.tangent.dot(v.normal).abs() < 1e-5);
+            assert!(v.bitangent.dot(v.normal).abs() < 1e-5);
+            assert!(v.tangent.dot(v.bitangent).abs() < 1e-5);
+        }
+    }
 }
