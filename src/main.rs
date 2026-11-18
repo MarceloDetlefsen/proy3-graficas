@@ -146,7 +146,15 @@ fn render(
         .map(|vertex| vertex_shader(vertex, uniforms))
         .collect();
 
-    let triangles = primitive_assembly(&transformed_vertices);
+    // Solución temporal: descartar triángulos con algún vértice detrás del plano near;
+    // reemplazar en el issue de clipping.
+    let triangles: Vec<[vertex::Vertex; 3]> = primitive_assembly(&transformed_vertices)
+        .into_iter()
+        .filter(|tri| {
+            tri.iter()
+                .all(|v| v.clip_w > 0.0 && v.transformed_position.z >= 0.0)
+        })
+        .collect();
     let fragments = rasterize(&triangles, mode);
 
     for fragment in fragments {
