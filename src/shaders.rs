@@ -51,9 +51,7 @@ pub fn surface_view(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     (uniforms.camera_pos - fragment.world_pos).normalize()
 }
 
-/// Coseno de vista radial. El valor absoluto compensa que el z-buffer usa
-/// menor z como más cercano mientras la cámara ortográfica está en +z; la
-/// cara visible tiene entonces la normal opuesta al vector hacia la cámara.
+/// Coseno de vista radial entre la normal en mundo y la dirección hacia la cámara real.
 pub fn surface_mu(fragment: &Fragment, uniforms: &Uniforms) -> f32 {
     fragment
         .normal
