@@ -175,6 +175,74 @@ pub fn remap(x: f32, a: f32, b: f32, c: f32, d: f32) -> f32 {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct VoronoiSample {
+    pub f1: f32,
+    pub edge_dist: f32,
+    pub cell_id: u32,
+}
+
+#[inline]
+fn cell_hash_u32(ix: i32, iy: i32, iz: i32, seed: u32) -> u32 {
+    let mut h = (ix as u32).wrapping_mul(374_761_393)
+        ^ (iy as u32).wrapping_mul(668_265_263)
+        ^ (iz as u32).wrapping_mul(2_147_483_647)
+        ^ seed.wrapping_mul(1_597_334_677);
+    h = (h ^ (h >> 13)).wrapping_mul(1_274_126_177);
+    h ^ (h >> 16)
+}
+
+#[inline]
+fn hash_unit(h: u32) -> f32 {
+    (h & 0xFFFF) as f32 / 65535.0
+}
+
+/// Evalúa Voronoi 3D en `p`, devolviendo distancia al centro `f1`, distancia al
+/// borde `edge_dist = d2 - d1` e identificador `cell_id`.
+pub fn voronoi_3d(p: Vector3, seed: u32) -> VoronoiSample {
+    let ix = p.x.floor() as i32;
+    let iy = p.y.floor() as i32;
+    let iz = p.z.floor() as i32;
+
+    let mut d1 = f32::MAX;
+    let mut d2 = f32::MAX;
+    let mut best_id = 0_u32;
+
+    for dz in -1..=1 {
+        for dy in -1..=1 {
+            for dx in -1..=1 {
+                let cx = ix + dx;
+                let cy = iy + dy;
+                let cz = iz + dz;
+                let h = cell_hash_u32(cx, cy, cz, seed);
+                let jx = cx as f32 + 0.15 + 0.70 * hash_unit(h);
+                let jy = cy as f32 + 0.15 + 0.70 * hash_unit(h.wrapping_mul(747_796_405));
+                let jz = cz as f32 + 0.15 + 0.70 * hash_unit(h.wrapping_mul(2_891_336_453));
+
+                let vx = jx - p.x;
+                let vy = jy - p.y;
+                let vz = jz - p.z;
+                let dist_sq = vx * vx + vy * vy + vz * vz;
+                if dist_sq < d1 {
+                    d2 = d1;
+                    d1 = dist_sq;
+                    best_id = h;
+                } else if dist_sq < d2 {
+                    d2 = dist_sq;
+                }
+            }
+        }
+    }
+
+    let f1 = d1.sqrt();
+    let f2 = d2.sqrt();
+    VoronoiSample {
+        f1,
+        edge_dist: (f2 - f1).max(0.0),
+        cell_id: best_id,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

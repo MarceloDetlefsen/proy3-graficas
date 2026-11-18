@@ -6,6 +6,7 @@ use crate::fragment::Fragment;
 use crate::math::Vec4;
 use crate::vertex::Vertex;
 
+pub mod ardens;
 pub mod gas_giant;
 pub mod rocky;
 pub mod ship;
@@ -17,6 +18,7 @@ pub enum Shader {
     Star,
     Rocky,
     GasGiant,
+    Ardens,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -92,6 +94,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Star => star::shade(fragment, uniforms),
         Shader::Rocky => rocky::shade(fragment, uniforms),
         Shader::GasGiant => gas_giant::shade(fragment, uniforms),
+        Shader::Ardens => ardens::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -112,6 +115,7 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Star => "Shader: Star",
         Shader::Rocky => "Shader: Rocky",
         Shader::GasGiant => "Shader: Gas Giant",
+        Shader::Ardens => "Shader: Ardens",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }

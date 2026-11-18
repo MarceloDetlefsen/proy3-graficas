@@ -398,7 +398,8 @@ fn main() {
     let mut body_caches: Vec<icosphere::DeformedIcosphereCache> = bodies
         .iter()
         .map(|b| {
-            icosphere::DeformedIcosphereCache::new(
+            icosphere::DeformedIcosphereCache::new_for_shader(
+                b.shader,
                 b.surface.deformation_amplitude,
                 b.surface.noise_frequency,
             )
