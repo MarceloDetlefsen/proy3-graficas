@@ -16,7 +16,7 @@ mod sim;
 mod surface_map;
 mod vertex;
 
-use camera::Camera;
+use camera::{Camera, FollowCamera};
 use clipping::ClipVertex;
 use framebuffer::Framebuffer;
 use math::Mat4;
@@ -364,6 +364,9 @@ fn main() {
     let ship_vertex_array: Vec<vertex::Vertex> =
         ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
     let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
+    let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
+    let mut follow_mode = true;
+    window.disable_cursor();
     let bodies = solar_system();
     let _ = build_model_matrix;
     let _ = shader_name;
@@ -397,6 +400,18 @@ fn main() {
         let frame_start = std::time::Instant::now();
         let dt = window.get_frame_time();
         let _sim_dt = sim_clock.advance(dt);
+        if window.is_key_pressed(KeyboardKey::KEY_F) {
+            follow_mode = !follow_mode;
+            if follow_mode {
+                window.disable_cursor();
+                follow_cam.snap(&ship);
+            } else {
+                window.enable_cursor();
+            }
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
+            follow_cam.recenter();
+        }
         if window.is_key_pressed(KeyboardKey::KEY_SPACE) {
             sim_clock.toggle_pause();
         }
@@ -520,12 +535,19 @@ fn main() {
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
 
         let aspect = internal_width as f32 / internal_height as f32;
-        let cam_pos = Vector3::new(
-            cam_distance * cam_pitch.cos() * cam_yaw.sin(),
-            cam_distance * cam_pitch.sin(),
-            cam_distance * cam_pitch.cos() * cam_yaw.cos(),
-        );
-        let cam = Camera::new(cam_pos, Vector3::zero(), 45.0_f32.to_radians(), 0.1, 300.0);
+        let cam = if follow_mode {
+            let delta = window.get_mouse_delta();
+            follow_cam.apply_mouse_look(delta.x, delta.y, 0.003);
+            follow_cam.update(&ship, dt);
+            follow_cam.to_camera(45.0_f32.to_radians(), 0.1, 300.0)
+        } else {
+            let cam_pos = Vector3::new(
+                cam_distance * cam_pitch.cos() * cam_yaw.sin(),
+                cam_distance * cam_pitch.sin(),
+                cam_distance * cam_pitch.cos() * cam_yaw.cos(),
+            );
+            Camera::new(cam_pos, Vector3::zero(), 45.0_f32.to_radians(), 0.1, 300.0)
+        };
         let base_light = Vector3::new(-0.65, 0.80, 1.0).normalize();
         let light_dir = Vector3::new(
             base_light.x * light_angle.cos() - base_light.z * light_angle.sin(),
@@ -665,11 +687,12 @@ fn main() {
             println!("Captura guardada en {}", capture_path.display());
         }
         let label = format!(
-            "Sistema Solar ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cull(C): {}",
+            "Sistema Solar ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Cull(C): {}",
             bodies.len(),
             sim_clock.time,
             sim_clock.scale,
             if sim_clock.paused { " PAUSA" } else { "" },
+            if follow_mode { "Seguir" } else { "Libre" },
             if backface_culling { "ON" } else { "OFF" },
         );
         let overlay = if perf_stats.enabled {
