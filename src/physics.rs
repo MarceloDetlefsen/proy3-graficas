@@ -204,4 +204,40 @@ mod tests {
         let g_y = gravity_acceleration(Vector3::new(0.0, 10.0, 0.0), &bodies, 0.0);
         assert!((g_y.length() - g_near.length()).abs() < 1e-5);
     }
+
+    #[test]
+    fn high_speed_ship_does_not_tunnel_through_planet() {
+        let mut planet = crate::scene::solar_system().remove(1);
+        planet.orbit_radius = 0.0;
+        planet.radius = 1.0;
+        let bodies = [planet];
+
+        let mut ship = crate::ship::Ship::new(Vector3::new(5.0, 0.0, 0.0));
+        ship.velocity = Vector3::new(-40.0, 0.0, 0.0);
+        let mut stepper = PhysicsStepper::new();
+        let min_surface = effective_radius(&bodies[0]) + ship.radius;
+        let mut collided = false;
+
+        for _ in 0..20 {
+            stepper.step(1.0 / 30.0, |dt| {
+                ship.integrate_pose(dt);
+                if resolve_body_collisions(&mut ship, &bodies, 0.0).is_some() {
+                    collided = true;
+                }
+                assert!(
+                    ship.position.x > 0.0,
+                    "La nave atraveso el planeta: x={}",
+                    ship.position.x
+                );
+            });
+        }
+
+        assert!(collided, "Debio detectar colision con el planeta");
+        assert!(
+            ship.position.x >= min_surface - 1e-4,
+            "La nave quedo dentro de la superficie: x={}",
+            ship.position.x
+        );
+        assert!(ship.velocity.x >= -1e-4);
+    }
 }
