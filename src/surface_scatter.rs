@@ -225,4 +225,23 @@ mod tests {
             .count();
         assert!(same_prefix < cand_a.len());
     }
+
+    #[test]
+    fn instance_vertical_axis_matches_surface_normal() {
+        let bodies = crate::scene::solar_system();
+        let zebes = &bodies[1];
+        let noise = Noise::new(0);
+        let dirs = fibonacci_sphere_points(200, 42, 0.03);
+        let cands = filter_candidates_by_noise(&dirs, 42, true);
+        let instances = build_body_instances(zebes, &cands, &noise);
+
+        assert!(!instances.is_empty());
+        for (inst, cand) in instances.iter().zip(cands.iter()) {
+            let up = inst
+                .local_matrix
+                .transform_normal(Vector3::new(0.0, 1.0, 0.0));
+            assert!((up - inst.local_normal).length() < 1e-5);
+            assert!(up.dot(cand.dir) > 0.0);
+        }
+    }
 }
