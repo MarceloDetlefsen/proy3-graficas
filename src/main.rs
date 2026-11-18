@@ -21,7 +21,7 @@ use perf::{FrameSample, PerfStats};
 use primitive::{ScreenTriangle, assemble_screen_triangles};
 use rasterizer::{
     TILE_SIZE, TileGrid, TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize_visibility_tiled,
-    render_wireframe, shade_visibility,
+    render_wireframe, shade_visibility_tiled,
 };
 use raylib::prelude::*;
 use scene::build_model_matrix;
@@ -193,8 +193,13 @@ fn render(
             let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
 
             let t_shade = std::time::Instant::now();
-            let (calls, visible) =
-                shade_visibility(&buffers.screen_triangles, framebuffer, shader, uniforms);
+            let (calls, visible) = shade_visibility_tiled(
+                &buffers.screen_triangles,
+                framebuffer,
+                shader,
+                uniforms,
+                1,
+            );
             let shading_ms = t_shade.elapsed().as_secs_f64() * 1000.0;
             (raster_ms, shading_ms, writes, calls, visible)
         }

@@ -253,6 +253,9 @@ pub fn rasterize_band(
     writes
 }
 
+type RastBand<'a> = Mutex<Option<(usize, &'a mut [f32], &'a mut [u32])>>;
+type ShadeBand<'a> = Mutex<Option<(usize, &'a [u32], &'a mut [u8])>>;
+
 pub fn rasterize_visibility_tiled(
     triangles: &[ScreenTriangle],
     tile_grid: &mut TileGrid,
@@ -287,7 +290,7 @@ pub fn rasterize_visibility_tiled(
         return writes;
     }
 
-    let bands: Vec<Mutex<Option<(usize, &mut [f32], &mut [u32])>>> = framebuffer
+    let bands: Vec<RastBand<'_>> = framebuffer
         .depth_buffer
         .chunks_mut(band_elems)
         .zip(framebuffer.tri_id_buffer.chunks_mut(band_elems))
@@ -328,6 +331,127 @@ pub fn rasterize_visibility_tiled(
     total_writes.load(Ordering::Relaxed)
 }
 
+fn shade_band(
+    band_idx: usize,
+    width: usize,
+    triangles: &[ScreenTriangle],
+    tri_id_band: &[u32],
+    color_band: &mut [u8],
+    shader: Shader,
+    uniforms: &Uniforms,
+) -> usize {
+    let band_height = tri_id_band.len() / width;
+    let y0 = band_idx * TILE_SIZE;
+    let mut calls = 0usize;
+
+    for local_y in 0..band_height {
+        let py = (y0 + local_y) as f32 + 0.5;
+        let row_offset = local_y * width;
+        for x in 0..width {
+            let idx = row_offset + x;
+            let tri_id = tri_id_band[idx];
+            if tri_id == INVALID_TRI_ID {
+                continue;
+            }
+            let tri = &triangles[tri_id as usize];
+            let [v0, v1, v2] = tri.vertices;
+            let pa = (v0.x, v0.y);
+            let pb = (v1.x, v1.y);
+            let pc = (v2.x, v2.y);
+            let inv_area = 1.0 / edge_2d(pa, pb, pc);
+            let p = (x as f32 + 0.5, py);
+            let w0 = edge_2d(pb, pc, p) * inv_area;
+            let w1 = edge_2d(pc, pa, p) * inv_area;
+            let w2 = edge_2d(pa, pb, p) * inv_area;
+
+            let fragment = interpolate_screen_fragment(tri, p.0, p.1, (w0, w1, w2));
+            let fc = fragment_shader(&fragment, shader, uniforms);
+            let c_idx = idx * 4;
+            color_band[c_idx] = (fc.x.clamp(0.0, 1.0) * 255.0) as u8;
+            color_band[c_idx + 1] = (fc.y.clamp(0.0, 1.0) * 255.0) as u8;
+            color_band[c_idx + 2] = (fc.z.clamp(0.0, 1.0) * 255.0) as u8;
+            color_band[c_idx + 3] = 255;
+            calls += 1;
+        }
+    }
+
+    calls
+}
+
+pub fn shade_visibility_tiled(
+    triangles: &[ScreenTriangle],
+    framebuffer: &mut Framebuffer,
+    shader: Shader,
+    uniforms: &Uniforms,
+    threads: usize,
+) -> (usize, usize) {
+    let width = framebuffer.width as usize;
+    let band_elems = TILE_SIZE * width;
+    let thread_count = threads.max(1);
+
+    if thread_count == 1 {
+        let mut calls = 0usize;
+        for (band_idx, (tri_id_band, color_band)) in framebuffer
+            .tri_id_buffer
+            .chunks(band_elems)
+            .zip(framebuffer.color_pixels.chunks_mut(band_elems * 4))
+            .enumerate()
+        {
+            calls += shade_band(
+                band_idx,
+                width,
+                triangles,
+                tri_id_band,
+                color_band,
+                shader,
+                uniforms,
+            );
+        }
+        return (calls, calls);
+    }
+
+    let bands: Vec<ShadeBand<'_>> = framebuffer
+        .tri_id_buffer
+        .chunks(band_elems)
+        .zip(framebuffer.color_pixels.chunks_mut(band_elems * 4))
+        .enumerate()
+        .map(|(band_idx, (t, c))| Mutex::new(Some((band_idx, t, c))))
+        .collect();
+    let next_band = AtomicUsize::new(0);
+    let total_calls = AtomicUsize::new(0);
+    let workers = thread_count.min(bands.len().max(1));
+
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                let mut local_calls = 0usize;
+                loop {
+                    let idx = next_band.fetch_add(1, Ordering::Relaxed);
+                    if idx >= bands.len() {
+                        break;
+                    }
+                    let (band_idx, tri_id_band, color_band) =
+                        bands[idx].lock().unwrap().take().unwrap();
+                    local_calls += shade_band(
+                        band_idx,
+                        width,
+                        triangles,
+                        tri_id_band,
+                        color_band,
+                        shader,
+                        uniforms,
+                    );
+                }
+                total_calls.fetch_add(local_calls, Ordering::Relaxed);
+            });
+        }
+    });
+
+    let calls = total_calls.load(Ordering::Relaxed);
+    (calls, calls)
+}
+
+#[allow(dead_code)]
 pub fn shade_visibility(
     triangles: &[ScreenTriangle],
     framebuffer: &mut Framebuffer,
@@ -588,7 +712,7 @@ mod tests {
         let mut fb_tiled = Framebuffer::new(160, 140, Color::BLACK);
         let mut grid = TileGrid::new(160, 140);
         rasterize_visibility_tiled(&triangles, &mut grid, &mut fb_tiled, true, 4);
-        shade_visibility(&triangles, &mut fb_tiled, Shader::Star, &uniforms);
+        shade_visibility_tiled(&triangles, &mut fb_tiled, Shader::Star, &uniforms, 4);
 
         assert_eq!(fb_full.depth_buffer, fb_tiled.depth_buffer);
         assert_eq!(fb_full.tri_id_buffer, fb_tiled.tri_id_buffer);
