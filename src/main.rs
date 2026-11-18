@@ -384,7 +384,7 @@ fn main() {
     window.disable_cursor();
     let bodies = solar_system();
     let icosphere_lods = icosphere::build_icosphere_lods();
-    let mut ico_level = 3_usize;
+    let mut body_lods = vec![3_usize; bodies.len()];
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
@@ -492,9 +492,6 @@ fn main() {
                 TriangleMode::FilledBarycentric => TriangleMode::Wireframe,
                 TriangleMode::Wireframe => TriangleMode::FilledBarycentric,
             };
-        }
-        if window.is_key_pressed(KeyboardKey::KEY_Z) {
-            ico_level = (ico_level + 1) % icosphere_lods.len();
         }
         if window.is_key_pressed(KeyboardKey::KEY_X) {
             frustum_culling = !frustum_culling;
@@ -667,11 +664,24 @@ fn main() {
         let sun_pos = body_position_at(&bodies[0], sim_clock.time);
         let mut tris_before_cull = 0usize;
         let mut tris_after_cull = 0usize;
-        for body in &bodies {
-            let body_mesh = &icosphere_lods[ico_level];
+        for (body_idx, body) in bodies.iter().enumerate() {
+            let body_pos = body_position_at(body, sim_clock.time);
+            let radius_px = lod::projected_radius_px(
+                &cam,
+                body_pos,
+                scene::effective_radius(body),
+                internal_height as f32,
+            );
+            let level = lod::select_detail_level_hysteresis(
+                body_lods[body_idx],
+                radius_px,
+                &lod::ICOSPHERE_THRESHOLDS_PX,
+                lod::DEFAULT_HYSTERESIS,
+            );
+            body_lods[body_idx] = level;
+            let body_mesh = &icosphere_lods[level];
             let body_tris = body_mesh.len() / 3;
             tris_before_cull += body_tris;
-            let body_pos = body_position_at(body, sim_clock.time);
             if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
             {
                 continue;
@@ -822,9 +832,8 @@ fn main() {
             mode_str, override_str, alt_str
         ));
         overlay.push(format!(
-            "Icosfera(Z): L{} ({} tris) | Malla(M): {} | Frustum(X): {} ({}->{})",
-            ico_level,
-            icosphere_lods[ico_level].len() / 3,
+            "LOD cuerpos: {:?} | Malla(M): {} | Frustum(X): {} ({}->{})",
+            body_lods,
             if matches!(mode, TriangleMode::Wireframe) {
                 "Wireframe"
             } else {
