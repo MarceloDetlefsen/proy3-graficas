@@ -14,12 +14,15 @@ mod perf;
 mod physics;
 mod primitive;
 mod rasterizer;
+mod rng;
 mod scene;
 mod shaders;
 mod ship;
 mod sim;
 mod sky;
 mod surface_map;
+mod surface_props;
+mod surface_scatter;
 mod vertex;
 
 use camera::{Camera, FollowCamera};
@@ -404,6 +407,25 @@ fn main() {
     let mut body_lods = vec![3_usize; bodies.len()];
     let mut forced_lod: Option<usize> = None;
     let mut last_rebuild_ms = 0.0_f64;
+    let mut surface_seed: u64 = 42;
+    let build_candidates = |seed: u64, bodies: &[scene::Body]| {
+        bodies
+            .iter()
+            .map(|body| surface_scatter::scatter_for_body(body, seed))
+            .collect::<Vec<_>>()
+    };
+    let mut planet_candidates = build_candidates(surface_seed, &bodies);
+    let build_all_instances = |bodies: &[scene::Body],
+                               cands: &[Vec<surface_scatter::SurfaceCandidate>],
+                               noise: &Noise| {
+        bodies
+            .iter()
+            .zip(cands.iter())
+            .map(|(b, c)| surface_scatter::build_body_instances(b, c, noise))
+            .collect::<Vec<_>>()
+    };
+    let mut planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+    let prop_meshes = surface_props::load_surface_props();
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
@@ -415,6 +437,8 @@ fn main() {
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
     let mut frustum_culling = true;
+    let mut instance_culling = true;
+    const MAX_PROP_DISTANCE: f32 = 32.0;
     let res_scales = [2_u32, 3, 1];
     let mut res_scale_idx = 0_usize; // 1/2 por defecto (400x300)
     let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
@@ -545,6 +569,19 @@ fn main() {
         if window.is_key_pressed(KeyboardKey::KEY_Y) {
             debug_normals = !debug_normals;
         }
+        if window.is_key_pressed(KeyboardKey::KEY_I) {
+            surface_seed = surface_seed.wrapping_sub(1);
+            planet_candidates = build_candidates(surface_seed, &bodies);
+            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_O) {
+            surface_seed = surface_seed.wrapping_add(1);
+            planet_candidates = build_candidates(surface_seed, &bodies);
+            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_SLASH) {
+            instance_culling = !instance_culling;
+        }
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
         }
@@ -590,6 +627,7 @@ fn main() {
                     noise_frequency,
                 ));
             }
+            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
             last_rebuild_ms = t_reb.elapsed().as_secs_f64() * 1000.0;
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
@@ -735,6 +773,8 @@ fn main() {
         let sun_pos = body_position_at(&bodies[0], sim_clock.time);
         let mut tris_before_cull = 0usize;
         let mut tris_after_cull = 0usize;
+        let mut instances_total = 0usize;
+        let mut instances_drawn = 0usize;
         for (body_idx, body) in bodies.iter().enumerate() {
             let body_pos = body_position_at(body, sim_clock.time);
             let radius_px = lod::projected_radius_px(
@@ -783,6 +823,47 @@ fn main() {
                     light_dir: body_light,
                 },
             );
+
+            // Dibujar instancias sobre la superficie compuestas con la matriz del planeta.
+            let planet_rt = scene::body_rt_matrix_at(body, sim_clock.time);
+            for inst in &planet_instances[body_idx] {
+                instances_total += 1;
+                let world_mat = planet_rt * inst.local_matrix;
+                let inst_world = Vector3::new(
+                    world_mat.cols[3][0],
+                    world_mat.cols[3][1],
+                    world_mat.cols[3][2],
+                );
+                let dist_sq = (inst_world - cam.position).length_sqr();
+                let prop_lod = lod::select_instance_lod(dist_sq);
+                let prop_mesh = prop_meshes.mesh_for(inst.kind, prop_lod);
+                let prop_tris = prop_mesh.len() / 3;
+                tris_before_cull += prop_tris;
+                if instance_culling
+                    && (dist_sq > MAX_PROP_DISTANCE * MAX_PROP_DISTANCE
+                        || !frustum.intersects_sphere(inst_world, inst.bounding_radius))
+                {
+                    continue;
+                }
+                instances_drawn += 1;
+                tris_after_cull += prop_tris;
+                uniforms.model_matrix = world_mat;
+                let b_inst = render_buffers.screen_triangles.len();
+                append_screen_triangles(
+                    prop_mesh,
+                    &uniforms,
+                    &mut render_buffers.clip_vertices,
+                    &mut render_buffers.screen_triangles,
+                );
+                let added_inst = render_buffers.screen_triangles.len() - b_inst;
+                render_buffers.tri_materials.resize(
+                    b_inst + added_inst,
+                    TriMaterial {
+                        shader: Shader::Prop(inst.kind),
+                        light_dir: body_light,
+                    },
+                );
+            }
         }
 
         // Dibujar nave con LOD según distancia a la cámara
@@ -967,6 +1048,13 @@ fn main() {
             if normal_mapping { "ON" } else { "OFF" },
             if debug_normals { "ON" } else { "OFF" },
         ));
+        overlay.push(format!(
+            "Semilla(I/O): {} | Instancias(/): {}/{} (Cull {})",
+            surface_seed,
+            instances_drawn,
+            instances_total,
+            if instance_culling { "ON" } else { "OFF" }
+        ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
         }
@@ -986,6 +1074,8 @@ fn main() {
                 "Z / X / M   : Forzar LOD / Frustum / Wireframe".to_string(),
                 ", . / [ ]   : Amplitud / Frecuencia deform.".to_string(),
                 "B / Y       : Normal map / Debug normales".to_string(),
+                "I / O       : Cambiar semilla superficie".to_string(),
+                "/           : Culling de instancias ON/OFF".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);

@@ -18,6 +18,7 @@ pub enum Shader {
     Rocky,
     GasGiant,
     Ship,
+    Prop(crate::surface_scatter::SurfacePropKind),
 }
 
 #[allow(dead_code)]
@@ -92,6 +93,17 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Rocky => rocky::shade(fragment, uniforms),
         Shader::GasGiant => gas_giant::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
+        Shader::Prop(kind) => {
+            use crate::surface_scatter::SurfacePropKind;
+            let base = match kind {
+                SurfacePropKind::Tree => Vector3::new(0.22, 0.72, 0.28),
+                SurfacePropKind::Rock => Vector3::new(0.48, 0.45, 0.44),
+                SurfacePropKind::Building => Vector3::new(0.62, 0.74, 0.85),
+                SurfacePropKind::Monument => Vector3::new(0.95, 0.76, 0.28),
+            };
+            let diff = diffuse_factor(fragment.normal, uniforms);
+            base * (0.22 + 0.78 * diff)
+        }
     }
 }
 
@@ -101,5 +113,6 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Rocky => "Shader: Rocky",
         Shader::GasGiant => "Shader: Gas Giant",
         Shader::Ship => "Shader: Ship",
+        Shader::Prop(_) => "Shader: Surface Prop",
     }
 }

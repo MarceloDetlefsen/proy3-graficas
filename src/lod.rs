@@ -61,6 +61,18 @@ pub fn select_detail_level_hysteresis(
     level
 }
 
+pub const INSTANCE_LOD_DIST: f32 = 12.0;
+
+/// Elige nivel `0` (cerca, detalle completo) o `1` (lejos, menos detalle) para instancias.
+#[inline]
+pub fn select_instance_lod(dist_sq: f32) -> usize {
+    if dist_sq <= INSTANCE_LOD_DIST * INSTANCE_LOD_DIST {
+        0
+    } else {
+        1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
