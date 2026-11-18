@@ -409,6 +409,8 @@ fn main() {
     let mut debug_noise = false;
     let mut noise_frequency = 4.0_f32;
     let mut rocky_debug_view = 3_i32;
+    let mut normal_mapping = true;
+    let mut debug_normals = false;
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
     let mut frustum_culling = true;
@@ -535,6 +537,12 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_V) {
             rocky_debug_view = (rocky_debug_view + 1) % 4;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_B) {
+            normal_mapping = !normal_mapping;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_Y) {
+            debug_normals = !debug_normals;
         }
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
@@ -706,8 +714,8 @@ fn main() {
             debug_noise,
             noise_frequency,
             rocky_debug_view,
-            normal_mapping: true,
-            debug_normals: false,
+            normal_mapping,
+            debug_normals,
             viewport_width: internal_width,
             viewport_height: internal_height,
             noise: noise.clone(),
@@ -951,8 +959,12 @@ fn main() {
             .find(|b| matches!(b.shader, Shader::Rocky))
             .map_or(0.0, |b| b.surface.deformation_amplitude);
         overlay.push(format!(
-            "Deform(,/.): Amp={:.2} Freq([/])={:.1} ({:.2} ms)",
-            rocky_amp, noise_frequency, last_rebuild_ms
+            "Deform(,/.): Amp={:.2} Freq([/])={:.1} ({:.2} ms) | Norm(B):{} Debug(Y):{}",
+            rocky_amp,
+            noise_frequency,
+            last_rebuild_ms,
+            if normal_mapping { "ON" } else { "OFF" },
+            if debug_normals { "ON" } else { "OFF" },
         ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
@@ -971,6 +983,8 @@ fn main() {
                 "G           : Activar / desactivar gravedad".to_string(),
                 "L           : Modo control (Auto/Local/Global)".to_string(),
                 "Z / X / M   : Forzar LOD / Frustum / Wireframe".to_string(),
+                ", . / [ ]   : Amplitud / Frecuencia deform.".to_string(),
+                "B / Y       : Normal map / Debug normales".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);
