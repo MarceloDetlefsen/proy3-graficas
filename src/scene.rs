@@ -107,6 +107,18 @@ pub fn solar_system() -> Vec<Body> {
     ]
 }
 
+pub fn body_position_at(body: &Body, time: f32) -> Vector3 {
+    if body.orbit_radius <= 0.0 || body.orbit_period.abs() <= 1e-6 {
+        return body_static_position(body);
+    }
+    let angle = body.phase + std::f32::consts::TAU * (time / body.orbit_period);
+    Vector3::new(
+        body.orbit_radius * angle.cos(),
+        body.orbit_radius * angle.sin() * body.orbit_inclination.sin(),
+        body.orbit_radius * angle.sin() * body.orbit_inclination.cos(),
+    )
+}
+
 pub fn body_static_position(body: &Body) -> Vector3 {
     Vector3::new(
         body.orbit_radius * body.phase.cos(),

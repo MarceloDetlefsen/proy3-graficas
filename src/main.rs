@@ -28,7 +28,9 @@ use rasterizer::{
     shade_visibility_tiled_materials,
 };
 use raylib::prelude::*;
-use scene::{body_static_model_matrix, body_static_position, build_model_matrix, solar_system};
+use scene::{
+    body_position_at, body_static_model_matrix, build_model_matrix, solar_system,
+};
 use shaders::{Shader, shader_name};
 use sim::SimClock;
 use surface_map::{BakedMaps, DEFAULT_BAKE_HEIGHT, DEFAULT_BAKE_WIDTH};
@@ -495,9 +497,9 @@ fn main() {
         let t_vtx = std::time::Instant::now();
         render_buffers.screen_triangles.clear();
         render_buffers.tri_materials.clear();
-        let sun_pos = body_static_position(&bodies[0]);
+        let sun_pos = body_position_at(&bodies[0], sim_clock.time);
         for body in &bodies {
-            let body_pos = body_static_position(body);
+            let body_pos = body_position_at(body, sim_clock.time);
             let to_sun = sun_pos - body_pos;
             let body_light = if to_sun.length_sqr() > 1e-6 {
                 to_sun.normalize()
