@@ -4,6 +4,7 @@ use crate::Uniforms;
 use crate::fragment::Fragment;
 use crate::math::Vec4;
 use crate::noise;
+use crate::rasterizer::{VIEWPORT_HEIGHT, VIEWPORT_WIDTH};
 use crate::vertex::Vertex;
 
 mod gas_giant;
@@ -20,16 +21,28 @@ pub enum Shader {
 
 pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     let position = Vec4::from_point(vertex.position);
-    let transformed = uniforms.model_matrix * position;
+    let world = uniforms.model_matrix * position;
+    let clip = uniforms.projection_matrix * (uniforms.view_matrix * world);
+
+    let inv_w = if clip.w.abs() > 1e-6 {
+        1.0 / clip.w
+    } else {
+        0.0
+    };
+    let ndc_x = clip.x * inv_w;
+    let ndc_y = clip.y * inv_w;
+    let ndc_z = clip.z * inv_w;
+
+    let screen_x = (ndc_x * 0.5 + 0.5) * VIEWPORT_WIDTH as f32;
+    let screen_y = (0.5 - ndc_y * 0.5) * VIEWPORT_HEIGHT as f32;
+    let depth = ndc_z * 0.5 + 0.5;
 
     let mut result = vertex.clone();
-    result.world_position = Vector3::new(
-        transformed.x - uniforms.model_matrix.cols[3][0],
-        transformed.y - uniforms.model_matrix.cols[3][1],
-        transformed.z - uniforms.model_matrix.cols[3][2],
-    );
-    result.transformed_position = transformed.xyz();
+    result.world_position = world.xyz();
+    result.transformed_position = Vector3::new(screen_x, screen_y, depth);
+    // Usa solo la parte de rotación/escala uniforme de la matriz de modelo.
     result.transformed_normal = uniforms.model_matrix.transform_normal(vertex.normal);
+    result.clip_w = clip.w;
     result
 }
 

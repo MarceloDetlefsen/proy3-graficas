@@ -11,6 +11,7 @@ mod shaders;
 mod triangle;
 mod vertex;
 
+use camera::Camera;
 use framebuffer::Framebuffer;
 use math::Mat4;
 use obj::load_obj;
@@ -185,10 +186,12 @@ fn main() {
         .collect();
 
     let (min, max) = obj.bounds();
-    let model_width = max.x - min.x;
-    let model_height = max.y - min.y;
-    let scale = (VIEWPORT_WIDTH as f32 * 0.8 / model_width)
-        .min(VIEWPORT_HEIGHT as f32 * 0.8 / model_height);
+    let max_extent = (max.x - min.x)
+        .max(max.y - min.y)
+        .max(max.z - min.z)
+        .max(1e-4);
+    let base_scale = 2.0 / max_extent;
+    let aspect = VIEWPORT_WIDTH as f32 / VIEWPORT_HEIGHT as f32;
 
     let mut framebuffer = Framebuffer::new(
         VIEWPORT_WIDTH as u32,
@@ -197,14 +200,21 @@ fn main() {
     );
 
     if let Some(options) = parse_capture_options() {
-        let model_matrix = build_model_matrix(&obj, scale, 0.0, 0.0, 1.0);
+        let model_matrix = build_model_matrix(&obj, 0.0, 0.0, base_scale);
+        let cam = Camera::new(
+            Vector3::new(0.0, 0.0, 3.0),
+            Vector3::zero(),
+            45.0_f32.to_radians(),
+            0.1,
+            100.0,
+        );
         let uniforms = Uniforms {
             model_matrix,
-            view_matrix: Mat4::identity(),
-            projection_matrix: Mat4::identity(),
+            view_matrix: cam.view_matrix(),
+            projection_matrix: cam.projection_matrix(aspect),
             time: options.time,
             light_dir: options.light_dir,
-            camera_pos: Vector3::new(0.0, 0.0, scale * 2.0),
+            camera_pos: Vector3::new(0.0, 0.0, 2.0),
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: options.view,
@@ -295,9 +305,16 @@ fn main() {
         }
         zoom = (zoom + window.get_mouse_wheel_move() * 0.1).clamp(0.2, 4.0);
 
-        let model_matrix = build_model_matrix(&obj, scale, yaw, pitch, zoom);
-        // En la convención del renderer, -z es el frente visible de la esfera.
-        let base_light = Vector3::new(-0.65, -0.80, -1.0).normalize();
+        let model_matrix = build_model_matrix(&obj, yaw, pitch, base_scale);
+        let cam = Camera::new(
+            Vector3::new(0.0, 0.0, 3.0 / zoom),
+            Vector3::zero(),
+            45.0_f32.to_radians(),
+            0.1,
+            100.0,
+        );
+        // En la convención del renderer, +z es el frente visible hacia la cámara.
+        let base_light = Vector3::new(-0.65, 0.80, 1.0).normalize();
         let light_dir = Vector3::new(
             base_light.x * light_angle.cos() - base_light.z * light_angle.sin(),
             base_light.y,
@@ -306,11 +323,11 @@ fn main() {
         .normalize();
         let uniforms = Uniforms {
             model_matrix,
-            view_matrix: Mat4::identity(),
-            projection_matrix: Mat4::identity(),
+            view_matrix: cam.view_matrix(),
+            projection_matrix: cam.projection_matrix(aspect),
             time,
             light_dir,
-            camera_pos: Vector3::new(0.0, 0.0, scale * zoom * 2.0),
+            camera_pos: Vector3::new(0.0, 0.0, 3.0 / zoom),
             debug_noise,
             noise_frequency,
             rocky_debug_view,

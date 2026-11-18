@@ -7,6 +7,7 @@ pub struct Vertex {
     pub world_position: Vector3,
     pub transformed_position: Vector3,
     pub transformed_normal: Vector3,
+    pub clip_w: f32,
 }
 
 impl Vertex {
@@ -17,6 +18,7 @@ impl Vertex {
             world_position: position,
             transformed_position: position,
             transformed_normal: normal,
+            clip_w: 1.0,
         }
     }
 }
