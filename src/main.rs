@@ -20,8 +20,8 @@ use obj::load_obj;
 use perf::{FrameSample, PerfStats};
 use primitive::{ScreenTriangle, assemble_screen_triangles};
 use rasterizer::{
-    TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize_visibility, render_wireframe,
-    shade_visibility,
+    TILE_SIZE, TileGrid, TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize_visibility_tiled,
+    render_wireframe, shade_visibility,
 };
 use raylib::prelude::*;
 use scene::build_model_matrix;
@@ -148,6 +148,7 @@ fn next_capture_path() -> PathBuf {
 struct RenderBuffers {
     transformed_vertices: Vec<vertex::Vertex>,
     screen_triangles: Vec<ScreenTriangle>,
+    tile_grid: TileGrid,
 }
 
 impl RenderBuffers {
@@ -155,6 +156,7 @@ impl RenderBuffers {
         Self {
             transformed_vertices: Vec::with_capacity(vertex_capacity),
             screen_triangles: Vec::with_capacity(vertex_capacity / 3),
+            tile_grid: TileGrid::new(WINDOW_WIDTH as usize, WINDOW_HEIGHT as usize),
         }
     }
 }
@@ -180,11 +182,13 @@ fn render(
     let (raster_ms, shading_ms, fragments, shader_calls, visible_pixels) = match mode {
         TriangleMode::FilledBarycentric => {
             let t_rast = std::time::Instant::now();
-            let writes = rasterize_visibility(
+            let writes = rasterize_visibility_tiled(
                 &buffers.screen_triangles,
+                &mut buffers.tile_grid,
                 framebuffer,
                 backface_culling,
             );
+            let _ = TILE_SIZE;
             let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
 
             let t_shade = std::time::Instant::now();

@@ -16,7 +16,6 @@ pub const WINDOW_HEIGHT: i32 = 600;
 pub const TILE_SIZE: usize = 64;
 const DEGENERATE_EPS: f32 = 1e-6;
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct TileGrid {
     pub tiles_x: usize,
@@ -128,6 +127,7 @@ pub fn interpolate_screen_fragment(
     }
 }
 
+#[allow(dead_code)]
 pub fn rasterize_visibility(
     triangles: &[ScreenTriangle],
     framebuffer: &mut Framebuffer,
@@ -184,6 +184,101 @@ pub fn rasterize_visibility(
         }
     }
 
+    writes
+}
+
+pub fn rasterize_band(
+    band_idx: usize,
+    width: usize,
+    triangles: &[ScreenTriangle],
+    tile_grid: &TileGrid,
+    depth_band: &mut [f32],
+    tri_id_band: &mut [u32],
+    backface_culling: bool,
+) -> usize {
+    let band_height = depth_band.len() / width;
+    let y0 = band_idx * TILE_SIZE;
+    let y1 = y0 + band_height;
+    let row_tiles = &tile_grid.bins[band_idx * tile_grid.tiles_x..(band_idx + 1) * tile_grid.tiles_x];
+    let mut writes = 0usize;
+
+    for (tx, bin) in row_tiles.iter().enumerate() {
+        let x0 = tx * TILE_SIZE;
+        let x1 = (x0 + TILE_SIZE).min(width);
+        for &tri_id in bin {
+            let tri = &triangles[tri_id as usize];
+            let [v0, v1, v2] = tri.vertices;
+            let pa = (v0.x, v0.y);
+            let pb = (v1.x, v1.y);
+            let pc = (v2.x, v2.y);
+            let area = edge_2d(pa, pb, pc);
+            if area.abs() <= DEGENERATE_EPS || (backface_culling && area <= 0.0) {
+                continue;
+            }
+            let inv_area = 1.0 / area;
+
+            let min_x = (pa.0.min(pb.0).min(pc.0).floor() as i32).max(x0 as i32);
+            let max_x = (pa.0.max(pb.0).max(pc.0).ceil() as i32).min(x1 as i32 - 1);
+            let min_y = (pa.1.min(pb.1).min(pc.1).floor() as i32).max(y0 as i32);
+            let max_y = (pa.1.max(pb.1).max(pc.1).ceil() as i32).min(y1 as i32 - 1);
+
+            if min_x > max_x || min_y > max_y {
+                continue;
+            }
+
+            for y in min_y as usize..=max_y as usize {
+                let py = y as f32 + 0.5;
+                let row_offset = (y - y0) * width;
+                for x in min_x as usize..=max_x as usize {
+                    let p = (x as f32 + 0.5, py);
+                    let w0 = edge_2d(pb, pc, p) * inv_area;
+                    let w1 = edge_2d(pc, pa, p) * inv_area;
+                    let w2 = edge_2d(pa, pb, p) * inv_area;
+                    if w0 >= 0.0 && w1 >= 0.0 && w2 >= 0.0 {
+                        let depth = v0.z * w0 + v1.z * w1 + v2.z * w2;
+                        let idx = row_offset + x;
+                        if depth < depth_band[idx] {
+                            depth_band[idx] = depth;
+                            tri_id_band[idx] = tri_id;
+                            writes += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    writes
+}
+
+pub fn rasterize_visibility_tiled(
+    triangles: &[ScreenTriangle],
+    tile_grid: &mut TileGrid,
+    framebuffer: &mut Framebuffer,
+    backface_culling: bool,
+) -> usize {
+    let width = framebuffer.width as usize;
+    let height = framebuffer.height as usize;
+    tile_grid.bin_triangles(triangles, width, height, backface_culling);
+
+    let band_elems = TILE_SIZE * width;
+    let mut writes = 0usize;
+    for (band_idx, (depth_band, tri_id_band)) in framebuffer
+        .depth_buffer
+        .chunks_mut(band_elems)
+        .zip(framebuffer.tri_id_buffer.chunks_mut(band_elems))
+        .enumerate()
+    {
+        writes += rasterize_band(
+            band_idx,
+            width,
+            triangles,
+            tile_grid,
+            depth_band,
+            tri_id_band,
+            backface_culling,
+        );
+    }
     writes
 }
 
