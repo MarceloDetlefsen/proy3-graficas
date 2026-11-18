@@ -13,6 +13,7 @@ pub mod gas_giant;
 pub mod rocky;
 pub mod ship;
 pub mod star;
+pub mod vestigio;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
@@ -23,6 +24,7 @@ pub enum Shader {
     Ardens,
     Abismo,
     Basquia,
+    Vestigio,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -101,6 +103,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Ardens => ardens::shade(fragment, uniforms),
         Shader::Abismo => abismo::shade(fragment, uniforms),
         Shader::Basquia => basquia::shade(fragment, uniforms),
+        Shader::Vestigio => vestigio::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -124,6 +127,7 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Ardens => "Shader: Ardens",
         Shader::Abismo => "Shader: Abismo",
         Shader::Basquia => "Shader: Basquia",
+        Shader::Vestigio => "Shader: Vestigio",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }
