@@ -756,10 +756,10 @@ mod tests {
         let (min, max) = obj.bounds();
         let max_extent = (max.x - min.x).max(max.y - min.y).max(max.z - min.z);
         let model_matrix = build_model_matrix(&obj, 0.0, 0.0, 2.0 / max_extent);
-        let vertex_array: Vec<Vertex> = obj
-            .indices
+        let (mesh_verts, mesh_indices) = obj.to_indexed_mesh();
+        let vertex_array: Vec<Vertex> = mesh_indices
             .iter()
-            .map(|&i| Vertex::new(obj.vertices[i], obj.vertex_normals[i]))
+            .map(|&i| mesh_verts[i].clone())
             .collect();
 
         let mut clip_scratch = Vec::new();

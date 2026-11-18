@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 
+use crate::vertex::Vertex;
 use raylib::prelude::Vector3;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader};
 
@@ -47,6 +49,38 @@ impl Obj {
             .get(corner.pos)
             .copied()
             .unwrap_or_else(|| Vector3::new(0.0, 1.0, 0.0))
+    }
+
+    pub fn corner_uv(&self, corner: FaceCorner) -> [f32; 2] {
+        corner
+            .tex
+            .and_then(|ti| self.texcoords.get(ti).copied())
+            .unwrap_or([0.0, 0.0])
+    }
+
+    /// Construye una malla indexada duplicando vértices únicamente cuando difieren sus atributos.
+    pub fn to_indexed_mesh(&self) -> (Vec<Vertex>, Vec<usize>) {
+        let mut unique: HashMap<FaceCorner, usize> = HashMap::new();
+        let mut vertices = Vec::new();
+        let mut indices = Vec::with_capacity(self.corner_indices.len());
+
+        for &corner in &self.corner_indices {
+            if corner.pos >= self.vertices.len() {
+                continue;
+            }
+            let idx = *unique.entry(corner).or_insert_with(|| {
+                let next_idx = vertices.len();
+                vertices.push(Vertex::with_uv(
+                    self.vertices[corner.pos],
+                    self.corner_normal(corner),
+                    self.corner_uv(corner),
+                ));
+                next_idx
+            });
+            indices.push(idx);
+        }
+
+        (vertices, indices)
     }
 
     /// Calcula la caja envolvente (bounding box) del modelo devolviendo (min, max).
@@ -317,5 +351,25 @@ f 1/1 2/2 3 4/4 5
 
         // Pentágono: 3 triángulos en abanico [0,1,2], [0,2,3], [0,3,4]
         assert_eq!(obj.indices[9..18], [0, 1, 2, 0, 2, 3, 0, 3, 4]);
+    }
+
+    #[test]
+    fn indexed_mesh_deduplicates_matching_corners_and_loads_assets() {
+        let sphere = load_obj("assets/sphere.obj").expect("sphere.obj debe cargar");
+        let (s_verts, s_idx) = sphere.to_indexed_mesh();
+        assert_eq!(s_idx.len(), 192 * 3);
+        assert!(s_verts.len() <= s_idx.len());
+
+        let ship = load_obj("assets/ship.obj").expect("ship.obj debe cargar");
+        let (sh_verts, sh_idx) = ship.to_indexed_mesh();
+        assert_eq!(sh_idx.len(), 29696 * 3);
+        assert!(sh_verts.len() <= sh_idx.len());
+        println!(
+            "Indexed mesh vertices -> sphere: {} (indices {}), ship: {} (indices {})",
+            s_verts.len(),
+            s_idx.len(),
+            sh_verts.len(),
+            sh_idx.len()
+        );
     }
 }

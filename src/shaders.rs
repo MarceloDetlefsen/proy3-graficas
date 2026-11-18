@@ -54,7 +54,7 @@ pub fn vertex_to_clip(vertex: &Vertex, uniforms: &Uniforms) -> ClipVertex {
         object_pos: vertex.position,
         world_pos: world.xyz(),
         normal: uniforms.model_matrix.transform_normal(vertex.normal),
-        uv: [0.0, 0.0],
+        uv: vertex.uv,
     }
 }
 

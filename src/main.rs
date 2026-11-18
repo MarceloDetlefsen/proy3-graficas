@@ -235,20 +235,17 @@ fn render(
 fn main() {
     let obj_path = "assets/sphere.obj";
     let obj = load_obj(obj_path).expect("No se pudo cargar assets/sphere.obj");
+    let (mesh_vertices, mesh_indices) = obj.to_indexed_mesh();
     println!("Modelo cargado: '{obj_path}'");
-    println!("  Vértices:   {}", obj.vertices.len());
+    println!("  Posiciones fuente (v): {}", obj.vertices.len());
+    println!("  UVs fuente (vt): {}", obj.texcoords.len());
     println!("  Normales fuente (vn): {}", obj.source_normals.len());
-    println!("  Triángulos: {}", obj.indices.len() / 3);
-    let normals_are_unit = obj
-        .vertex_normals
-        .iter()
-        .all(|normal| (normal.length() - 1.0).abs() <= 1e-4);
-    println!("  Normales suaves unitarias (~1): {normals_are_unit}");
+    println!("  Vértices indexados: {}", mesh_vertices.len());
+    println!("  Triángulos: {}", mesh_indices.len() / 3);
 
-    let vertex_array: Vec<vertex::Vertex> = obj
-        .indices
+    let vertex_array: Vec<vertex::Vertex> = mesh_indices
         .iter()
-        .map(|&index| vertex::Vertex::new(obj.vertices[index], obj.vertex_normals[index]))
+        .map(|&index| mesh_vertices[index].clone())
         .collect();
 
     let (min, max) = obj.bounds();
