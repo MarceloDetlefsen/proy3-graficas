@@ -154,9 +154,35 @@ pub fn apply_controls_in_frame(
             .map_or(Vector3::zero(), |b| body_velocity_at(b, time)),
     };
     ship.velocity -= ref_vel;
+    let (speed_scale, _) = local_flight_scales(ship.position, mode, bodies, time);
+    let base_max_speed = ship.max_speed;
+    ship.max_speed = base_max_speed * speed_scale;
     ship.apply_thrust(controls.throttle, controls.boost, dt);
+    ship.max_speed = base_max_speed;
     ship.apply_damping(controls.braking, dt);
     ship.velocity += ref_vel;
+}
+
+/// Calcula `(escala_velocidad, escala_giro)` proporcionales a la altitud en
+/// modo local para dar control fino cerca de la superficie y transición suave a `(1, 1)`.
+pub fn local_flight_scales(
+    pos: Vector3,
+    mode: NavMode,
+    bodies: &[Body],
+    time: f32,
+) -> (f32, f32) {
+    let NavMode::Local(idx) = mode else {
+        return (1.0, 1.0);
+    };
+    let Some(body) = bodies.get(idx) else {
+        return (1.0, 1.0);
+    };
+    let r = effective_radius(body).max(1e-4);
+    let alt = ((pos - body_position_at(body, time)).length() - r).max(0.0);
+    let t = (alt / (LOCAL_EXIT_RADII * r)).clamp(0.0, 1.0);
+    let speed_scale = 0.35 + 0.65 * t;
+    let turn_scale = 0.55 + 0.45 * t;
+    (speed_scale, turn_scale)
 }
 
 /// Alinea suavemente el vector `up` de la nave con la normal superficial del
