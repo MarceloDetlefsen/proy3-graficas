@@ -4,6 +4,7 @@ mod fragment;
 mod framebuffer;
 mod math;
 mod mesh_lod;
+mod nav;
 mod noise;
 mod obj;
 mod perf;
