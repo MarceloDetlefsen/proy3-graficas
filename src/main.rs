@@ -346,6 +346,8 @@ fn main() {
     let mut cam_pitch = 0.45_f32;
     let mut cam_distance = 34.0_f32;
     let mut sim_clock = SimClock::new();
+    let time_scales = [0.25_f32, 0.5, 1.0, 2.0, 5.0];
+    let mut time_scale_idx = 2_usize;
     let bodies = solar_system();
     let _ = build_model_matrix;
     let _ = shader_name;
@@ -379,6 +381,17 @@ fn main() {
         let frame_start = std::time::Instant::now();
         let dt = window.get_frame_time();
         let _sim_dt = sim_clock.advance(dt);
+        if window.is_key_pressed(KeyboardKey::KEY_SPACE) {
+            sim_clock.toggle_pause();
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_MINUS) {
+            time_scale_idx = time_scale_idx.saturating_sub(1);
+            sim_clock.set_scale(time_scales[time_scale_idx]);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_EQUAL) {
+            time_scale_idx = (time_scale_idx + 1).min(time_scales.len() - 1);
+            sim_clock.set_scale(time_scales[time_scale_idx]);
+        }
         if window.is_key_pressed(KeyboardKey::KEY_F3) {
             perf_stats.enabled = !perf_stats.enabled;
         }
