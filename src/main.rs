@@ -187,6 +187,7 @@ fn render(
                 &mut buffers.tile_grid,
                 framebuffer,
                 backface_culling,
+                1,
             );
             let _ = TILE_SIZE;
             let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;

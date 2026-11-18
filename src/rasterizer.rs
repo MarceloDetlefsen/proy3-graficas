@@ -4,6 +4,8 @@ use crate::framebuffer::{Framebuffer, INVALID_TRI_ID};
 use crate::primitive::ScreenTriangle;
 use crate::shaders::{Shader, fragment_shader};
 use raylib::prelude::{Color, Vector2};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TriangleMode {
@@ -256,30 +258,74 @@ pub fn rasterize_visibility_tiled(
     tile_grid: &mut TileGrid,
     framebuffer: &mut Framebuffer,
     backface_culling: bool,
+    threads: usize,
 ) -> usize {
     let width = framebuffer.width as usize;
     let height = framebuffer.height as usize;
     tile_grid.bin_triangles(triangles, width, height, backface_culling);
 
     let band_elems = TILE_SIZE * width;
-    let mut writes = 0usize;
-    for (band_idx, (depth_band, tri_id_band)) in framebuffer
+    let thread_count = threads.max(1);
+    if thread_count == 1 {
+        let mut writes = 0usize;
+        for (band_idx, (depth_band, tri_id_band)) in framebuffer
+            .depth_buffer
+            .chunks_mut(band_elems)
+            .zip(framebuffer.tri_id_buffer.chunks_mut(band_elems))
+            .enumerate()
+        {
+            writes += rasterize_band(
+                band_idx,
+                width,
+                triangles,
+                tile_grid,
+                depth_band,
+                tri_id_band,
+                backface_culling,
+            );
+        }
+        return writes;
+    }
+
+    let bands: Vec<Mutex<Option<(usize, &mut [f32], &mut [u32])>>> = framebuffer
         .depth_buffer
         .chunks_mut(band_elems)
         .zip(framebuffer.tri_id_buffer.chunks_mut(band_elems))
         .enumerate()
-    {
-        writes += rasterize_band(
-            band_idx,
-            width,
-            triangles,
-            tile_grid,
-            depth_band,
-            tri_id_band,
-            backface_culling,
-        );
-    }
-    writes
+        .map(|(band_idx, (d, t))| Mutex::new(Some((band_idx, d, t))))
+        .collect();
+    let next_band = AtomicUsize::new(0);
+    let total_writes = AtomicUsize::new(0);
+    let workers = thread_count.min(bands.len().max(1));
+    let grid_ref: &TileGrid = tile_grid;
+
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| {
+                let mut local_writes = 0usize;
+                loop {
+                    let idx = next_band.fetch_add(1, Ordering::Relaxed);
+                    if idx >= bands.len() {
+                        break;
+                    }
+                    let (band_idx, depth_band, tri_id_band) =
+                        bands[idx].lock().unwrap().take().unwrap();
+                    local_writes += rasterize_band(
+                        band_idx,
+                        width,
+                        triangles,
+                        grid_ref,
+                        depth_band,
+                        tri_id_band,
+                        backface_culling,
+                    );
+                }
+                total_writes.fetch_add(local_writes, Ordering::Relaxed);
+            });
+        }
+    });
+
+    total_writes.load(Ordering::Relaxed)
 }
 
 pub fn shade_visibility(
@@ -541,7 +587,7 @@ mod tests {
 
         let mut fb_tiled = Framebuffer::new(160, 140, Color::BLACK);
         let mut grid = TileGrid::new(160, 140);
-        rasterize_visibility_tiled(&triangles, &mut grid, &mut fb_tiled, true);
+        rasterize_visibility_tiled(&triangles, &mut grid, &mut fb_tiled, true, 4);
         shade_visibility(&triangles, &mut fb_tiled, Shader::Star, &uniforms);
 
         assert_eq!(fb_full.depth_buffer, fb_tiled.depth_buffer);
