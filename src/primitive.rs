@@ -49,10 +49,19 @@ pub fn assemble_screen_triangles(
     clip_scratch: &mut Vec<ClipVertex>,
     out_triangles: &mut Vec<ScreenTriangle>,
 ) {
+    out_triangles.clear();
+    append_screen_triangles(vertex_array, uniforms, clip_scratch, out_triangles);
+}
+
+pub fn append_screen_triangles(
+    vertex_array: &[Vertex],
+    uniforms: &Uniforms,
+    clip_scratch: &mut Vec<ClipVertex>,
+    out_triangles: &mut Vec<ScreenTriangle>,
+) {
     clip_scratch.clear();
     clip_scratch.extend(vertex_array.iter().map(|v| vertex_to_clip(v, uniforms)));
 
-    out_triangles.clear();
     let vw = uniforms.viewport_width as f32;
     let vh = uniforms.viewport_height as f32;
 
