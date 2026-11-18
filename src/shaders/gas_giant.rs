@@ -253,12 +253,30 @@ pub fn shade_from_static(fragment: &Fragment, uniforms: &Uniforms, s: [f32; 5]) 
     result
 }
 
+fn animated_vortex_dir(p: Vector3, time: f32) -> Vector3 {
+    if time.abs() <= 1e-5 {
+        return p;
+    }
+    let center = Vector3::new(VORTEX_CENTER[0], VORTEX_CENTER[1], VORTEX_CENTER[2]).normalize();
+    let distance = (p - center).length();
+    let falloff = (-distance / VORTEX_INFLUENCE_RADIUS).exp();
+    let angle = -time * (VORTEX_SPIN * 4.0) * falloff;
+    let (sin_a, cos_a) = angle.sin_cos();
+    let cross = Vector3::new(
+        center.y * p.z - center.z * p.y,
+        center.z * p.x - center.x * p.z,
+        center.x * p.y - center.y * p.x,
+    );
+    (p * cos_a + cross * sin_a + center * center.dot(p) * (1.0 - cos_a)).normalize()
+}
+
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     print_statistics_once(&uniforms.noise);
+    let sample_dir = animated_vortex_dir(fragment.object_pos.normalize(), uniforms.time);
     let s = if let Some(baked) = uniforms.baked.as_ref() {
-        baked.gas_giant.sample_dir(fragment.object_pos)
+        baked.gas_giant.sample_dir(sample_dir)
     } else {
-        sample_static(&uniforms.noise, fragment.object_pos)
+        sample_static(&uniforms.noise, sample_dir)
     };
     shade_from_static(fragment, uniforms, s)
 }
