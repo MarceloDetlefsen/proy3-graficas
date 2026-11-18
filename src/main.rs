@@ -552,6 +552,7 @@ fn main() {
             roll_in += 1.0;
         }
 
+        let mut collision_body: Option<usize> = None;
         physics_stepper.step(dt, |sub_dt| {
             ship.apply_thrust(throttle, boost, sub_dt);
             ship.apply_damping(braking, sub_dt);
@@ -563,6 +564,10 @@ fn main() {
                 sub_dt,
                 gravity_enabled,
             );
+            if let Some(idx) = physics::resolve_body_collisions(&mut ship, &bodies, sim_clock.time)
+            {
+                collision_body = Some(idx);
+            }
         });
 
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
@@ -732,6 +737,9 @@ fn main() {
             if gravity_enabled { "ON" } else { "OFF" },
             gravity_mag,
         ));
+        if let Some(idx) = collision_body {
+            overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
+        }
         if perf_stats.enabled {
             overlay.extend(perf_stats.overlay_lines());
         }
