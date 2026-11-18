@@ -363,7 +363,7 @@ fn main() {
     let time_scales = [0.25_f32, 0.5, 1.0, 2.0, 5.0];
     let mut time_scale_idx = 2_usize;
     let ship_lods = load_ship_lods();
-    let (ship_v0, ship_i0) = &ship_lods.levels[0];
+    let (ship_v0, _ship_i0) = &ship_lods.levels[0];
     let (ship_min, ship_max) = mesh_bounds(ship_v0);
     let ship_center = (ship_min + ship_max) * 0.5;
     let ship_extent = (ship_max.x - ship_min.x)
@@ -371,8 +371,11 @@ fn main() {
         .max(ship_max.z - ship_min.z)
         .max(1e-4);
     let ship_unit_scale = 2.0 / ship_extent;
-    let ship_vertex_array: Vec<vertex::Vertex> =
-        ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
+    let ship_vertex_arrays: [Vec<vertex::Vertex>; 3] = std::array::from_fn(|lvl| {
+        let (verts, idxs) = &ship_lods.levels[lvl];
+        idxs.iter().map(|&i| verts[i].clone()).collect()
+    });
+    let mut ship_lod = 0_usize;
     let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
     let mut physics_stepper = physics::PhysicsStepper::new();
     let mut nav_state = nav::NavState::new();
@@ -711,8 +714,22 @@ fn main() {
             );
         }
 
-        // Dibujar nave (LOD0)
-        let ship_tris = ship_vertex_array.len() / 3;
+        // Dibujar nave con LOD según distancia a la cámara
+        let ship_radius_px = lod::projected_radius_px(
+            &cam,
+            ship.position,
+            ship.radius,
+            internal_height as f32,
+        );
+        let ship_detail = lod::select_detail_level_hysteresis(
+            2 - ship_lod.min(2),
+            ship_radius_px,
+            &lod::SHIP_THRESHOLDS_PX,
+            lod::DEFAULT_HYSTERESIS,
+        );
+        ship_lod = 2 - ship_detail;
+        let ship_mesh = &ship_vertex_arrays[ship_lod];
+        let ship_tris = ship_mesh.len() / 3;
         tris_before_cull += ship_tris;
         if !frustum_culling || frustum.intersects_sphere(ship.position, ship.radius * 1.5) {
             tris_after_cull += ship_tris;
@@ -725,7 +742,7 @@ fn main() {
             uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
             let before_ship = render_buffers.screen_triangles.len();
             append_screen_triangles(
-                &ship_vertex_array,
+                ship_mesh,
                 &uniforms,
                 &mut render_buffers.clip_vertices,
                 &mut render_buffers.screen_triangles,
