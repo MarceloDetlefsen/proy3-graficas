@@ -109,6 +109,28 @@ pub fn spherical_uv(unit_pos: Vector3) -> [f32; 2] {
     [u, v]
 }
 
+/// Calcula la base tangente `(tangent, bitangent)` ortonormal a `normal` a partir
+/// de la dirección esférica `dir` (tangente de longitud y respaldo en los polos).
+pub fn spherical_tangent_basis(dir: Vector3, normal: Vector3) -> (Vector3, Vector3) {
+    let n = normal.normalize();
+    let lon_raw = Vector3::new(-dir.z, 0.0, dir.x);
+    let t_raw = if lon_raw.length_sqr() > 1e-8 {
+        lon_raw
+    } else if n.x.abs() < 0.9 {
+        Vector3::new(1.0, 0.0, 0.0)
+    } else {
+        Vector3::new(0.0, 0.0, 1.0)
+    };
+    let t_ortho = t_raw - n * n.dot(t_raw);
+    let tangent = if t_ortho.length_sqr() > 1e-8 {
+        t_ortho.normalize()
+    } else {
+        Vector3::new(0.0, 0.0, 1.0).cross(n).normalize()
+    };
+    let bitangent = n.cross(tangent).normalize();
+    (tangent, bitangent)
+}
+
 impl IcoMesh {
     /// Recalcula normales suaves por vértice promediando las normales de caras adyacentes.
     pub fn compute_smooth_normals(&self) -> Vec<Vector3> {
@@ -145,7 +167,11 @@ impl IcoMesh {
             .zip(normals.iter())
             .map(|(&pos, &normal)| {
                 let dir = pos.normalize();
-                Vertex::with_uv(pos, normal, spherical_uv(dir))
+                let (tangent, bitangent) = spherical_tangent_basis(dir, normal);
+                let mut v = Vertex::with_uv(pos, normal, spherical_uv(dir));
+                v.tangent = tangent;
+                v.bitangent = bitangent;
+                v
             })
             .collect();
         self.indices
