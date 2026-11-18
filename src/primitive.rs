@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use raylib::prelude::Vector3;
 
 use crate::Uniforms;
@@ -15,6 +13,7 @@ pub struct ScreenVertex {
     pub object_pos: Vector3,
     pub world_pos: Vector3,
     pub normal: Vector3,
+    #[allow(dead_code)]
     pub uv: [f32; 2],
 }
 
@@ -56,18 +55,4 @@ pub fn assemble_screen_triangles(
             vertices: [to_sv(&group[0]), to_sv(&group[1]), to_sv(&group[2])],
         });
     }
-}
-
-pub fn primitive_assembly(transformed_vertices: &[Vertex]) -> Vec<[Vertex; 3]> {
-    assert!(
-        transformed_vertices.len().is_multiple_of(3),
-        "La cantidad de vértices debe ser múltiplo de 3",
-    );
-
-    transformed_vertices
-        .as_chunks::<3>()
-        .0
-        .iter()
-        .map(|group| [group[0].clone(), group[1].clone(), group[2].clone()])
-        .collect()
 }

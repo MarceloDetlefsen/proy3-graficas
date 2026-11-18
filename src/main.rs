@@ -10,7 +10,6 @@ mod rasterizer;
 mod scene;
 mod shaders;
 mod surface_map;
-mod triangle;
 mod vertex;
 
 use camera::Camera;
@@ -19,11 +18,14 @@ use math::Mat4;
 use noise::Noise;
 use obj::load_obj;
 use perf::{FrameSample, PerfStats};
-use primitive::{assemble_screen_triangles, primitive_assembly};
-use rasterizer::{TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize};
+use primitive::{ScreenTriangle, assemble_screen_triangles};
+use rasterizer::{
+    TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize_visibility, render_wireframe,
+    shade_visibility,
+};
 use raylib::prelude::*;
 use scene::build_model_matrix;
-use shaders::{Shader, fragment_shader, shader_name};
+use shaders::{Shader, shader_name};
 use surface_map::{BakedMaps, DEFAULT_BAKE_HEIGHT, DEFAULT_BAKE_WIDTH};
 use std::fs;
 use std::path::PathBuf;
@@ -143,78 +145,73 @@ fn next_capture_path() -> PathBuf {
     }
 }
 
+struct RenderBuffers {
+    transformed_vertices: Vec<vertex::Vertex>,
+    screen_triangles: Vec<ScreenTriangle>,
+}
+
+impl RenderBuffers {
+    fn new(vertex_capacity: usize) -> Self {
+        Self {
+            transformed_vertices: Vec::with_capacity(vertex_capacity),
+            screen_triangles: Vec::with_capacity(vertex_capacity / 3),
+        }
+    }
+}
+
 fn render(
     framebuffer: &mut Framebuffer,
     uniforms: &Uniforms,
     vertex_array: &[vertex::Vertex],
+    buffers: &mut RenderBuffers,
     mode: TriangleMode,
     shader: Shader,
     backface_culling: bool,
 ) -> FrameSample {
     let t_vtx = std::time::Instant::now();
-    let mut scratch_vertices = Vec::with_capacity(vertex_array.len());
-    let mut screen_triangles = Vec::with_capacity(vertex_array.len() / 3);
     assemble_screen_triangles(
         vertex_array,
         uniforms,
-        &mut scratch_vertices,
-        &mut screen_triangles,
+        &mut buffers.transformed_vertices,
+        &mut buffers.screen_triangles,
     );
-    let _ = &screen_triangles;
-
-    let triangles: Vec<[vertex::Vertex; 3]> = primitive_assembly(&scratch_vertices)
-        .into_iter()
-        .filter(|tri| {
-            tri.iter()
-                .all(|v| v.clip_w > 0.0 && v.transformed_position.z >= 0.0)
-        })
-        .collect();
     let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
-    let t_rast = std::time::Instant::now();
-    let fragments = rasterize(
-        &triangles,
-        mode,
-        backface_culling,
-        framebuffer.width as i32,
-        framebuffer.height as i32,
-    );
-    let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
-    let frag_count = fragments.len();
+    let (raster_ms, shading_ms, fragments, shader_calls, visible_pixels) = match mode {
+        TriangleMode::FilledBarycentric => {
+            let t_rast = std::time::Instant::now();
+            let writes = rasterize_visibility(
+                &buffers.screen_triangles,
+                framebuffer,
+                backface_culling,
+            );
+            let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
 
-    let mut shading_ns = 0u128;
-    let mut fb_ns = 0u128;
-    for fragment in &fragments {
-        let t_s = std::time::Instant::now();
-        let fragment_color = fragment_shader(fragment, shader, uniforms);
-        shading_ns += t_s.elapsed().as_nanos();
-
-        let t_f = std::time::Instant::now();
-        let color = Color::new(
-            (fragment_color.x.clamp(0.0, 1.0) * 255.0) as u8,
-            (fragment_color.y.clamp(0.0, 1.0) * 255.0) as u8,
-            (fragment_color.z.clamp(0.0, 1.0) * 255.0) as u8,
-            255,
-        );
-        framebuffer.set_pixel_depth(
-            fragment.position.x as i32,
-            fragment.position.y as i32,
-            fragment.depth,
-            color,
-        );
-        fb_ns += t_f.elapsed().as_nanos();
-    }
+            let t_shade = std::time::Instant::now();
+            let (calls, visible) =
+                shade_visibility(&buffers.screen_triangles, framebuffer, shader, uniforms);
+            let shading_ms = t_shade.elapsed().as_secs_f64() * 1000.0;
+            (raster_ms, shading_ms, writes, calls, visible)
+        }
+        TriangleMode::Wireframe => {
+            let t_wire = std::time::Instant::now();
+            let (calls, visible) =
+                render_wireframe(&buffers.screen_triangles, framebuffer, shader, uniforms);
+            let wire_ms = t_wire.elapsed().as_secs_f64() * 1000.0;
+            (0.0, wire_ms, calls, calls, visible)
+        }
+    };
 
     FrameSample {
         vertex_ms,
         raster_ms,
-        shading_ms: shading_ns as f64 / 1_000_000.0,
-        fb_ms: fb_ns as f64 / 1_000_000.0,
+        shading_ms,
+        fb_ms: 0.0,
         present_ms: 0.0,
         total_ms: 0.0,
-        fragments: frag_count,
-        shader_calls: frag_count,
-        visible_pixels: framebuffer.visible_pixel_count(),
+        fragments,
+        shader_calls,
+        visible_pixels,
         width: framebuffer.width,
         height: framebuffer.height,
     }
@@ -289,11 +286,13 @@ fn main() {
             noise: noise.clone(),
             baked: Some(baked.clone()),
         };
+        let mut render_buffers = RenderBuffers::new(vertex_array.len());
         framebuffer.clear();
         render(
             &mut framebuffer,
             &uniforms,
             &vertex_array,
+            &mut render_buffers,
             TriangleMode::FilledBarycentric,
             options.shader,
             true,
@@ -334,6 +333,7 @@ fn main() {
     let orbit_speed = 1.8_f32;
     let light_speed = 1.8_f32;
     let mut perf_stats = PerfStats::new();
+    let mut render_buffers = RenderBuffers::new(vertex_array.len());
 
     while !window.window_should_close() {
         let frame_start = std::time::Instant::now();
@@ -449,6 +449,7 @@ fn main() {
             &mut framebuffer,
             &uniforms,
             &vertex_array,
+            &mut render_buffers,
             mode,
             shader,
             backface_culling,
