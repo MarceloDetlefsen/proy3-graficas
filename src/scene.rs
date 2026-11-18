@@ -152,6 +152,25 @@ pub fn solar_system() -> Vec<Body> {
                 max_deformation: 1.3 * 0.015,
             },
         },
+        Body {
+            name: "Basquia",
+            kind: BodyKind::Planet,
+            radius: 0.9,
+            mass: 8.0,
+            orbit_radius: 64.6,
+            orbit_period: 120.0,
+            phase: 4.5,
+            orbit_inclination: 0.07,
+            rotation_period: 28.0,
+            axial_tilt: 0.22,
+            shader: Shader::Basquia,
+            surface: SurfaceParams {
+                seed: 33,
+                noise_frequency: 4.0,
+                deformation_amplitude: 0.03,
+                max_deformation: 0.9 * 0.03,
+            },
+        },
     ]
 }
 
