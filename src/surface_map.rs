@@ -18,6 +18,7 @@ pub const DEFAULT_BAKE_HEIGHT: usize = 256;
 #[derive(Clone, Debug)]
 pub struct BakedMaps {
     pub rocky: EquirectMap<7>,
+    pub rocky_normals: EquirectMap<3>,
     pub gas_giant: EquirectMap<5>,
 }
 
@@ -32,13 +33,50 @@ impl BakedMaps {
         height: usize,
         frequency: f32,
     ) -> Self {
+        let rocky = EquirectMap::from_fn(width, height, |dir| {
+            let h = planet_height(noise, dir, frequency);
+            rocky::sample_static_with_height(noise, dir, h)
+        });
+        let rocky_normals = build_normal_map_from_heights(&rocky, 3.5);
         Self {
-            rocky: EquirectMap::from_fn(width, height, |dir| {
-                let h = planet_height(noise, dir, frequency);
-                rocky::sample_static_with_height(noise, dir, h)
-            }),
+            rocky,
+            rocky_normals,
             gas_giant: EquirectMap::from_fn(width, height, |dir| gas_giant::sample_static(noise, dir)),
         }
+    }
+}
+
+/// Genera un mapa de normales en espacio tangente `(nx, ny, nz)` a partir
+/// del canal de altura (índice 3) de `height_map`.
+pub fn build_normal_map_from_heights(height_map: &EquirectMap<7>, strength: f32) -> EquirectMap<3> {
+    let w = height_map.width.max(1);
+    let h = height_map.height.max(1);
+    let mut data = Vec::with_capacity(w * h);
+    for y in 0..h {
+        let v = (y as f32 + 0.5) / h as f32;
+        let lat = (v - 0.5) * PI;
+        let cos_lat = lat.cos().abs().max(0.15);
+        let y_dn = y.saturating_sub(1);
+        let y_up = (y + 1).min(h - 1);
+        for x in 0..w {
+            let x_lt = (x + w - 1) % w;
+            let x_rt = (x + 1) % w;
+            let h_l = height_map.data[y * w + x_lt][3];
+            let h_r = height_map.data[y * w + x_rt][3];
+            let h_d = height_map.data[y_dn * w + x][3];
+            let h_u = height_map.data[y_up * w + x][3];
+
+            let dh_du = (h_r - h_l) * strength / cos_lat;
+            let dh_dv = (h_u - h_d) * strength;
+            // Base tangente: T (+u), B = N x T (-v), N.
+            let n = Vector3::new(-dh_du, dh_dv, 1.0).normalize();
+            data.push([n.x, n.y, n.z]);
+        }
+    }
+    EquirectMap {
+        width: w,
+        height: h,
+        data,
     }
 }
 
