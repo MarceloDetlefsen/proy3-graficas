@@ -20,7 +20,7 @@ use camera::Camera;
 use clipping::ClipVertex;
 use framebuffer::Framebuffer;
 use math::Mat4;
-use mesh_lod::load_ship_lods;
+use mesh_lod::{load_ship_lods, mesh_bounds};
 use noise::Noise;
 use obj::load_obj;
 use perf::{FrameSample, PerfStats};
@@ -33,6 +33,7 @@ use rasterizer::{
 use raylib::prelude::*;
 use scene::{body_model_matrix_at, body_position_at, build_model_matrix, solar_system};
 use shaders::{Shader, shader_name};
+use ship::Ship;
 use sim::SimClock;
 use surface_map::{BakedMaps, DEFAULT_BAKE_HEIGHT, DEFAULT_BAKE_WIDTH};
 use std::fs;
@@ -352,7 +353,17 @@ fn main() {
     let time_scales = [0.25_f32, 0.5, 1.0, 2.0, 5.0];
     let mut time_scale_idx = 2_usize;
     let ship_lods = load_ship_lods();
-    let _ = &ship_lods;
+    let (ship_v0, ship_i0) = &ship_lods.levels[0];
+    let (ship_min, ship_max) = mesh_bounds(ship_v0);
+    let ship_center = (ship_min + ship_max) * 0.5;
+    let ship_extent = (ship_max.x - ship_min.x)
+        .max(ship_max.y - ship_min.y)
+        .max(ship_max.z - ship_min.z)
+        .max(1e-4);
+    let ship_unit_scale = 2.0 / ship_extent;
+    let ship_vertex_array: Vec<vertex::Vertex> =
+        ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
+    let ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
     let bodies = solar_system();
     let _ = build_model_matrix;
     let _ = shader_name;
@@ -539,6 +550,30 @@ fn main() {
                 },
             );
         }
+
+        // Dibujar nave (LOD0)
+        let ship_to_sun = sun_pos - ship.position;
+        let ship_light = if ship_to_sun.length_sqr() > 1e-6 {
+            ship_to_sun.normalize()
+        } else {
+            light_dir
+        };
+        uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
+        let before_ship = render_buffers.screen_triangles.len();
+        append_screen_triangles(
+            &ship_vertex_array,
+            &uniforms,
+            &mut render_buffers.clip_vertices,
+            &mut render_buffers.screen_triangles,
+        );
+        let added_ship = render_buffers.screen_triangles.len() - before_ship;
+        render_buffers.tri_materials.resize(
+            before_ship + added_ship,
+            TriMaterial {
+                shader: Shader::Rocky,
+                light_dir: ship_light,
+            },
+        );
         let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
         let (raster_ms, shading_ms, fragments, shader_calls, visible_pixels) = match mode {
