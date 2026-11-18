@@ -13,7 +13,83 @@ pub enum TriangleMode {
 
 pub const WINDOW_WIDTH: i32 = 800;
 pub const WINDOW_HEIGHT: i32 = 600;
+pub const TILE_SIZE: usize = 64;
 const DEGENERATE_EPS: f32 = 1e-6;
+
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+pub struct TileGrid {
+    pub tiles_x: usize,
+    pub tiles_y: usize,
+    pub bins: Vec<Vec<u32>>,
+}
+
+impl TileGrid {
+    pub fn new(width: usize, height: usize) -> Self {
+        let tiles_x = width.div_ceil(TILE_SIZE).max(1);
+        let tiles_y = height.div_ceil(TILE_SIZE).max(1);
+        Self {
+            tiles_x,
+            tiles_y,
+            bins: vec![Vec::new(); tiles_x * tiles_y],
+        }
+    }
+
+    pub fn bin_triangles(
+        &mut self,
+        triangles: &[ScreenTriangle],
+        width: usize,
+        height: usize,
+        backface_culling: bool,
+    ) {
+        let tiles_x = width.div_ceil(TILE_SIZE).max(1);
+        let tiles_y = height.div_ceil(TILE_SIZE).max(1);
+        self.tiles_x = tiles_x;
+        self.tiles_y = tiles_y;
+        let needed = tiles_x * tiles_y;
+        if self.bins.len() != needed {
+            self.bins.resize_with(needed, Vec::new);
+        }
+        for bin in &mut self.bins {
+            bin.clear();
+        }
+
+        let w_i32 = width as i32;
+        let h_i32 = height as i32;
+        for (tri_idx, tri) in triangles.iter().enumerate() {
+            let [v0, v1, v2] = tri.vertices;
+            let pa = (v0.x, v0.y);
+            let pb = (v1.x, v1.y);
+            let pc = (v2.x, v2.y);
+            let area = edge_2d(pa, pb, pc);
+            if area.abs() <= DEGENERATE_EPS || (backface_culling && area <= 0.0) {
+                continue;
+            }
+
+            let min_x = pa.0.min(pb.0).min(pc.0).floor() as i32;
+            let max_x = pa.0.max(pb.0).max(pc.0).ceil() as i32;
+            let min_y = pa.1.min(pb.1).min(pc.1).floor() as i32;
+            let max_y = pa.1.max(pb.1).max(pc.1).ceil() as i32;
+
+            if max_x < 0 || min_x >= w_i32 || max_y < 0 || min_y >= h_i32 {
+                continue;
+            }
+
+            let tx0 = (min_x.clamp(0, w_i32 - 1) as usize) / TILE_SIZE;
+            let tx1 = (max_x.clamp(0, w_i32 - 1) as usize) / TILE_SIZE;
+            let ty0 = (min_y.clamp(0, h_i32 - 1) as usize) / TILE_SIZE;
+            let ty1 = (max_y.clamp(0, h_i32 - 1) as usize) / TILE_SIZE;
+
+            let tri_id = tri_idx as u32;
+            for ty in ty0..=ty1 {
+                let row = ty * tiles_x;
+                for tx in tx0..=tx1 {
+                    self.bins[row + tx].push(tri_id);
+                }
+            }
+        }
+    }
+}
 
 #[inline]
 pub fn edge_2d(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> f32 {
