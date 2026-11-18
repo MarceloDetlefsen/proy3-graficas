@@ -11,7 +11,7 @@ pub mod rocky;
 pub mod star;
 
 #[allow(dead_code)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Shader {
     Star,
     Rocky,
