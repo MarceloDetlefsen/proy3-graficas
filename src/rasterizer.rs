@@ -3,9 +3,15 @@ use crate::fragment::Fragment;
 use crate::framebuffer::{Framebuffer, INVALID_TRI_ID};
 use crate::primitive::ScreenTriangle;
 use crate::shaders::{Shader, fragment_shader};
-use raylib::prelude::{Color, Vector2};
+use raylib::prelude::{Color, Vector2, Vector3};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[derive(Clone, Copy, Debug)]
+pub struct TriMaterial {
+    pub shader: Shader,
+    pub light_dir: Vector3,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TriangleMode {
@@ -353,13 +359,15 @@ pub fn rasterize_visibility_tiled(
     total_writes.load(Ordering::Relaxed)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn shade_band(
     band_idx: usize,
     width: usize,
     triangles: &[ScreenTriangle],
+    materials: &[TriMaterial],
     tri_id_band: &[u32],
     color_band: &mut [u8],
-    shader: Shader,
+    default_shader: Shader,
     uniforms: &Uniforms,
 ) -> usize {
     let band_height = tri_id_band.len() / width;
@@ -375,7 +383,8 @@ fn shade_band(
             if tri_id == INVALID_TRI_ID {
                 continue;
             }
-            let tri = &triangles[tri_id as usize];
+            let tri_usize = tri_id as usize;
+            let tri = &triangles[tri_usize];
             let [v0, v1, v2] = tri.vertices;
             let pa = (v0.x, v0.y);
             let pb = (v1.x, v1.y);
@@ -387,7 +396,18 @@ fn shade_band(
             let w2 = edge_2d(pa, pb, p) * inv_area;
 
             let fragment = interpolate_screen_fragment(tri, p.0, p.1, (w0, w1, w2));
-            let fc = fragment_shader(&fragment, shader, uniforms);
+            let (shader, light_dir) = materials
+                .get(tri_usize)
+                .map_or((default_shader, uniforms.light_dir), |m| {
+                    (m.shader, m.light_dir)
+                });
+            let fc = if (light_dir - uniforms.light_dir).length_sqr() < 1e-12 {
+                fragment_shader(&fragment, shader, uniforms)
+            } else {
+                let mut local_u = uniforms.clone();
+                local_u.light_dir = light_dir;
+                fragment_shader(&fragment, shader, &local_u)
+            };
             let c_idx = idx * 4;
             color_band[c_idx] = (fc.x.clamp(0.0, 1.0) * 255.0) as u8;
             color_band[c_idx + 1] = (fc.y.clamp(0.0, 1.0) * 255.0) as u8;
@@ -400,10 +420,11 @@ fn shade_band(
     calls
 }
 
-pub fn shade_visibility_tiled(
+pub fn shade_visibility_tiled_materials(
     triangles: &[ScreenTriangle],
+    materials: &[TriMaterial],
     framebuffer: &mut Framebuffer,
-    shader: Shader,
+    default_shader: Shader,
     uniforms: &Uniforms,
     threads: usize,
 ) -> (usize, usize) {
@@ -423,9 +444,10 @@ pub fn shade_visibility_tiled(
                 band_idx,
                 width,
                 triangles,
+                materials,
                 tri_id_band,
                 color_band,
-                shader,
+                default_shader,
                 uniforms,
             );
         }
@@ -458,9 +480,10 @@ pub fn shade_visibility_tiled(
                         band_idx,
                         width,
                         triangles,
+                        materials,
                         tri_id_band,
                         color_band,
-                        shader,
+                        default_shader,
                         uniforms,
                     );
                 }
@@ -471,6 +494,16 @@ pub fn shade_visibility_tiled(
 
     let calls = total_calls.load(Ordering::Relaxed);
     (calls, calls)
+}
+
+pub fn shade_visibility_tiled(
+    triangles: &[ScreenTriangle],
+    framebuffer: &mut Framebuffer,
+    shader: Shader,
+    uniforms: &Uniforms,
+    threads: usize,
+) -> (usize, usize) {
+    shade_visibility_tiled_materials(triangles, &[], framebuffer, shader, uniforms, threads)
 }
 
 #[allow(dead_code)]

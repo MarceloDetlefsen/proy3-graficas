@@ -1,7 +1,152 @@
+#![allow(dead_code)]
+
 use raylib::prelude::Vector3;
 
 use crate::math::Mat4;
 use crate::obj::Obj;
+use crate::shaders::Shader;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BodyKind {
+    Star,
+    Planet,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SurfaceParams {
+    pub seed: u32,
+    pub noise_frequency: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Body {
+    pub name: &'static str,
+    pub kind: BodyKind,
+    pub radius: f32,
+    pub mass: f32,
+    pub orbit_radius: f32,
+    pub orbit_period: f32,
+    pub phase: f32,
+    pub orbit_inclination: f32,
+    pub rotation_period: f32,
+    pub axial_tilt: f32,
+    pub shader: Shader,
+    pub surface: SurfaceParams,
+}
+
+pub fn solar_system() -> Vec<Body> {
+    vec![
+        Body {
+            name: "Sol",
+            kind: BodyKind::Star,
+            radius: 3.5,
+            mass: 1000.0,
+            orbit_radius: 0.0,
+            orbit_period: 0.0,
+            phase: 0.0,
+            orbit_inclination: 0.0,
+            rotation_period: 30.0,
+            axial_tilt: 0.0,
+            shader: Shader::Star,
+            surface: SurfaceParams {
+                seed: 0,
+                noise_frequency: 4.0,
+            },
+        },
+        Body {
+            name: "Zebes",
+            kind: BodyKind::Planet,
+            radius: 1.25,
+            mass: 12.0,
+            orbit_radius: 10.0,
+            orbit_period: 28.0,
+            phase: 0.35,
+            orbit_inclination: 0.05,
+            rotation_period: 12.0,
+            axial_tilt: 0.15,
+            shader: Shader::Rocky,
+            surface: SurfaceParams {
+                seed: 0,
+                noise_frequency: 4.0,
+            },
+        },
+        Body {
+            name: "Tau Ceti",
+            kind: BodyKind::Planet,
+            radius: 2.1,
+            mass: 45.0,
+            orbit_radius: 18.0,
+            orbit_period: 48.0,
+            phase: 2.1,
+            orbit_inclination: -0.06,
+            rotation_period: 9.0,
+            axial_tilt: 0.08,
+            shader: Shader::GasGiant,
+            surface: SurfaceParams {
+                seed: 0,
+                noise_frequency: 4.0,
+            },
+        },
+        Body {
+            name: "Pyros",
+            kind: BodyKind::Planet,
+            radius: 1.0,
+            mass: 8.0,
+            orbit_radius: 26.0,
+            orbit_period: 70.0,
+            phase: 4.2,
+            orbit_inclination: 0.08,
+            rotation_period: 16.0,
+            axial_tilt: 0.25,
+            shader: Shader::Rocky,
+            surface: SurfaceParams {
+                seed: 1,
+                noise_frequency: 4.0,
+            },
+        },
+    ]
+}
+
+pub fn body_position_at(body: &Body, time: f32) -> Vector3 {
+    if body.orbit_radius <= 0.0 || body.orbit_period.abs() <= 1e-6 {
+        return body_static_position(body);
+    }
+    let angle = body.phase + std::f32::consts::TAU * (time / body.orbit_period);
+    Vector3::new(
+        body.orbit_radius * angle.cos(),
+        body.orbit_radius * angle.sin() * body.orbit_inclination.sin(),
+        body.orbit_radius * angle.sin() * body.orbit_inclination.cos(),
+    )
+}
+
+pub fn body_static_position(body: &Body) -> Vector3 {
+    Vector3::new(
+        body.orbit_radius * body.phase.cos(),
+        body.orbit_radius * body.phase.sin() * body.orbit_inclination.sin(),
+        body.orbit_radius * body.phase.sin() * body.orbit_inclination.cos(),
+    )
+}
+
+pub fn body_model_matrix_at(obj: &Obj, body: &Body, time: f32) -> Mat4 {
+    let (min, max) = obj.bounds();
+    let max_extent = (max.x - min.x)
+        .max(max.y - min.y)
+        .max(max.z - min.z)
+        .max(1e-4);
+    let unit_scale = (body.radius * 2.0) / max_extent;
+    let center = (min + max) * 0.5;
+    let pos = body_position_at(body, time);
+    let spin = if body.rotation_period.abs() > 1e-6 {
+        std::f32::consts::TAU * (time / body.rotation_period)
+    } else {
+        0.0
+    };
+    Mat4::translation(pos)
+        * Mat4::rotation_z(body.axial_tilt)
+        * Mat4::rotation_y(spin)
+        * Mat4::scale(Vector3::new(unit_scale, unit_scale, unit_scale))
+        * Mat4::translation(Vector3::new(-center.x, -center.y, -center.z))
+}
 
 pub fn build_model_matrix(obj: &Obj, yaw: f32, pitch: f32, scale: f32) -> Mat4 {
     let (min, max) = obj.bounds();

@@ -8,14 +8,16 @@ use crate::vertex::Vertex;
 
 pub mod gas_giant;
 pub mod rocky;
+pub mod ship;
 pub mod star;
 
 #[allow(dead_code)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum Shader {
     Star,
     Rocky,
     GasGiant,
+    Ship,
 }
 
 #[allow(dead_code)]
@@ -89,6 +91,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Star => star::shade(fragment, uniforms),
         Shader::Rocky => rocky::shade(fragment, uniforms),
         Shader::GasGiant => gas_giant::shade(fragment, uniforms),
+        Shader::Ship => ship::shade(fragment, uniforms),
     }
 }
 
@@ -97,5 +100,6 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Star => "Shader: Star",
         Shader::Rocky => "Shader: Rocky",
         Shader::GasGiant => "Shader: Gas Giant",
+        Shader::Ship => "Shader: Ship",
     }
 }
