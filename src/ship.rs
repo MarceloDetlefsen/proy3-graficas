@@ -24,6 +24,10 @@ pub struct Ship {
     pub max_speed: f32,
     pub damping: f32,
     pub brake_damping: f32,
+    pub angular_velocity: Vector3,
+    pub angular_accel: f32,
+    pub angular_damping: f32,
+    pub max_angular_speed: f32,
 }
 
 fn rotate_around_axis(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
@@ -47,6 +51,10 @@ impl Ship {
             max_speed: 18.0,
             damping: 0.45,
             brake_damping: 4.5,
+            angular_velocity: Vector3::zero(),
+            angular_accel: 7.5,
+            angular_damping: 5.5,
+            max_angular_speed: 2.4,
         }
     }
 
@@ -77,6 +85,37 @@ impl Ship {
         if braking && self.velocity.length_sqr() < 1e-6 {
             self.velocity = Vector3::zero();
         }
+    }
+
+    /// Acumula velocidad angular en cabeceo, guiñada y alabeo con amortiguación y tope.
+    pub fn apply_angular_input(&mut self, pitch_in: f32, yaw_in: f32, roll_in: f32, dt: f32) {
+        if dt <= 0.0 {
+            return;
+        }
+        self.angular_velocity.x += pitch_in.clamp(-1.0, 1.0) * self.angular_accel * dt;
+        self.angular_velocity.y += yaw_in.clamp(-1.0, 1.0) * self.angular_accel * dt;
+        self.angular_velocity.z += roll_in.clamp(-1.0, 1.0) * self.angular_accel * dt;
+
+        let factor = (-self.angular_damping.max(0.0) * dt).exp();
+        self.angular_velocity *= factor;
+
+        let cap = self.max_angular_speed;
+        self.angular_velocity.x = self.angular_velocity.x.clamp(-cap, cap);
+        self.angular_velocity.y = self.angular_velocity.y.clamp(-cap, cap);
+        self.angular_velocity.z = self.angular_velocity.z.clamp(-cap, cap);
+    }
+
+    /// Integra posición y orientación (Euler semi-implícito) y re-ortonormaliza la base.
+    pub fn integrate_pose(&mut self, dt: f32) {
+        if dt <= 0.0 {
+            return;
+        }
+        self.position += self.velocity * dt;
+        self.rotate_local(
+            self.angular_velocity.y * dt,
+            self.angular_velocity.x * dt,
+            self.angular_velocity.z * dt,
+        );
     }
 
     pub fn orthonormalize(&mut self) {
