@@ -171,6 +171,25 @@ pub fn solar_system() -> Vec<Body> {
                 max_deformation: 0.9 * 0.03,
             },
         },
+        Body {
+            name: "Vestigio",
+            kind: BodyKind::Planet,
+            radius: 1.0,
+            mass: 10.0,
+            orbit_radius: 81.6,
+            orbit_period: 150.0,
+            phase: 0.85,
+            orbit_inclination: -0.04,
+            rotation_period: 60.0,
+            axial_tilt: 0.14,
+            shader: Shader::Vestigio,
+            surface: SurfaceParams {
+                seed: 44,
+                noise_frequency: 5.0,
+                deformation_amplitude: 0.05,
+                max_deformation: 0.05,
+            },
+        },
     ]
 }
 
