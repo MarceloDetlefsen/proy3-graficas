@@ -742,6 +742,76 @@ mod tests {
     }
 
     #[test]
+    fn crossing_near_plane_with_camera_never_panics_or_stretches() {
+        use crate::Uniforms;
+        use crate::camera::Camera;
+        use crate::framebuffer::Framebuffer;
+        use crate::noise::Noise;
+        use crate::primitive::assemble_screen_triangles;
+        use crate::scene::build_model_matrix;
+        use crate::vertex::Vertex;
+        use raylib::prelude::Color;
+
+        let obj = load_obj("assets/sphere.obj").expect("sphere.obj debe cargar");
+        let (min, max) = obj.bounds();
+        let max_extent = (max.x - min.x).max(max.y - min.y).max(max.z - min.z);
+        let model_matrix = build_model_matrix(&obj, 0.0, 0.0, 2.0 / max_extent);
+        let vertex_array: Vec<Vertex> = obj
+            .indices
+            .iter()
+            .map(|&i| Vertex::new(obj.vertices[i], obj.vertex_normals[i]))
+            .collect();
+
+        let mut clip_scratch = Vec::new();
+        let mut screen_tris = Vec::new();
+        let mut grid = TileGrid::new(160, 120);
+        let mut fb = Framebuffer::new(160, 120, Color::BLACK);
+        let noise = Noise::new(0);
+
+        for dist in [1.001_f32, 0.5, 0.05, -0.5] {
+            fb.clear();
+            let cam = Camera::new(
+                Vector3::new(0.0, 0.0, dist),
+                Vector3::new(0.0, 0.0, dist - 2.0),
+                45.0_f32.to_radians(),
+                0.1,
+                100.0,
+            );
+            let uniforms = Uniforms {
+                model_matrix,
+                view_matrix: cam.view_matrix(),
+                projection_matrix: cam.projection_matrix(160.0 / 120.0),
+                time: 0.0,
+                light_dir: Vector3::new(0.0, 0.0, 1.0),
+                camera_pos: cam.position,
+                debug_noise: false,
+                noise_frequency: 4.0,
+                rocky_debug_view: 3,
+                viewport_width: 160,
+                viewport_height: 120,
+                noise: noise.clone(),
+                baked: None,
+            };
+
+            assemble_screen_triangles(&vertex_array, &uniforms, &mut clip_scratch, &mut screen_tris);
+            for tri in &screen_tris {
+                for v in &tri.vertices {
+                    assert!(v.x.is_finite() && v.y.is_finite() && v.z.is_finite());
+                    assert!(v.inv_w.is_finite() && v.inv_w > 0.0);
+                    assert!(v.z >= -1e-4, "vértice detrás de near no recortado: z={}", v.z);
+                }
+            }
+            rasterize_visibility_tiled(&screen_tris, &mut grid, &mut fb, true, 2);
+            shade_visibility_tiled(&screen_tris, &mut fb, Shader::Star, &uniforms, 2);
+            for &d in &fb.depth_buffer {
+                if d < f32::INFINITY {
+                    assert!(d.is_finite() && (-1e-4..=1.0001).contains(&d));
+                }
+            }
+        }
+    }
+
+    #[test]
     fn sphere_obj_triangles_are_oriented_outward() {
         let obj = load_obj("assets/sphere.obj").expect("sphere.obj debe cargar");
         let mut inward = 0usize;
