@@ -5,7 +5,7 @@ use std::sync::Once;
 
 use crate::Uniforms;
 use crate::fragment::Fragment;
-use crate::noise;
+use crate::noise::{self, Noise};
 use crate::shaders::{diffuse_factor, surface_mu};
 
 // Frecuencia del seno latitudinal; valores altos producen más bandas.
@@ -65,14 +65,23 @@ pub const VORTEX_SPIN: f32 = 0.060;
 
 static PRINTED_STATS: Once = Once::new();
 
-fn domain_warp(object_pos: Vector3, time: f32) -> Vector3 {
+fn time_shift(t: f32) -> Vector3 {
+    Vector3::new(t * 0.5, t * 0.3, t * 0.4)
+}
+
+fn domain_warp(noise: &Noise, object_pos: Vector3, time: f32) -> Vector3 {
     let p = vortex_domain(object_pos.normalize(), time);
-    let warp1 = noise::fbm4(p * WARP1_FREQ, time * WARP1_SPEED, 3, 2.0, 0.5) * 2.0 - 1.0;
+    let warp1 = noise.fbm(p * WARP1_FREQ + time_shift(time * WARP1_SPEED), 3, 2.0, 0.5) * 2.0 - 1.0;
     let first = p + Vector3::new(warp1, warp1 * 0.72, -warp1 * 0.58) * WARP1_AMP;
-    let warp2 = noise::fbm4(first * WARP2_FREQ, time * WARP2_SPEED, 3, 2.0, 0.5) * 2.0 - 1.0;
+    let warp2 = noise.fbm(first * WARP2_FREQ + time_shift(time * WARP2_SPEED), 3, 2.0, 0.5) * 2.0 - 1.0;
     let second = first + Vector3::new(-warp2 * 0.62, warp2, warp2 * 0.48) * WARP2_AMP;
-    let warp3 =
-        noise::fbm4(second * WARP3_FREQ, time * WARP2_SPEED * 1.45, 3, 2.0, 0.5) * 2.0 - 1.0;
+    let warp3 = noise.fbm(
+        second * WARP3_FREQ + time_shift(time * WARP2_SPEED * 1.45),
+        3,
+        2.0,
+        0.5,
+    ) * 2.0
+        - 1.0;
     second + Vector3::new(warp3 * 0.75, -warp3 * 0.45, warp3 * 0.35) * WARP3_AMP
 }
 
@@ -91,17 +100,17 @@ fn vortex_domain(p: Vector3, time: f32) -> Vector3 {
     offset * cos_angle + cross * sin_angle + center * center.dot(offset) * (1.0 - cos_angle)
 }
 
-fn raw_pattern(object_pos: Vector3, time: f32) -> f32 {
-    let warped = domain_warp(object_pos, time);
+fn raw_pattern(noise: &Noise, object_pos: Vector3, time: f32) -> f32 {
+    let warped = domain_warp(noise, object_pos, time);
     let latitude = warped.y.clamp(-1.0, 1.0);
     let bands = (latitude * BAND_FREQ).sin() * 0.5 + 0.5;
-    let fluid_noise = noise::fbm4(warped * 2.2, time * WARP1_SPEED, 3, 2.0, 0.5);
+    let fluid_noise = noise.fbm(warped * 2.2 + time_shift(time * WARP1_SPEED), 3, 2.0, 0.5);
     bands * 0.52 + fluid_noise * 0.48
 }
 
-pub fn band_pattern_at(object_pos: Vector3, time: f32) -> f32 {
+pub fn band_pattern_at(noise: &Noise, object_pos: Vector3, time: f32) -> f32 {
     noise::remap(
-        raw_pattern(object_pos, time),
+        raw_pattern(noise, object_pos, time),
         PATTERN_LOW,
         PATTERN_HIGH,
         0.0,
@@ -110,8 +119,8 @@ pub fn band_pattern_at(object_pos: Vector3, time: f32) -> f32 {
     .clamp(0.0, 1.0)
 }
 
-pub fn band_pattern(object_pos: Vector3) -> f32 {
-    band_pattern_at(object_pos, 0.0)
+pub fn band_pattern(noise: &Noise, object_pos: Vector3) -> f32 {
+    band_pattern_at(noise, object_pos, 0.0)
 }
 
 fn color(values: [f32; 3]) -> Vector3 {
@@ -141,11 +150,11 @@ fn palette_color(pattern: f32) -> Vector3 {
     }
 }
 
-fn vortex_mask(object_pos: Vector3) -> f32 {
+fn vortex_mask(noise: &Noise, object_pos: Vector3) -> f32 {
     let p = object_pos.normalize();
     let center = Vector3::new(VORTEX_CENTER[0], VORTEX_CENTER[1], VORTEX_CENTER[2]).normalize();
     let distance = (p - center).length();
-    let edge_noise = noise::fbm(p * VORTEX_EDGE_FREQ, 3, 2.0, 0.5);
+    let edge_noise = noise.fbm(p * VORTEX_EDGE_FREQ, 3, 2.0, 0.5);
     let perturbed_distance = distance + (edge_noise - 0.5) * VORTEX_EDGE_NOISE;
     1.0 - noise::smoothstep(
         VORTEX_RADIUS * 0.42,
@@ -154,12 +163,11 @@ fn vortex_mask(object_pos: Vector3) -> f32 {
     )
 }
 
-fn surface_color(object_pos: Vector3, pattern: f32, time: f32) -> Vector3 {
+fn surface_color(noise: &Noise, object_pos: Vector3, pattern: f32, time: f32) -> Vector3 {
     let base = palette_color(pattern);
-    let vortex = vortex_mask(object_pos);
-    let detail = noise::fbm4(
-        domain_warp(object_pos, time) * VORTEX_DETAIL_FREQ,
-        time * WARP2_SPEED,
+    let vortex = vortex_mask(noise, object_pos);
+    let detail = noise.fbm(
+        domain_warp(noise, object_pos, time) * VORTEX_DETAIL_FREQ + time_shift(time * WARP2_SPEED),
         3,
         2.0,
         0.5,
@@ -178,7 +186,7 @@ fn percentile(sorted: &[f32], fraction: f32) -> f32 {
     sorted[(fraction * (sorted.len() - 1) as f32) as usize]
 }
 
-fn print_statistics_once() {
+fn print_statistics_once(noise: &Noise) {
     PRINTED_STATS.call_once(|| {
         let sample_count = 4096;
         let golden_angle = std::f32::consts::PI * (3.0 - 5.0_f32.sqrt());
@@ -188,7 +196,7 @@ fn print_statistics_once() {
             let radius = (1.0 - y * y).sqrt();
             let angle = golden_angle * i as f32;
             let point = Vector3::new(radius * angle.cos(), y, radius * angle.sin());
-            values.push(raw_pattern(point, 0.0));
+            values.push(raw_pattern(noise, point, 0.0));
         }
         values.sort_by(f32::total_cmp);
         println!(
@@ -203,13 +211,13 @@ fn print_statistics_once() {
 }
 
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
-    print_statistics_once();
-    let pattern = band_pattern_at(fragment.object_pos, uniforms.time);
+    print_statistics_once(&uniforms.noise);
+    let pattern = band_pattern_at(&uniforms.noise, fragment.object_pos, uniforms.time);
     if uniforms.rocky_debug_view == 0 {
         return Vector3::new(pattern, pattern, pattern);
     }
 
-    let mut result = surface_color(fragment.object_pos, pattern, uniforms.time);
+    let mut result = surface_color(&uniforms.noise, fragment.object_pos, pattern, uniforms.time);
     let diffuse = diffuse_factor(fragment.normal, uniforms);
     let mu = surface_mu(fragment, uniforms);
     let limb = 0.22 + 0.78 * mu.powf(0.72);

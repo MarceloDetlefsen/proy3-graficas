@@ -50,9 +50,9 @@ fn temperature_from_mu(fragment: &Fragment, uniforms: &Uniforms, mu: f32) -> f32
         + (LIMB_MAX_TEMPERATURE - LIMB_MIN_TEMPERATURE) * mu.powf(LIMB_EXPONENT);
 
     let surface_position = fragment.object_pos.normalize();
-    let granulation_noise = noise::fbm4(
-        surface_position * GRANULATION_FREQ,
-        uniforms.time * GRANULATION_SPEED,
+    let t_gran = uniforms.time * GRANULATION_SPEED;
+    let granulation_noise = uniforms.noise.fbm(
+        surface_position * GRANULATION_FREQ + Vector3::new(t_gran * 0.6, t_gran * 0.4, t_gran * 0.5),
         3,
         2.0,
         0.5,
@@ -60,9 +60,9 @@ fn temperature_from_mu(fragment: &Fragment, uniforms: &Uniforms, mu: f32) -> f32
     let granulation = granulation_noise * 2.0 - 1.0;
     let mut value = limb + granulation * GRANULATION_AMP;
 
-    let spots = noise::fbm4(
-        surface_position * SPOT_FREQ,
-        uniforms.time * SPOT_SPEED,
+    let t_spot = uniforms.time * SPOT_SPEED;
+    let spots = uniforms.noise.fbm(
+        surface_position * SPOT_FREQ + Vector3::new(t_spot * 0.5, t_spot * 0.3, t_spot * 0.4),
         3,
         2.0,
         0.5,
@@ -127,6 +127,7 @@ mod tests {
             rocky_debug_view: 0,
             viewport_width: 800,
             viewport_height: 600,
+            noise: crate::noise::Noise::new(0),
         }
     }
 
@@ -162,12 +163,13 @@ mod tests {
         let golden_angle = std::f32::consts::PI * (3.0 - 5.0_f32.sqrt());
         let mut values = Vec::with_capacity(sample_count);
 
+        let fast_noise = crate::noise::Noise::new(0);
         for i in 0..sample_count {
             let y = 1.0 - (i as f32 + 0.5) * 2.0 / sample_count as f32;
             let radius = (1.0 - y * y).sqrt();
             let angle = golden_angle * i as f32;
             let point = Vector3::new(radius * angle.cos(), y, radius * angle.sin());
-            values.push(noise::fbm(point * SPOT_FREQ, 3, 2.0, 0.5));
+            values.push(fast_noise.fbm(point * SPOT_FREQ, 3, 2.0, 0.5));
         }
 
         values.sort_by(f32::total_cmp);

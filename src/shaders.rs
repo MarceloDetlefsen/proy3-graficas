@@ -3,7 +3,6 @@ use raylib::prelude::*;
 use crate::Uniforms;
 use crate::fragment::Fragment;
 use crate::math::Vec4;
-use crate::noise;
 use crate::vertex::Vertex;
 
 mod gas_giant;
@@ -68,7 +67,7 @@ pub fn diffuse_factor(normal: Vector3, uniforms: &Uniforms) -> f32 {
 pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms) -> Vector3 {
     if uniforms.debug_noise {
         let sample_position = fragment.object_pos.normalize() * uniforms.noise_frequency;
-        let value = noise::fbm(sample_position, 5, 2.0, 0.5);
+        let value = uniforms.noise.fbm(sample_position, 5, 2.0, 0.5);
         return Vector3::new(value, value, value);
     }
 

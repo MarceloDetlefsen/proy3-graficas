@@ -15,6 +15,7 @@ mod vertex;
 use camera::Camera;
 use framebuffer::Framebuffer;
 use math::Mat4;
+use noise::Noise;
 use obj::load_obj;
 use perf::{FrameSample, PerfStats};
 use primitive::primitive_assembly;
@@ -37,6 +38,7 @@ pub struct Uniforms {
     pub rocky_debug_view: i32,
     pub viewport_width: i32,
     pub viewport_height: i32,
+    pub noise: Noise,
 }
 
 struct CaptureOptions {
@@ -246,6 +248,8 @@ fn main() {
         Color::new(15, 18, 28, 255),
     );
 
+    let noise = Noise::new(0);
+
     if let Some(options) = parse_capture_options() {
         let aspect = internal_width as f32 / internal_height as f32;
         let model_matrix = build_model_matrix(&obj, 0.0, 0.0, base_scale);
@@ -268,6 +272,7 @@ fn main() {
             rocky_debug_view: options.view,
             viewport_width: internal_width,
             viewport_height: internal_height,
+            noise: noise.clone(),
         };
         framebuffer.clear();
         render(
@@ -408,6 +413,7 @@ fn main() {
             rocky_debug_view,
             viewport_width: internal_width,
             viewport_height: internal_height,
+            noise: noise.clone(),
         };
 
         let t_clear = std::time::Instant::now();
