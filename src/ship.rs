@@ -75,8 +75,10 @@ impl Ship {
             [b.x, b.y, b.z, 0.0],
             [0.0, 0.0, 0.0, 1.0],
         );
+        // El modelo ship.obj viene invertido; se rota 180° en X local antes de orientar la nave.
         Mat4::translation(self.position)
             * rot_scale
+            * Mat4::rotation_x(std::f32::consts::PI)
             * Mat4::translation(Vector3::new(-mesh_center.x, -mesh_center.y, -mesh_center.z))
     }
 }
