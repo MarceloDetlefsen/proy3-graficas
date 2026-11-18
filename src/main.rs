@@ -161,6 +161,7 @@ impl RenderBuffers {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn render(
     framebuffer: &mut Framebuffer,
     uniforms: &Uniforms,
@@ -169,6 +170,7 @@ fn render(
     mode: TriangleMode,
     shader: Shader,
     backface_culling: bool,
+    threads: usize,
 ) -> FrameSample {
     let t_vtx = std::time::Instant::now();
     assemble_screen_triangles(
@@ -187,7 +189,7 @@ fn render(
                 &mut buffers.tile_grid,
                 framebuffer,
                 backface_culling,
-                1,
+                threads,
             );
             let _ = TILE_SIZE;
             let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
@@ -198,7 +200,7 @@ fn render(
                 framebuffer,
                 shader,
                 uniforms,
-                1,
+                threads,
             );
             let shading_ms = t_shade.elapsed().as_secs_f64() * 1000.0;
             (raster_ms, shading_ms, writes, calls, visible)
@@ -224,6 +226,7 @@ fn render(
         visible_pixels,
         width: framebuffer.width,
         height: framebuffer.height,
+        threads,
     }
 }
 
@@ -298,6 +301,9 @@ fn main() {
         };
         let mut render_buffers = RenderBuffers::new(vertex_array.len());
         framebuffer.clear();
+        let default_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         render(
             &mut framebuffer,
             &uniforms,
@@ -306,6 +312,7 @@ fn main() {
             TriangleMode::FilledBarycentric,
             options.shader,
             true,
+            default_threads,
         );
         if let Some(parent) = options.output.parent() {
             fs::create_dir_all(parent).expect("No se pudo crear el directorio de captura");
@@ -340,6 +347,16 @@ fn main() {
     let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
     let mut internal_height = WINDOW_HEIGHT / res_scales[res_scale_idx] as i32;
     framebuffer.resize(internal_width as u32, internal_height as u32);
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let mut thread_options: Vec<usize> = [1, 2, 4, 8, 16]
+        .into_iter()
+        .filter(|&n| n < max_threads)
+        .collect();
+    thread_options.push(max_threads);
+    let mut thread_idx = thread_options.len() - 1;
+    let mut threads = thread_options[thread_idx];
     let orbit_speed = 1.8_f32;
     let light_speed = 1.8_f32;
     let mut perf_stats = PerfStats::new();
@@ -354,6 +371,10 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_C) {
             backface_culling = !backface_culling;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_T) {
+            thread_idx = (thread_idx + 1) % thread_options.len();
+            threads = thread_options[thread_idx];
         }
         if window.is_key_pressed(KeyboardKey::KEY_K) {
             let t_bake = std::time::Instant::now();
@@ -463,6 +484,7 @@ fn main() {
             mode,
             shader,
             backface_culling,
+            threads,
         );
         sample.fb_ms += clear_ms;
         if capture_requested {

@@ -23,6 +23,7 @@ pub struct FrameSample {
     pub visible_pixels: usize,
     pub width: u32,
     pub height: u32,
+    pub threads: usize,
 }
 
 #[derive(Debug)]
@@ -76,6 +77,7 @@ impl PerfStats {
             visible_pixels: sum.visible_pixels / count,
             width: 0,
             height: 0,
+            threads: 0,
         }
     }
 
@@ -89,8 +91,8 @@ impl PerfStats {
         let last = self.samples.back().copied().unwrap_or_default();
         vec![
             format!(
-                "FPS: {fps:.1} ({:.2} ms) | Res: {}x{}",
-                avg.total_ms, last.width, last.height
+                "FPS: {fps:.1} ({:.2} ms) | Res: {}x{} | Hilos: {}",
+                avg.total_ms, last.width, last.height, last.threads
             ),
             format!(
                 "Vtx: {:.2} | Rast: {:.2} | Shade: {:.2} ms",
