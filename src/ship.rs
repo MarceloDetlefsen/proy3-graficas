@@ -19,6 +19,9 @@ pub struct Ship {
     pub up: Vector3,
     pub scale: f32,
     pub radius: f32,
+    pub max_accel: f32,
+    pub boost_multiplier: f32,
+    pub max_speed: f32,
 }
 
 fn rotate_around_axis(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
@@ -37,6 +40,25 @@ impl Ship {
             up: Vector3::new(0.0, 1.0, 0.0),
             scale: 0.7,
             radius: 0.7,
+            max_accel: 12.0,
+            boost_multiplier: 2.2,
+            max_speed: 18.0,
+        }
+    }
+
+    /// Aplica empuje progresivo hacia adelante (`throttle > 0`) o atrás (`throttle < 0`)
+    /// limitando la aceleración y la velocidad máxima resultante.
+    pub fn apply_thrust(&mut self, throttle: f32, boost: bool, dt: f32) {
+        let t = throttle.clamp(-1.0, 1.0);
+        if t.abs() <= 1e-6 || dt <= 0.0 {
+            return;
+        }
+        let mult = if boost { self.boost_multiplier } else { 1.0 };
+        self.velocity += self.forward * (t * self.max_accel * mult * dt);
+        let speed_limit = self.max_speed * mult;
+        let speed_sq = self.velocity.length_sqr();
+        if speed_sq > speed_limit * speed_limit {
+            self.velocity = self.velocity.normalize() * speed_limit;
         }
     }
 
