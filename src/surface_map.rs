@@ -9,6 +9,27 @@
 use raylib::prelude::Vector3;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
+use crate::noise::Noise;
+use crate::shaders::{gas_giant, rocky};
+
+pub const DEFAULT_BAKE_WIDTH: usize = 512;
+pub const DEFAULT_BAKE_HEIGHT: usize = 256;
+
+#[derive(Clone, Debug)]
+pub struct BakedMaps {
+    pub rocky: EquirectMap<7>,
+    pub gas_giant: EquirectMap<5>,
+}
+
+impl BakedMaps {
+    pub fn bake(noise: &Noise, width: usize, height: usize) -> Self {
+        Self {
+            rocky: EquirectMap::from_fn(width, height, |dir| rocky::sample_static(noise, dir)),
+            gas_giant: EquirectMap::from_fn(width, height, |dir| gas_giant::sample_static(noise, dir)),
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct EquirectMap<const N: usize> {
     pub width: usize,

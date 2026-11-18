@@ -24,6 +24,7 @@ use rasterizer::{TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize};
 use raylib::prelude::*;
 use scene::build_model_matrix;
 use shaders::{Shader, fragment_shader, shader_name, vertex_shader};
+use surface_map::{BakedMaps, DEFAULT_BAKE_HEIGHT, DEFAULT_BAKE_WIDTH};
 use std::fs;
 use std::path::PathBuf;
 
@@ -40,6 +41,7 @@ pub struct Uniforms {
     pub viewport_width: i32,
     pub viewport_height: i32,
     pub noise: Noise,
+    pub baked: Option<BakedMaps>,
 }
 
 struct CaptureOptions {
@@ -250,6 +252,14 @@ fn main() {
     );
 
     let noise = Noise::new(0);
+    let bake_start = std::time::Instant::now();
+    let baked = BakedMaps::bake(&noise, DEFAULT_BAKE_WIDTH, DEFAULT_BAKE_HEIGHT);
+    println!(
+        "Mapas estáticos horneados ({}x{}) en {:.2} ms",
+        DEFAULT_BAKE_WIDTH,
+        DEFAULT_BAKE_HEIGHT,
+        bake_start.elapsed().as_secs_f64() * 1000.0
+    );
 
     if let Some(options) = parse_capture_options() {
         let aspect = internal_width as f32 / internal_height as f32;
@@ -274,6 +284,7 @@ fn main() {
             viewport_width: internal_width,
             viewport_height: internal_height,
             noise: noise.clone(),
+            baked: Some(baked.clone()),
         };
         framebuffer.clear();
         render(
@@ -415,6 +426,7 @@ fn main() {
             viewport_width: internal_width,
             viewport_height: internal_height,
             noise: noise.clone(),
+            baked: Some(baked.clone()),
         };
 
         let t_clear = std::time::Instant::now();

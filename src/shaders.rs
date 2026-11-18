@@ -5,9 +5,9 @@ use crate::fragment::Fragment;
 use crate::math::Vec4;
 use crate::vertex::Vertex;
 
-mod gas_giant;
-mod rocky;
-mod star;
+pub mod gas_giant;
+pub mod rocky;
+pub mod star;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy)]

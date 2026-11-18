@@ -128,6 +128,7 @@ mod tests {
             viewport_width: 800,
             viewport_height: 600,
             noise: crate::noise::Noise::new(0),
+            baked: None,
         }
     }
 
