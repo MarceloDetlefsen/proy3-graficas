@@ -385,10 +385,20 @@ fn main() {
     let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
     let mut follow_mode = true;
     window.disable_cursor();
-    let bodies = solar_system();
+    let mut bodies = solar_system();
     let icosphere_lods = icosphere::build_icosphere_lods();
+    let mut body_caches: Vec<icosphere::DeformedIcosphereCache> = bodies
+        .iter()
+        .map(|b| {
+            icosphere::DeformedIcosphereCache::new(
+                b.surface.deformation_amplitude,
+                b.surface.noise_frequency,
+            )
+        })
+        .collect();
     let mut body_lods = vec![3_usize; bodies.len()];
     let mut forced_lod: Option<usize> = None;
+    let mut last_rebuild_ms = 0.0_f64;
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
@@ -528,11 +538,46 @@ fn main() {
         if window.is_key_down(KeyboardKey::KEY_U) {
             light_angle += light_speed * dt;
         }
+        let mut rebuild_surface = false;
         if window.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) {
-            noise_frequency = (noise_frequency - 0.25).max(0.25);
+            noise_frequency = (noise_frequency - 0.5).max(0.5);
+            rebuild_surface = true;
         }
         if window.is_key_pressed(KeyboardKey::KEY_RIGHT_BRACKET) {
-            noise_frequency = (noise_frequency + 0.25).min(20.0);
+            noise_frequency = (noise_frequency + 0.5).min(20.0);
+            rebuild_surface = true;
+        }
+        let mut amp_delta = 0.0_f32;
+        if window.is_key_pressed(KeyboardKey::KEY_COMMA) {
+            amp_delta = -0.03;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_PERIOD) {
+            amp_delta = 0.03;
+        }
+        if amp_delta != 0.0 || rebuild_surface {
+            let t_reb = std::time::Instant::now();
+            for (i, body) in bodies.iter_mut().enumerate() {
+                if matches!(body.shader, Shader::Rocky) {
+                    body.surface.deformation_amplitude =
+                        (body.surface.deformation_amplitude + amp_delta).clamp(0.0, 0.40);
+                    body.surface.max_deformation =
+                        body.radius * body.surface.deformation_amplitude;
+                    body.surface.noise_frequency = noise_frequency;
+                    body_caches[i].invalidate(
+                        body.surface.deformation_amplitude,
+                        body.surface.noise_frequency,
+                    );
+                }
+            }
+            if rebuild_surface {
+                baked = Arc::new(BakedMaps::bake_with_frequency(
+                    &noise,
+                    DEFAULT_BAKE_WIDTH,
+                    DEFAULT_BAKE_HEIGHT,
+                    noise_frequency,
+                ));
+            }
+            last_rebuild_ms = t_reb.elapsed().as_secs_f64() * 1000.0;
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
         if !follow_mode {
@@ -693,7 +738,7 @@ fn main() {
                 ),
             };
             body_lods[body_idx] = level;
-            let body_mesh = &icosphere_lods[level];
+            let body_mesh = body_caches[body_idx].get_or_build(level, &noise);
             let body_tris = body_mesh.len() / 3;
             tris_before_cull += body_tris;
             if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
@@ -894,6 +939,14 @@ fn main() {
             if frustum_culling { "ON" } else { "OFF" },
             tris_before_cull,
             tris_after_cull,
+        ));
+        let rocky_amp = bodies
+            .iter()
+            .find(|b| matches!(b.shader, Shader::Rocky))
+            .map_or(0.0, |b| b.surface.deformation_amplitude);
+        overlay.push(format!(
+            "Deform(,/.): Amp={:.2} Freq([/])={:.1} ({:.2} ms)",
+            rocky_amp, noise_frequency, last_rebuild_ms
         ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
