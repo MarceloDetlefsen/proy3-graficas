@@ -570,7 +570,7 @@ fn main() {
         render_buffers.tri_materials.resize(
             before_ship + added_ship,
             TriMaterial {
-                shader: Shader::Rocky,
+                shader: Shader::Ship,
                 light_dir: ship_light,
             },
         );
