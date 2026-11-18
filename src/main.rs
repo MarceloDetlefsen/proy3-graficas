@@ -19,7 +19,7 @@ use math::Mat4;
 use noise::Noise;
 use obj::load_obj;
 use perf::{FrameSample, PerfStats};
-use primitive::primitive_assembly;
+use primitive::{ScreenTriangle, assemble_screen_triangles, primitive_assembly};
 use rasterizer::{TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize};
 use raylib::prelude::*;
 use scene::build_model_matrix;
@@ -152,14 +152,17 @@ fn render(
     backface_culling: bool,
 ) -> FrameSample {
     let t_vtx = std::time::Instant::now();
-    let transformed_vertices: Vec<vertex::Vertex> = vertex_array
-        .iter()
-        .map(|vertex| vertex_shader(vertex, uniforms))
-        .collect();
+    let mut scratch_vertices = Vec::with_capacity(vertex_array.len());
+    let mut screen_triangles = Vec::with_capacity(vertex_array.len() / 3);
+    assemble_screen_triangles(
+        vertex_array,
+        uniforms,
+        &mut scratch_vertices,
+        &mut screen_triangles,
+    );
+    let _ = &screen_triangles;
 
-    // Solución temporal: descartar triángulos con algún vértice detrás del plano near;
-    // reemplazar en el issue de clipping.
-    let triangles: Vec<[vertex::Vertex; 3]> = primitive_assembly(&transformed_vertices)
+    let triangles: Vec<[vertex::Vertex; 3]> = primitive_assembly(&scratch_vertices)
         .into_iter()
         .filter(|tri| {
             tri.iter()
