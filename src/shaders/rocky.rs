@@ -296,14 +296,17 @@ fn surface_color(noise: &Noise, object_pos: Vector3, height: f32) -> Vector3 {
 
 fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vector3 {
     let p = fragment.object_pos.normalize();
-    let dx = Vector3::new(BUMP_DELTA, 0.0, 0.0);
-    let dy = Vector3::new(0.0, BUMP_DELTA, 0.0);
-    let dz = Vector3::new(0.0, 0.0, BUMP_DELTA);
-    let gradient = Vector3::new(
-        (height_field(&uniforms.noise, p + dx) - height) / BUMP_DELTA,
-        (height_field(&uniforms.noise, p + dy) - height) / BUMP_DELTA,
-        (height_field(&uniforms.noise, p + dz) - height) / BUMP_DELTA,
-    ) * BUMP_GRADIENT_SCALE;
+    let ref_axis = if p.y.abs() < 0.9 {
+        Vector3::new(0.0, 1.0, 0.0)
+    } else {
+        Vector3::new(1.0, 0.0, 0.0)
+    };
+    let t1 = ref_axis.cross(p).normalize();
+    let t2 = p.cross(t1).normalize();
+    // Diferencias hacia adelante en 2 direcciones tangentes reutilizando `height`.
+    let g1 = (height_field(&uniforms.noise, p + t1 * BUMP_DELTA) - height) / BUMP_DELTA;
+    let g2 = (height_field(&uniforms.noise, p + t2 * BUMP_DELTA) - height) / BUMP_DELTA;
+    let gradient = (t1 * g1 + t2 * g2) * BUMP_GRADIENT_SCALE;
     // La altura aumenta en la dirección del gradiente; la normal de una superficie
     // elevada se inclina contra él. Este signo mantiene las crestas claras hacia la luz.
     let bump_fade = noise::smoothstep(0.12, 0.48, crate::shaders::surface_mu(fragment, uniforms));
