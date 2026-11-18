@@ -406,6 +406,23 @@ fn main() {
     let mut body_lods = vec![3_usize; bodies.len()];
     let mut forced_lod: Option<usize> = None;
     let mut last_rebuild_ms = 0.0_f64;
+    let mut surface_seed: u64 = 42;
+    let build_candidates = |seed: u64, bodies: &[scene::Body]| {
+        bodies
+            .iter()
+            .enumerate()
+            .map(|(idx, body)| {
+                if matches!(body.shader, Shader::Rocky) {
+                    let s = seed.wrapping_add(idx as u64 * 1009);
+                    let dirs = surface_scatter::fibonacci_sphere_points(420, s, 0.03);
+                    surface_scatter::filter_candidates_by_noise(&dirs, s, idx == 1)
+                } else {
+                    Vec::new()
+                }
+            })
+            .collect::<Vec<_>>()
+    };
+    let mut planet_candidates = build_candidates(surface_seed, &bodies);
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
@@ -546,6 +563,14 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_Y) {
             debug_normals = !debug_normals;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_I) {
+            surface_seed = surface_seed.wrapping_sub(1);
+            planet_candidates = build_candidates(surface_seed, &bodies);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_O) {
+            surface_seed = surface_seed.wrapping_add(1);
+            planet_candidates = build_candidates(surface_seed, &bodies);
         }
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
@@ -969,6 +994,11 @@ fn main() {
             if normal_mapping { "ON" } else { "OFF" },
             if debug_normals { "ON" } else { "OFF" },
         ));
+        let total_surface_objs: usize = planet_candidates.iter().map(Vec::len).sum();
+        overlay.push(format!(
+            "Semilla(I/O): {} | Objetos superficie: {}",
+            surface_seed, total_surface_objs
+        ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
         }
@@ -988,6 +1018,7 @@ fn main() {
                 "Z / X / M   : Forzar LOD / Frustum / Wireframe".to_string(),
                 ", . / [ ]   : Amplitud / Frecuencia deform.".to_string(),
                 "B / Y       : Normal map / Debug normales".to_string(),
+                "I / O       : Cambiar semilla superficie".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);
