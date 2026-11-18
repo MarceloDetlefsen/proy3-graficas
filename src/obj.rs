@@ -155,7 +155,7 @@ pub fn load_obj_from_reader<R: BufRead>(reader: R) -> io::Result<Obj> {
                 }
             }
             "f" => {
-                let mut face = Vec::new();
+                let mut face_corners = Vec::new();
                 for part in parts {
                     if let Some(corner) = parse_face_corner(
                         part,
@@ -163,13 +163,18 @@ pub fn load_obj_from_reader<R: BufRead>(reader: R) -> io::Result<Obj> {
                         texcoords.len(),
                         source_normals.len(),
                     ) {
-                        indices.push(corner.pos);
-                        corner_indices.push(corner);
-                        face.push(corner.pos);
+                        face_corners.push(corner);
                     }
                 }
-                if face.len() >= 3 {
-                    faces.push(face);
+                if face_corners.len() >= 3 {
+                    for i in 1..(face_corners.len() - 1) {
+                        let tri = [face_corners[0], face_corners[i], face_corners[i + 1]];
+                        for c in tri {
+                            indices.push(c.pos);
+                            corner_indices.push(c);
+                        }
+                        faces.push(vec![tri[0].pos, tri[1].pos, tri[2].pos]);
+                    }
                 }
             }
             _ => {}
