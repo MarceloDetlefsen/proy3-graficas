@@ -17,6 +17,19 @@ pub const WINDOW_WIDTH: i32 = 800;
 pub const WINDOW_HEIGHT: i32 = 600;
 pub const TILE_SIZE: usize = 64;
 const DEGENERATE_EPS: f32 = 1e-6;
+const MAX_SCREEN_COORD: f32 = 65536.0;
+
+#[inline]
+fn has_valid_screen_coords(tri: &ScreenTriangle) -> bool {
+    tri.vertices.iter().all(|v| {
+        v.x.is_finite()
+            && v.y.is_finite()
+            && v.z.is_finite()
+            && v.inv_w.is_finite()
+            && v.x.abs() <= MAX_SCREEN_COORD
+            && v.y.abs() <= MAX_SCREEN_COORD
+    })
+}
 
 #[derive(Clone, Debug)]
 pub struct TileGrid {
@@ -58,6 +71,9 @@ impl TileGrid {
         let w_i32 = width as i32;
         let h_i32 = height as i32;
         for (tri_idx, tri) in triangles.iter().enumerate() {
+            if !has_valid_screen_coords(tri) {
+                continue;
+            }
             let [v0, v1, v2] = tri.vertices;
             let pa = (v0.x, v0.y);
             let pb = (v1.x, v1.y);
@@ -140,6 +156,9 @@ pub fn rasterize_visibility(
     let mut writes = 0usize;
 
     for (tri_idx, tri) in triangles.iter().enumerate() {
+        if !has_valid_screen_coords(tri) {
+            continue;
+        }
         let [v0, v1, v2] = tri.vertices;
         let pa = (v0.x, v0.y);
         let pb = (v1.x, v1.y);
@@ -209,6 +228,9 @@ pub fn rasterize_band(
         let x1 = (x0 + TILE_SIZE).min(width);
         for &tri_id in bin {
             let tri = &triangles[tri_id as usize];
+            if !has_valid_screen_coords(tri) {
+                continue;
+            }
             let [v0, v1, v2] = tri.vertices;
             let pa = (v0.x, v0.y);
             let pb = (v1.x, v1.y);
