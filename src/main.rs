@@ -801,12 +801,7 @@ fn main() {
                 continue;
             }
             tris_after_cull += body_tris;
-            let to_sun = sun_pos - body_pos;
-            let body_light = if to_sun.length_sqr() > 1e-6 {
-                to_sun.normalize()
-            } else {
-                light_dir
-            };
+            let body_light = scene::body_light_dir(body_pos, sun_pos, light_dir);
             uniforms.model_matrix = body_model_matrix_unit(body, sim_clock.time);
             let before = render_buffers.screen_triangles.len();
             append_screen_triangles(
@@ -890,12 +885,7 @@ fn main() {
         tris_before_cull += ship_tris;
         if !frustum_culling || frustum.intersects_sphere(ship.position, ship.radius * 1.5) {
             tris_after_cull += ship_tris;
-            let ship_to_sun = sun_pos - ship.position;
-            let ship_light = if ship_to_sun.length_sqr() > 1e-6 {
-                ship_to_sun.normalize()
-            } else {
-                light_dir
-            };
+            let ship_light = scene::body_light_dir(ship.position, sun_pos, light_dir);
             uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
             let before_ship = render_buffers.screen_triangles.len();
             append_screen_triangles(

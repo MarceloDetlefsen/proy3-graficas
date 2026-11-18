@@ -192,6 +192,19 @@ pub fn body_model_matrix_unit(body: &Body, time: f32) -> Mat4 {
         * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
 }
 
+/// Calcula la dirección unitaria de luz desde `body_pos` hacia `sun_pos`,
+/// usando `fallback` cuando ambos coinciden (p. ej. el propio Sol).
+pub fn body_light_dir(body_pos: Vector3, sun_pos: Vector3, fallback: Vector3) -> Vector3 {
+    let to_sun = sun_pos - body_pos;
+    if to_sun.length_sqr() > 1e-6 {
+        to_sun.normalize()
+    } else if fallback.length_sqr() > 1e-6 {
+        fallback.normalize()
+    } else {
+        Vector3::new(0.0, 1.0, 0.0)
+    }
+}
+
 pub fn build_model_matrix(obj: &Obj, yaw: f32, pitch: f32, scale: f32) -> Mat4 {
     let (min, max) = obj.bounds();
     let model_center = Vector3::new(
