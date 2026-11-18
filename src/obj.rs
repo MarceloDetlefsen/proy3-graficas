@@ -37,6 +37,18 @@ impl Obj {
         load_obj(path)
     }
 
+    pub fn corner_normal(&self, corner: FaceCorner) -> Vector3 {
+        if let Some(ni) = corner.normal
+            && let Some(&n) = self.source_normals.get(ni)
+        {
+            return n.normalize();
+        }
+        self.vertex_normals
+            .get(corner.pos)
+            .copied()
+            .unwrap_or_else(|| Vector3::new(0.0, 1.0, 0.0))
+    }
+
     /// Calcula la caja envolvente (bounding box) del modelo devolviendo (min, max).
     pub fn bounds(&self) -> (Vector3, Vector3) {
         if self.vertices.is_empty() {
@@ -181,35 +193,49 @@ pub fn load_obj_from_reader<R: BufRead>(reader: R) -> io::Result<Obj> {
         }
     }
 
-    let centroid = vertices
-        .iter()
-        .copied()
-        .fold(Vector3::zero(), |sum, position| sum + position)
-        * (1.0 / vertices.len().max(1) as f32);
-    let centered_at_origin = centroid.length() <= 1e-5;
-    let vertex_normals = if centered_at_origin {
-        vertices
-            .iter()
-            .map(|position| position.normalize())
-            .collect()
-    } else {
-        let mut accumulated = vec![Vector3::zero(); vertices.len()];
-        for face in faces {
-            let [a, b, c] = [face[0], face[1], face[2]];
-            if a >= vertices.len() || b >= vertices.len() || c >= vertices.len() {
-                continue;
-            }
-            let face_normal = (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]);
-            for &index in &face {
-                if index < accumulated.len() {
-                    accumulated[index] += face_normal;
-                }
+    let needs_smooth_normals =
+        source_normals.is_empty() || corner_indices.iter().any(|c| c.normal.is_none());
+    let vertex_normals = if !needs_smooth_normals {
+        let mut from_file = vec![Vector3::new(0.0, 1.0, 0.0); vertices.len()];
+        for c in &corner_indices {
+            if let Some(ni) = c.normal
+                && let Some(&n) = source_normals.get(ni)
+                && c.pos < from_file.len()
+            {
+                from_file[c.pos] = n.normalize();
             }
         }
-        accumulated
-            .into_iter()
-            .map(|normal| normal.normalize())
-            .collect()
+        from_file
+    } else {
+        let centroid = vertices
+            .iter()
+            .copied()
+            .fold(Vector3::zero(), |sum, position| sum + position)
+            * (1.0 / vertices.len().max(1) as f32);
+        if centroid.length() <= 1e-5 {
+            vertices
+                .iter()
+                .map(|position| position.normalize())
+                .collect()
+        } else {
+            let mut accumulated = vec![Vector3::zero(); vertices.len()];
+            for face in faces {
+                let [a, b, c] = [face[0], face[1], face[2]];
+                if a >= vertices.len() || b >= vertices.len() || c >= vertices.len() {
+                    continue;
+                }
+                let face_normal = (vertices[b] - vertices[a]).cross(vertices[c] - vertices[a]);
+                for &index in &face {
+                    if index < accumulated.len() {
+                        accumulated[index] += face_normal;
+                    }
+                }
+            }
+            accumulated
+                .into_iter()
+                .map(|normal| normal.normalize())
+                .collect()
+        }
     };
 
     Ok(Obj {
@@ -233,11 +259,10 @@ mod tests {
         assert_eq!(obj.vertices.len(), 98);
         assert_eq!(obj.source_normals.len(), 192);
         assert_eq!(obj.indices.len(), 192 * 3);
-        assert_eq!(obj.vertex_normals.len(), obj.vertices.len());
         assert!(
-            obj.vertex_normals
+            obj.corner_indices
                 .iter()
-                .all(|normal| (normal.length() - 1.0).abs() <= 1e-4)
+                .all(|&c| (obj.corner_normal(c).length() - 1.0).abs() <= 1e-4)
         );
     }
 }
