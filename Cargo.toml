@@ -1,0 +1,15 @@
+[package]
+name = "proy3-graficas"
+version = "0.1.0"
+edition = "2024"
+
+[profile.dev]
+opt-level = 3
+debug = false
+
+[profile.release]
+debug = true
+
+[dependencies]
+raylib = { version = "6.0.0", features = ["SUPPORT_IMAGE_GENERATION"] }
+noise = "0.9"
