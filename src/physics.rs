@@ -6,8 +6,16 @@
 //! trayectoria de la nave sea determinista e independiente de los FPS.
 //! Los cuerpos celestes siguen órbitas analíticas cinemáticas.
 
+use raylib::prelude::Vector3;
+
+use crate::scene::{body_position_at, Body};
+
 pub const FIXED_DT: f32 = 1.0 / 120.0;
 pub const MAX_SUBSTEPS: usize = 8;
+/// Constante gravitatoria calibrada para que a ~3 radios de un planeta la
+/// aceleración sea aproximadamente la mitad del empuje máximo de la nave.
+pub const GRAVITY_G: f32 = 7.2;
+pub const GRAVITY_SOFTENING_FACTOR: f32 = 0.5;
 
 #[derive(Clone, Copy, Debug)]
 pub struct PhysicsStepper {
@@ -35,6 +43,25 @@ impl PhysicsStepper {
         }
         steps
     }
+}
+
+/// Calcula la aceleración gravitatoria neta sobre `pos` debida a todos los
+/// cuerpos en el instante `time`, usando ablandamiento proporcional al radio.
+pub fn gravity_acceleration(pos: Vector3, bodies: &[Body], time: f32) -> Vector3 {
+    let mut total = Vector3::zero();
+    for body in bodies {
+        let delta = body_position_at(body, time) - pos;
+        let dist_sq = delta.length_sqr();
+        let softening = body.radius * GRAVITY_SOFTENING_FACTOR;
+        let denom_sq = dist_sq + softening * softening;
+        if dist_sq <= 1e-10 || denom_sq <= 1e-10 {
+            continue;
+        }
+        let dist = dist_sq.sqrt();
+        let mag = GRAVITY_G * body.mass / denom_sq;
+        total += delta * (mag / dist);
+    }
+    total
 }
 
 #[cfg(test)]
