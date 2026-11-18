@@ -486,6 +486,70 @@ mod tests {
     }
 
     #[test]
+    fn tiled_rasterization_matches_full_rasterization_pixel_by_pixel() {
+        use crate::Uniforms;
+        use crate::framebuffer::Framebuffer;
+        use crate::math::Mat4;
+        use crate::noise::Noise;
+        use raylib::prelude::Color;
+
+        let mk_v = |x: f32, y: f32, z: f32, w: f32| ScreenVertex {
+            x,
+            y,
+            z,
+            inv_w: 1.0 / w,
+            object_pos: Vector3::new(x * 0.01, y * 0.01, 1.0).normalize(),
+            world_pos: Vector3::new(x * 0.01, y * 0.01, 1.0),
+            normal: Vector3::new(0.0, 0.0, 1.0),
+            uv: [0.0, 0.0],
+        };
+        let triangles = [
+            ScreenTriangle {
+                vertices: [
+                    mk_v(10.0, 10.0, 0.6, 1.0),
+                    mk_v(15.0, 130.0, 0.4, 1.5),
+                    mk_v(150.0, 20.0, 0.5, 2.0),
+                ],
+            },
+            ScreenTriangle {
+                vertices: [
+                    mk_v(50.0, 50.0, 0.2, 1.2),
+                    mk_v(60.0, 155.0, 0.7, 1.8),
+                    mk_v(175.0, 70.0, 0.3, 1.0),
+                ],
+            },
+        ];
+        let uniforms = Uniforms {
+            model_matrix: Mat4::identity(),
+            view_matrix: Mat4::identity(),
+            projection_matrix: Mat4::identity(),
+            time: 0.0,
+            light_dir: Vector3::new(0.0, 0.0, 1.0),
+            camera_pos: Vector3::new(0.0, 0.0, 5.0),
+            debug_noise: false,
+            noise_frequency: 4.0,
+            rocky_debug_view: 3,
+            viewport_width: 160,
+            viewport_height: 140,
+            noise: Noise::new(0),
+            baked: None,
+        };
+
+        let mut fb_full = Framebuffer::new(160, 140, Color::BLACK);
+        rasterize_visibility(&triangles, &mut fb_full, true);
+        shade_visibility(&triangles, &mut fb_full, Shader::Star, &uniforms);
+
+        let mut fb_tiled = Framebuffer::new(160, 140, Color::BLACK);
+        let mut grid = TileGrid::new(160, 140);
+        rasterize_visibility_tiled(&triangles, &mut grid, &mut fb_tiled, true);
+        shade_visibility(&triangles, &mut fb_tiled, Shader::Star, &uniforms);
+
+        assert_eq!(fb_full.depth_buffer, fb_tiled.depth_buffer);
+        assert_eq!(fb_full.tri_id_buffer, fb_tiled.tri_id_buffer);
+        assert_eq!(fb_full.color_pixels, fb_tiled.color_pixels);
+    }
+
+    #[test]
     fn sphere_obj_triangles_are_oriented_outward() {
         let obj = load_obj("assets/sphere.obj").expect("sphere.obj debe cargar");
         let mut inward = 0usize;
