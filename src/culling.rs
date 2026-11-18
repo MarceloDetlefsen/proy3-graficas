@@ -69,3 +69,39 @@ impl Frustum {
         true
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::camera::Camera;
+
+    #[test]
+    fn frustum_sphere_inside_outside_and_partial_cases() {
+        let cam = Camera::new(
+            Vector3::new(0.0, 0.0, 10.0),
+            Vector3::zero(),
+            45.0_f32.to_radians(),
+            1.0,
+            50.0,
+        );
+        let vp = cam.projection_matrix(4.0 / 3.0) * cam.view_matrix();
+        let frustum = Frustum::from_vp(&vp);
+
+        // Completamente dentro (centro del campo de visión).
+        assert!(frustum.intersects_sphere(Vector3::new(0.0, 0.0, 0.0), 1.0));
+
+        // Fuera detrás de la cámara / plano near (z=10..9, z=12 queda detrás).
+        assert!(!frustum.intersects_sphere(Vector3::new(0.0, 0.0, 12.0), 1.0));
+        // Fuera más allá del plano far (z=-40 es far, z=-45 queda más allá).
+        assert!(!frustum.intersects_sphere(Vector3::new(0.0, 0.0, -45.0), 1.0));
+        // Fuera a la derecha / arriba.
+        assert!(!frustum.intersects_sphere(Vector3::new(30.0, 0.0, 0.0), 1.0));
+        assert!(!frustum.intersects_sphere(Vector3::new(0.0, 30.0, 0.0), 1.0));
+
+        // Parcialmente dentro cruzando el plano near (z=9.0 es el plano near).
+        assert!(frustum.intersects_sphere(Vector3::new(0.0, 0.0, 9.5), 1.0));
+        // Parcialmente dentro cruzando el plano derecho en z=0 (dist=10, half_w = 10*tan(22.5)*(4/3) ≈ 5.52).
+        assert!(frustum.intersects_sphere(Vector3::new(6.0, 0.0, 0.0), 1.0));
+        assert!(!frustum.intersects_sphere(Vector3::new(8.0, 0.0, 0.0), 1.0));
+    }
+}
