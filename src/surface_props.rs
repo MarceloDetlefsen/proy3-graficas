@@ -8,8 +8,11 @@
 
 use raylib::prelude::Vector3;
 
+use crate::mesh_lod::decimate_vertex_clustering;
+use crate::obj::load_obj;
 use crate::surface_scatter::SurfacePropKind;
 use crate::vertex::Vertex;
+use std::path::Path;
 
 fn push_tri(out: &mut Vec<Vertex>, a: Vector3, b: Vector3, c: Vector3) {
     let e1 = b - a;
@@ -109,4 +112,75 @@ pub fn placeholder_mesh(kind: SurfacePropKind) -> Vec<Vertex> {
         }
     }
     tris
+}
+
+pub fn low_placeholder_mesh(kind: SurfacePropKind) -> Vec<Vertex> {
+    let mut tris = Vec::new();
+    match kind {
+        SurfacePropKind::Tree => push_cone(&mut tris, 4, 0.0, 0.30, 1.00),
+        SurfacePropKind::Rock => push_box(&mut tris, 0.30, 0.0, 0.70, 0.30),
+        SurfacePropKind::Building => push_box(&mut tris, 0.24, 0.0, 0.90, 0.24),
+        SurfacePropKind::Monument => push_cone(&mut tris, 4, 0.0, 0.22, 1.00),
+    }
+    tris
+}
+
+#[derive(Clone, Debug)]
+pub struct PropMeshLod {
+    pub high: Vec<Vertex>,
+    pub low: Vec<Vertex>,
+}
+
+#[derive(Clone, Debug)]
+pub struct PropMeshSet {
+    pub tree: PropMeshLod,
+    pub rock: PropMeshLod,
+    pub building: PropMeshLod,
+    pub monument: PropMeshLod,
+}
+
+impl PropMeshSet {
+    pub fn mesh_for(&self, kind: SurfacePropKind, lod: usize) -> &[Vertex] {
+        let entry = match kind {
+            SurfacePropKind::Tree => &self.tree,
+            SurfacePropKind::Rock => &self.rock,
+            SurfacePropKind::Building => &self.building,
+            SurfacePropKind::Monument => &self.monument,
+        };
+        if lod == 0 {
+            &entry.high
+        } else {
+            &entry.low
+        }
+    }
+}
+
+fn load_or_fallback(kind: SurfacePropKind, path: &str) -> PropMeshLod {
+    if Path::new(path).exists() {
+        let obj = load_obj(path).expect("No se pudo cargar modelo de superficie");
+        let (verts, idxs) = obj.to_indexed_mesh();
+        let high: Vec<Vertex> = idxs.iter().map(|&i| verts[i].clone()).collect();
+        let (lv, li) = decimate_vertex_clustering(&verts, &idxs, 4);
+        let low = if li.is_empty() {
+            low_placeholder_mesh(kind)
+        } else {
+            li.iter().map(|&i| lv[i].clone()).collect()
+        };
+        return PropMeshLod { high, low };
+    }
+    println!("Aviso: no se encontró {path}; usando marcador procedural de respaldo.");
+    PropMeshLod {
+        high: placeholder_mesh(kind),
+        low: low_placeholder_mesh(kind),
+    }
+}
+
+/// Carga los modelos de superficie desde `assets/surface/` con respaldo procedural.
+pub fn load_surface_props() -> PropMeshSet {
+    PropMeshSet {
+        tree: load_or_fallback(SurfacePropKind::Tree, "assets/surface/tree.obj"),
+        rock: load_or_fallback(SurfacePropKind::Rock, "assets/surface/rock.obj"),
+        building: load_or_fallback(SurfacePropKind::Building, "assets/surface/building.obj"),
+        monument: load_or_fallback(SurfacePropKind::Monument, "assets/surface/monument.obj"),
+    }
 }

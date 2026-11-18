@@ -434,6 +434,7 @@ fn main() {
             .collect::<Vec<_>>()
     };
     let mut planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+    let prop_meshes = surface_props::load_surface_props();
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
@@ -844,11 +845,7 @@ fn main() {
                 );
                 let dist_sq = (inst_world - cam.position).length_sqr();
                 let prop_lod = lod::select_instance_lod(dist_sq);
-                let prop_mesh = if prop_lod == 0 {
-                    &icosphere_lods[1]
-                } else {
-                    &icosphere_lods[0]
-                };
+                let prop_mesh = prop_meshes.mesh_for(inst.kind, prop_lod);
                 let prop_tris = prop_mesh.len() / 3;
                 tris_before_cull += prop_tris;
                 if instance_culling
