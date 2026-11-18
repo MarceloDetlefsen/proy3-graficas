@@ -411,16 +411,7 @@ fn main() {
     let build_candidates = |seed: u64, bodies: &[scene::Body]| {
         bodies
             .iter()
-            .enumerate()
-            .map(|(idx, body)| {
-                if matches!(body.shader, Shader::Rocky) {
-                    let s = seed.wrapping_add(idx as u64 * 1009);
-                    let dirs = surface_scatter::fibonacci_sphere_points(420, s, 0.03);
-                    surface_scatter::filter_candidates_by_noise(&dirs, s, idx == 1)
-                } else {
-                    Vec::new()
-                }
-            })
+            .map(|body| surface_scatter::scatter_for_body(body, seed))
             .collect::<Vec<_>>()
     };
     let mut planet_candidates = build_candidates(surface_seed, &bodies);

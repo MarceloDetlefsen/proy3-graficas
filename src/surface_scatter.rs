@@ -12,7 +12,8 @@ use crate::icosphere::spherical_tangent_basis;
 use crate::math::Mat4;
 use crate::noise::Noise;
 use crate::rng::SplitMix64;
-use crate::scene::Body;
+use crate::scene::{Body, BodyKind};
+use crate::shaders::Shader;
 use crate::surface_map::planet_height;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,6 +195,18 @@ pub fn build_body_instances(
             }
         })
         .collect()
+}
+
+/// Asigna candidatos por zonas de densidad según el tipo de planeta.
+pub fn scatter_for_body(body: &Body, base_seed: u64) -> Vec<SurfaceCandidate> {
+    if body.kind == BodyKind::Star || !matches!(body.shader, Shader::Rocky) {
+        return Vec::new();
+    }
+    let body_seed = base_seed.wrapping_add((body.surface.seed as u64 + 1) * 1009);
+    let allow_trees = body.surface.seed == 0;
+    let candidate_count = if allow_trees { 450 } else { 320 };
+    let dirs = fibonacci_sphere_points(candidate_count, body_seed, 0.03);
+    filter_candidates_by_noise(&dirs, body_seed, allow_trees)
 }
 
 #[cfg(test)]
