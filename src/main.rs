@@ -363,7 +363,7 @@ fn main() {
     let ship_unit_scale = 2.0 / ship_extent;
     let ship_vertex_array: Vec<vertex::Vertex> =
         ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
-    let ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
+    let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
     let bodies = solar_system();
     let _ = build_model_matrix;
     let _ = shader_name;
@@ -439,10 +439,10 @@ fn main() {
             internal_height = WINDOW_HEIGHT / div;
             framebuffer.resize(internal_width as u32, internal_height as u32);
         }
-        if window.is_key_pressed(KeyboardKey::KEY_W) {
+        if window.is_key_pressed(KeyboardKey::KEY_F1) {
             mode = TriangleMode::Wireframe;
         }
-        if window.is_key_pressed(KeyboardKey::KEY_B) {
+        if window.is_key_pressed(KeyboardKey::KEY_F2) {
             mode = TriangleMode::FilledBarycentric;
         }
         if window.is_key_pressed(KeyboardKey::KEY_ONE) {
@@ -454,7 +454,7 @@ fn main() {
         if window.is_key_pressed(KeyboardKey::KEY_THREE) {
             shader = Shader::GasGiant;
         }
-        if window.is_key_pressed(KeyboardKey::KEY_D) {
+        if window.is_key_pressed(KeyboardKey::KEY_N) {
             debug_noise = !debug_noise;
         }
         if window.is_key_pressed(KeyboardKey::KEY_V) {
@@ -485,6 +485,38 @@ fn main() {
         if window.is_key_down(KeyboardKey::KEY_DOWN) {
             cam_pitch = (cam_pitch - orbit_speed * dt).max(-1.5);
         }
+        // Controles provisionales de teclado para la nave (dependientes de dt).
+        let ship_speed = 10.0_f32;
+        let turn_speed = 1.8_f32;
+        if window.is_key_down(KeyboardKey::KEY_W) {
+            ship.position += ship.forward * (ship_speed * dt);
+        }
+        if window.is_key_down(KeyboardKey::KEY_S) {
+            ship.position -= ship.forward * (ship_speed * dt);
+        }
+        let mut yaw_in = 0.0_f32;
+        let mut pitch_in = 0.0_f32;
+        let mut roll_in = 0.0_f32;
+        if window.is_key_down(KeyboardKey::KEY_A) {
+            yaw_in += turn_speed * dt;
+        }
+        if window.is_key_down(KeyboardKey::KEY_D) {
+            yaw_in -= turn_speed * dt;
+        }
+        if window.is_key_down(KeyboardKey::KEY_Z) {
+            pitch_in += turn_speed * dt;
+        }
+        if window.is_key_down(KeyboardKey::KEY_X) {
+            pitch_in -= turn_speed * dt;
+        }
+        if window.is_key_down(KeyboardKey::KEY_Q) {
+            roll_in -= turn_speed * dt;
+        }
+        if window.is_key_down(KeyboardKey::KEY_E) {
+            roll_in += turn_speed * dt;
+        }
+        ship.rotate_local(yaw_in, pitch_in, roll_in);
+
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
 
         let aspect = internal_width as f32 / internal_height as f32;
