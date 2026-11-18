@@ -22,6 +22,8 @@ pub struct Ship {
     pub max_accel: f32,
     pub boost_multiplier: f32,
     pub max_speed: f32,
+    pub damping: f32,
+    pub brake_damping: f32,
 }
 
 fn rotate_around_axis(v: Vector3, axis: Vector3, angle: f32) -> Vector3 {
@@ -43,6 +45,8 @@ impl Ship {
             max_accel: 12.0,
             boost_multiplier: 2.2,
             max_speed: 18.0,
+            damping: 0.45,
+            brake_damping: 4.5,
         }
     }
 
@@ -59,6 +63,19 @@ impl Ship {
         let speed_sq = self.velocity.length_sqr();
         if speed_sq > speed_limit * speed_limit {
             self.velocity = self.velocity.normalize() * speed_limit;
+        }
+    }
+
+    /// Aplica amortiguación progresiva a la velocidad lineal, reforzada al frenar.
+    pub fn apply_damping(&mut self, braking: bool, dt: f32) {
+        if dt <= 0.0 {
+            return;
+        }
+        let rate = if braking { self.brake_damping } else { self.damping }.max(0.0);
+        let factor = (-rate * dt).exp();
+        self.velocity *= factor;
+        if braking && self.velocity.length_sqr() < 1e-6 {
+            self.velocity = Vector3::zero();
         }
     }
 
