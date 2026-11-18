@@ -282,20 +282,23 @@ fn height_color(height: f32) -> Vector3 {
     }
 }
 
-fn surface_color(noise: &Noise, object_pos: Vector3, height: f32) -> Vector3 {
+pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
+    let p = dir.normalize();
+    let height = height_field(noise, p);
+    let sea = sea_mask(noise, p, height);
+    let biome = biome_mask(noise, p);
+    let crack = crack_mask(noise, p);
     let base = height_color(height);
-    let sea = sea_mask(noise, object_pos, height);
     let with_sea = noise::mix_color(base, color(COLOR_SEA), sea);
-    let biome = biome_mask(noise, object_pos);
-    let pink_noise = noise.fbm(object_pos.normalize() * 8.0, 3, 2.0, 0.5);
+    let pink_noise = noise.fbm(p * 8.0, 3, 2.0, 0.5);
     let pink_amount = noise::smoothstep(0.55, 0.72, pink_noise);
     let biome_color = noise::mix_color(color(COLOR_TOXIC_GREEN), color(COLOR_PINK), pink_amount);
     let with_biome = noise::mix_color(with_sea, biome_color, biome);
-    noise::mix_color(with_biome, color(COLOR_CRACK), crack_mask(noise, object_pos))
+    let albedo = noise::mix_color(with_biome, color(COLOR_CRACK), crack);
+    [albedo.x, albedo.y, albedo.z, height, sea, crack, biome]
 }
 
-fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vector3 {
-    let p = fragment.object_pos.normalize();
+fn tangent_pair(p: Vector3) -> (Vector3, Vector3) {
     let ref_axis = if p.y.abs() < 0.9 {
         Vector3::new(0.0, 1.0, 0.0)
     } else {
@@ -303,9 +306,20 @@ fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vecto
     };
     let t1 = ref_axis.cross(p).normalize();
     let t2 = p.cross(t1).normalize();
-    // Diferencias hacia adelante en 2 direcciones tangentes reutilizando `height`.
-    let g1 = (height_field(&uniforms.noise, p + t1 * BUMP_DELTA) - height) / BUMP_DELTA;
-    let g2 = (height_field(&uniforms.noise, p + t2 * BUMP_DELTA) - height) / BUMP_DELTA;
+    (t1, t2)
+}
+
+fn bumped_normal_from_heights(
+    fragment: &Fragment,
+    uniforms: &Uniforms,
+    height: f32,
+    h1: f32,
+    h2: f32,
+) -> Vector3 {
+    let p = fragment.object_pos.normalize();
+    let (t1, t2) = tangent_pair(p);
+    let g1 = (h1 - height) / BUMP_DELTA;
+    let g2 = (h2 - height) / BUMP_DELTA;
     let gradient = (t1 * g1 + t2 * g2) * BUMP_GRADIENT_SCALE;
     // La altura aumenta en la dirección del gradiente; la normal de una superficie
     // elevada se inclina contra él. Este signo mantiene las crestas claras hacia la luz.
@@ -314,66 +328,58 @@ fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vecto
     uniforms.model_matrix.transform_normal(object_normal)
 }
 
-fn lit_surface_color(
-    fragment: &Fragment,
-    uniforms: &Uniforms,
-    height: f32,
-    base: Vector3,
-) -> Vector3 {
-    let sea = sea_mask(&uniforms.noise, fragment.object_pos, height);
-    let normal = if sea > 0.5 {
-        fragment.normal.normalize()
-    } else {
-        bumped_normal(fragment, uniforms, height)
-    };
-    let diffuse = diffuse_factor(normal, uniforms);
-    let mut result = base * (AMBIENT + (1.0 - AMBIENT) * diffuse);
-
-    let view = surface_view(fragment, uniforms);
-    let half_vector = (uniforms.light_dir + view).normalize();
-    let specular = normal.dot(half_vector).max(0.0).powf(SEA_SPEC_POWER) * SEA_SPEC_STRENGTH * sea;
-    result += Vector3::new(1.0, 1.0, 1.0) * specular;
-
-    let crack = crack_mask(&uniforms.noise, fragment.object_pos);
-    let n_dot_l = diffuse_factor(fragment.normal, uniforms);
-    result += color(COLOR_CRACK) * (crack * LAVA_GLOW * (1.0 - n_dot_l));
-    result
-}
-
 fn lit_cloud_color(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     let diffuse = diffuse_factor(fragment.normal, uniforms);
     color(CLOUD_COLOR) * (AMBIENT + (1.0 - AMBIENT) * diffuse)
 }
 
-pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
-    print_statistics_once(&uniforms.noise);
-    let height = height_field(&uniforms.noise, fragment.object_pos);
+pub fn shade_from_static(
+    fragment: &Fragment,
+    uniforms: &Uniforms,
+    s: [f32; 7],
+    bump_heights: (f32, f32),
+) -> Vector3 {
+    let [r, g, b, height, sea, crack, biome] = s;
     match uniforms.rocky_debug_view {
-        1 => {
-            let value = biome_mask(&uniforms.noise, fragment.object_pos);
-            Vector3::new(value, value, value)
-        }
-        2 => {
-            let value = crack_mask(&uniforms.noise, fragment.object_pos);
-            Vector3::new(value, value, value)
-        }
+        1 => Vector3::new(biome, biome, biome),
+        2 => Vector3::new(crack, crack, crack),
         3 => {
-            let base = surface_color(&uniforms.noise, fragment.object_pos, height);
-            let surface = lit_surface_color(fragment, uniforms, height, base);
+            let base = Vector3::new(r, g, b);
+            let normal = if sea > 0.5 {
+                fragment.normal.normalize()
+            } else {
+                bumped_normal_from_heights(fragment, uniforms, height, bump_heights.0, bump_heights.1)
+            };
+            let diffuse = diffuse_factor(normal, uniforms);
+            let mut surface = base * (AMBIENT + (1.0 - AMBIENT) * diffuse);
+
+            let view = surface_view(fragment, uniforms);
+            let half_vector = (uniforms.light_dir + view).normalize();
+            let specular =
+                normal.dot(half_vector).max(0.0).powf(SEA_SPEC_POWER) * SEA_SPEC_STRENGTH * sea;
+            surface += Vector3::new(1.0, 1.0, 1.0) * specular;
+
+            let n_dot_l = diffuse_factor(fragment.normal, uniforms);
+            let lava = color(COLOR_CRACK) * (crack * LAVA_GLOW * (1.0 - n_dot_l));
+            surface += lava;
+
             let clouds = cloud_mask(&uniforms.noise, fragment.object_pos, uniforms.time);
             let cloud_alpha = clouds * CLOUD_OPACITY;
             let cloud_color = lit_cloud_color(fragment, uniforms);
             let mut result = noise::mix_color(surface, cloud_color, cloud_alpha);
-
-            // La nube oscurece la lava, pero conserva una fracción de su brillo nocturno
-            // para que las grietas sigan leyendo debajo de la capa.
-            let lava = color(COLOR_CRACK)
-                * (crack_mask(&uniforms.noise, fragment.object_pos)
-                    * LAVA_GLOW
-                    * (1.0 - diffuse_factor(fragment.normal, uniforms)));
             result += lava * (clouds * 0.18);
             result
         }
         _ => Vector3::new(height, height, height),
     }
+}
+
+pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
+    print_statistics_once(&uniforms.noise);
+    let p = fragment.object_pos.normalize();
+    let s = sample_static(&uniforms.noise, p);
+    let (t1, t2) = tangent_pair(p);
+    let h1 = height_field(&uniforms.noise, p + t1 * BUMP_DELTA);
+    let h2 = height_field(&uniforms.noise, p + t2 * BUMP_DELTA);
+    shade_from_static(fragment, uniforms, s, (h1, h2))
 }

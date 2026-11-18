@@ -210,14 +210,38 @@ fn print_statistics_once(noise: &Noise) {
     });
 }
 
-pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
-    print_statistics_once(&uniforms.noise);
-    let pattern = band_pattern_at(&uniforms.noise, fragment.object_pos, uniforms.time);
+pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 5] {
+    let p = dir.normalize();
+    let pattern = band_pattern_at(noise, p, 0.0);
+    let albedo = surface_color(noise, p, pattern, 0.0);
+    let vortex = vortex_mask(noise, p);
+    [albedo.x, albedo.y, albedo.z, pattern, vortex]
+}
+
+pub fn shade_from_static(fragment: &Fragment, uniforms: &Uniforms, s: [f32; 5]) -> Vector3 {
+    let [r, g, b, pattern, _vortex] = s;
     if uniforms.rocky_debug_view == 0 {
         return Vector3::new(pattern, pattern, pattern);
     }
 
-    let mut result = surface_color(&uniforms.noise, fragment.object_pos, pattern, uniforms.time);
+    let mut result = Vector3::new(r, g, b);
+    // Capa animada ligera en vivo sobre el mapa estático para mantener fluidez atmosférica.
+    if uniforms.time.abs() > 1e-4 {
+        let p = fragment.object_pos.normalize();
+        let swirl = uniforms.noise.fbm(
+            p * 3.5 + time_shift(uniforms.time * WARP2_SPEED),
+            2,
+            2.0,
+            0.5,
+        );
+        let shift = (swirl - 0.5) * 0.14;
+        result = Vector3::new(
+            (result.x + shift * 0.4).clamp(0.0, 1.0),
+            (result.y + shift * 0.8).clamp(0.0, 1.0),
+            (result.z + shift * 0.2).clamp(0.0, 1.0),
+        );
+    }
+
     let diffuse = diffuse_factor(fragment.normal, uniforms);
     let mu = surface_mu(fragment, uniforms);
     let limb = 0.22 + 0.78 * mu.powf(0.72);
@@ -227,4 +251,10 @@ pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     let rim = (1.0 - mu).powf(3.0) * RIM_INTENSITY;
     result += Vector3::new(0.18, 0.90, 0.35) * rim;
     result
+}
+
+pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
+    print_statistics_once(&uniforms.noise);
+    let s = sample_static(&uniforms.noise, fragment.object_pos);
+    shade_from_static(fragment, uniforms, s)
 }
