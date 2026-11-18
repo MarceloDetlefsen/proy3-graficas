@@ -21,6 +21,8 @@ pub struct FrameSample {
     pub fragments: usize,
     pub shader_calls: usize,
     pub visible_pixels: usize,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug)]
@@ -72,6 +74,8 @@ impl PerfStats {
             fragments: sum.fragments / count,
             shader_calls: sum.shader_calls / count,
             visible_pixels: sum.visible_pixels / count,
+            width: 0,
+            height: 0,
         }
     }
 
@@ -82,8 +86,12 @@ impl PerfStats {
         } else {
             0.0
         };
+        let last = self.samples.back().copied().unwrap_or_default();
         vec![
-            format!("FPS: {fps:.1} ({:.2} ms)", avg.total_ms),
+            format!(
+                "FPS: {fps:.1} ({:.2} ms) | Res: {}x{}",
+                avg.total_ms, last.width, last.height
+            ),
             format!(
                 "Vtx: {:.2} | Rast: {:.2} | Shade: {:.2} ms",
                 avg.vertex_ms, avg.raster_ms, avg.shading_ms

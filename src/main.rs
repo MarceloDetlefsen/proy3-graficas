@@ -207,6 +207,8 @@ fn render(
         fragments: frag_count,
         shader_calls: frag_count,
         visible_pixels: framebuffer.visible_pixel_count(),
+        width: framebuffer.width,
+        height: framebuffer.height,
     }
 }
 
@@ -237,7 +239,6 @@ fn main() {
     let base_scale = 2.0 / max_extent;
     let internal_width = WINDOW_WIDTH;
     let internal_height = WINDOW_HEIGHT;
-    let aspect = internal_width as f32 / internal_height as f32;
 
     let mut framebuffer = Framebuffer::new(
         internal_width as u32,
@@ -246,6 +247,7 @@ fn main() {
     );
 
     if let Some(options) = parse_capture_options() {
+        let aspect = internal_width as f32 / internal_height as f32;
         let model_matrix = build_model_matrix(&obj, 0.0, 0.0, base_scale);
         let cam = Camera::new(
             Vector3::new(0.0, 0.0, 3.0),
@@ -304,6 +306,11 @@ fn main() {
     let mut rocky_debug_view = 3_i32;
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
+    let res_scales = [2_u32, 3, 1];
+    let mut res_scale_idx = 0_usize; // 1/2 por defecto (400x300)
+    let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
+    let mut internal_height = WINDOW_HEIGHT / res_scales[res_scale_idx] as i32;
+    framebuffer.resize(internal_width as u32, internal_height as u32);
     let orbit_speed = 1.8_f32;
     let light_speed = 1.8_f32;
     let mut perf_stats = PerfStats::new();
@@ -317,6 +324,13 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_C) {
             backface_culling = !backface_culling;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_R) {
+            res_scale_idx = (res_scale_idx + 1) % res_scales.len();
+            let div = res_scales[res_scale_idx] as i32;
+            internal_width = WINDOW_WIDTH / div;
+            internal_height = WINDOW_HEIGHT / div;
+            framebuffer.resize(internal_width as u32, internal_height as u32);
         }
         if window.is_key_pressed(KeyboardKey::KEY_W) {
             mode = TriangleMode::Wireframe;
@@ -366,6 +380,7 @@ fn main() {
         }
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 0.4).clamp(1.2, 20.0);
 
+        let aspect = internal_width as f32 / internal_height as f32;
         let model_matrix = build_model_matrix(&obj, 0.0, 0.0, base_scale);
         let cam_pos = Vector3::new(
             cam_distance * cam_pitch.cos() * cam_yaw.sin(),

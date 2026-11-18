@@ -54,6 +54,19 @@ impl Framebuffer {
         self.depth_buffer.fill(f32::INFINITY);
     }
 
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if self.width == width && self.height == height {
+            return;
+        }
+        let len = (width * height) as usize;
+        self.width = width;
+        self.height = height;
+        self.color_pixels = vec![0u8; len * 4];
+        self.depth_buffer = vec![f32::INFINITY; len];
+        self.texture = None;
+        self.clear();
+    }
+
     pub fn set_pixel(&mut self, x: i32, y: i32, color: Color) {
         if x >= 0 && y >= 0 && x < self.width as i32 && y < self.height as i32 {
             let idx = (y as usize * self.width as usize + x as usize) * 4;
