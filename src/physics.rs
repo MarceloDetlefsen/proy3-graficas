@@ -100,4 +100,25 @@ mod tests {
         assert!((v30 - v60).length() < 1e-5);
         assert!((v30 - v144).length() < 1e-5);
     }
+
+    #[test]
+    fn gravity_follows_inverse_square_and_directional_symmetry() {
+        let mut planet = crate::scene::solar_system().remove(1);
+        planet.orbit_radius = 0.0;
+        planet.radius = 0.01;
+        let bodies = [planet];
+
+        let g_near = gravity_acceleration(Vector3::new(10.0, 0.0, 0.0), &bodies, 0.0);
+        let g_far = gravity_acceleration(Vector3::new(20.0, 0.0, 0.0), &bodies, 0.0);
+        let ratio = g_near.length() / g_far.length();
+        assert!((ratio - 4.0).abs() < 1e-3, "ratio esperado ~4.0, obtenido {ratio}");
+
+        let p = Vector3::new(12.0, -5.0, 8.0);
+        let g_pos = gravity_acceleration(p, &bodies, 0.0);
+        let g_neg = gravity_acceleration(-p, &bodies, 0.0);
+        assert!((g_pos + g_neg).length() < 1e-5);
+
+        let g_y = gravity_acceleration(Vector3::new(0.0, 10.0, 0.0), &bodies, 0.0);
+        assert!((g_y.length() - g_near.length()).abs() < 1e-5);
+    }
 }
