@@ -1,3 +1,4 @@
+mod camera;
 mod fragment;
 mod framebuffer;
 mod math;
