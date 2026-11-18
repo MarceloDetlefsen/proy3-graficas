@@ -365,6 +365,8 @@ fn main() {
     let ship_vertex_array: Vec<vertex::Vertex> =
         ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
     let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
+    let mut physics_stepper = physics::PhysicsStepper::new();
+    let mut show_help = false;
     let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
     let mut follow_mode = true;
     window.disable_cursor();
@@ -413,8 +415,11 @@ fn main() {
         if window.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
             follow_cam.recenter();
         }
-        if window.is_key_pressed(KeyboardKey::KEY_SPACE) {
+        if window.is_key_pressed(KeyboardKey::KEY_TAB) {
             sim_clock.toggle_pause();
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_H) {
+            show_help = !show_help;
         }
         if window.is_key_pressed(KeyboardKey::KEY_MINUS) {
             time_scale_idx = time_scale_idx.saturating_sub(1);
@@ -489,56 +494,70 @@ fn main() {
             noise_frequency = (noise_frequency + 0.25).min(20.0);
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
-        if window.is_key_down(KeyboardKey::KEY_LEFT) {
-            cam_yaw -= orbit_speed * dt;
+        if !follow_mode {
+            if window.is_key_down(KeyboardKey::KEY_LEFT) {
+                cam_yaw -= orbit_speed * dt;
+            }
+            if window.is_key_down(KeyboardKey::KEY_RIGHT) {
+                cam_yaw += orbit_speed * dt;
+            }
+            if window.is_key_down(KeyboardKey::KEY_UP) {
+                cam_pitch = (cam_pitch + orbit_speed * dt).min(1.5);
+            }
+            if window.is_key_down(KeyboardKey::KEY_DOWN) {
+                cam_pitch = (cam_pitch - orbit_speed * dt).max(-1.5);
+            }
         }
-        if window.is_key_down(KeyboardKey::KEY_RIGHT) {
-            cam_yaw += orbit_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_UP) {
-            cam_pitch = (cam_pitch + orbit_speed * dt).min(1.5);
-        }
-        if window.is_key_down(KeyboardKey::KEY_DOWN) {
-            cam_pitch = (cam_pitch - orbit_speed * dt).max(-1.5);
-        }
-        // Controles provisionales de teclado para la nave (dependientes de dt).
-        let ship_speed = 10.0_f32;
-        let turn_speed = 1.8_f32;
+
+        // Controles de vuelo con paso de tiempo fijo.
+        let mut throttle = 0.0_f32;
         if window.is_key_down(KeyboardKey::KEY_W) {
-            ship.position += ship.forward * (ship_speed * dt);
+            throttle += 1.0;
         }
         if window.is_key_down(KeyboardKey::KEY_S) {
-            ship.position -= ship.forward * (ship_speed * dt);
+            throttle -= 1.0;
         }
+        let boost = window.is_key_down(KeyboardKey::KEY_LEFT_SHIFT);
+        let braking = window.is_key_down(KeyboardKey::KEY_SPACE);
+
         let mut yaw_in = 0.0_f32;
         let mut pitch_in = 0.0_f32;
         let mut roll_in = 0.0_f32;
-        if window.is_key_down(KeyboardKey::KEY_A) {
-            yaw_in += turn_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_D) {
-            yaw_in -= turn_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_Z) {
-            pitch_in += turn_speed * dt;
-        }
-        if window.is_key_down(KeyboardKey::KEY_X) {
-            pitch_in -= turn_speed * dt;
+        if follow_mode {
+            if window.is_key_down(KeyboardKey::KEY_LEFT) {
+                yaw_in += 1.0;
+            }
+            if window.is_key_down(KeyboardKey::KEY_RIGHT) {
+                yaw_in -= 1.0;
+            }
+            if window.is_key_down(KeyboardKey::KEY_UP) {
+                pitch_in += 1.0;
+            }
+            if window.is_key_down(KeyboardKey::KEY_DOWN) {
+                pitch_in -= 1.0;
+            }
+            let mouse_delta = window.get_mouse_delta();
+            yaw_in = (yaw_in - mouse_delta.x * 0.04).clamp(-1.0, 1.0);
+            pitch_in = (pitch_in - mouse_delta.y * 0.04).clamp(-1.0, 1.0);
         }
         if window.is_key_down(KeyboardKey::KEY_Q) {
-            roll_in -= turn_speed * dt;
+            roll_in -= 1.0;
         }
         if window.is_key_down(KeyboardKey::KEY_E) {
-            roll_in += turn_speed * dt;
+            roll_in += 1.0;
         }
-        ship.rotate_local(yaw_in, pitch_in, roll_in);
+
+        physics_stepper.step(dt, |sub_dt| {
+            ship.apply_thrust(throttle, boost, sub_dt);
+            ship.apply_damping(braking, sub_dt);
+            ship.apply_angular_input(pitch_in, yaw_in, roll_in, sub_dt);
+            ship.integrate_pose(sub_dt);
+        });
 
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
 
         let aspect = internal_width as f32 / internal_height as f32;
         let cam = if follow_mode {
-            let delta = window.get_mouse_delta();
-            follow_cam.apply_mouse_look(delta.x, delta.y, 0.003);
             follow_cam.update(&ship, dt);
             follow_cam.to_camera(45.0_f32.to_radians(), 0.1, 300.0)
         } else {
@@ -688,19 +707,30 @@ fn main() {
             println!("Captura guardada en {}", capture_path.display());
         }
         let label = format!(
-            "Sistema Solar ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Cull(C): {}",
+            "Sistema Solar ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Ayuda(H)",
             bodies.len(),
             sim_clock.time,
             sim_clock.scale,
             if sim_clock.paused { " PAUSA" } else { "" },
             if follow_mode { "Seguir" } else { "Libre" },
-            if backface_culling { "ON" } else { "OFF" },
         );
-        let overlay = if perf_stats.enabled {
+        let mut overlay = if perf_stats.enabled {
             perf_stats.overlay_lines()
         } else {
             Vec::new()
         };
+        if show_help {
+            overlay.extend([
+                "--- Controles de vuelo (H para cerrar) ---".to_string(),
+                "W / S       : Empuje adelante / atras".to_string(),
+                "Shift       : Impulso (boost)".to_string(),
+                "Espacio     : Frenado progresivo".to_string(),
+                "Mouse/Flech.: Cabeceo y guinada".to_string(),
+                "Q / E       : Alabeo (roll)".to_string(),
+                "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
+                "Tab / - =   : Pausa / Escala de tiempo".to_string(),
+            ]);
+        }
         let t_pres = std::time::Instant::now();
         framebuffer.draw_in_window(&mut window, &thread, &label, &overlay);
         sample.present_ms = t_pres.elapsed().as_secs_f64() * 1000.0;
