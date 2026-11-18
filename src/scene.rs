@@ -128,6 +128,19 @@ pub fn body_position_at(body: &Body, time: f32) -> Vector3 {
     )
 }
 
+pub fn body_velocity_at(body: &Body, time: f32) -> Vector3 {
+    if body.orbit_radius <= 0.0 || body.orbit_period.abs() <= 1e-6 {
+        return Vector3::zero();
+    }
+    let omega = std::f32::consts::TAU / body.orbit_period;
+    let angle = body.phase + omega * time;
+    Vector3::new(
+        -body.orbit_radius * omega * angle.sin(),
+        body.orbit_radius * omega * angle.cos() * body.orbit_inclination.sin(),
+        body.orbit_radius * omega * angle.cos() * body.orbit_inclination.cos(),
+    )
+}
+
 pub fn body_static_position(body: &Body) -> Vector3 {
     Vector3::new(
         body.orbit_radius * body.phase.cos(),

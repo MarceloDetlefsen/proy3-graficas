@@ -8,7 +8,7 @@
 
 use raylib::prelude::Vector3;
 
-use crate::scene::{body_position_at, effective_radius, Body};
+use crate::scene::{body_position_at, body_velocity_at, effective_radius, Body};
 
 pub const FIXED_DT: f32 = 1.0 / 120.0;
 pub const MAX_SUBSTEPS: usize = 8;
@@ -127,6 +127,24 @@ pub fn detect_body_collision(
         }
     }
     deepest
+}
+
+/// Resuelve la colisión empujando la nave fuera de la superficie y anulando la
+/// componente entrante de la velocidad relativa al cuerpo.
+pub fn resolve_body_collisions(
+    ship: &mut crate::ship::Ship,
+    bodies: &[Body],
+    time: f32,
+) -> Option<usize> {
+    let col = detect_body_collision(ship, bodies, time)?;
+    ship.position += col.normal * col.penetration;
+    let body_vel = body_velocity_at(&bodies[col.body_index], time);
+    let rel_vel = ship.velocity - body_vel;
+    let vn = rel_vel.dot(col.normal);
+    if vn < 0.0 {
+        ship.velocity -= col.normal * vn;
+    }
+    Some(col.body_index)
 }
 
 #[cfg(test)]
