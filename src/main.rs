@@ -1,4 +1,5 @@
 mod camera;
+mod clipping;
 mod fragment;
 mod framebuffer;
 mod math;
@@ -13,6 +14,7 @@ mod surface_map;
 mod vertex;
 
 use camera::Camera;
+use clipping::ClipVertex;
 use framebuffer::Framebuffer;
 use math::Mat4;
 use noise::Noise;
@@ -146,7 +148,7 @@ fn next_capture_path() -> PathBuf {
 }
 
 struct RenderBuffers {
-    transformed_vertices: Vec<vertex::Vertex>,
+    clip_vertices: Vec<ClipVertex>,
     screen_triangles: Vec<ScreenTriangle>,
     tile_grid: TileGrid,
 }
@@ -154,7 +156,7 @@ struct RenderBuffers {
 impl RenderBuffers {
     fn new(vertex_capacity: usize) -> Self {
         Self {
-            transformed_vertices: Vec::with_capacity(vertex_capacity),
+            clip_vertices: Vec::with_capacity(vertex_capacity),
             screen_triangles: Vec::with_capacity(vertex_capacity / 3),
             tile_grid: TileGrid::new(WINDOW_WIDTH as usize, WINDOW_HEIGHT as usize),
         }
@@ -176,7 +178,7 @@ fn render(
     assemble_screen_triangles(
         vertex_array,
         uniforms,
-        &mut buffers.transformed_vertices,
+        &mut buffers.clip_vertices,
         &mut buffers.screen_triangles,
     );
     let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
@@ -233,20 +235,17 @@ fn render(
 fn main() {
     let obj_path = "assets/sphere.obj";
     let obj = load_obj(obj_path).expect("No se pudo cargar assets/sphere.obj");
+    let (mesh_vertices, mesh_indices) = obj.to_indexed_mesh();
     println!("Modelo cargado: '{obj_path}'");
-    println!("  Vértices:   {}", obj.vertices.len());
+    println!("  Posiciones fuente (v): {}", obj.vertices.len());
+    println!("  UVs fuente (vt): {}", obj.texcoords.len());
     println!("  Normales fuente (vn): {}", obj.source_normals.len());
-    println!("  Triángulos: {}", obj.indices.len() / 3);
-    let normals_are_unit = obj
-        .vertex_normals
-        .iter()
-        .all(|normal| (normal.length() - 1.0).abs() <= 1e-4);
-    println!("  Normales suaves unitarias (~1): {normals_are_unit}");
+    println!("  Vértices indexados: {}", mesh_vertices.len());
+    println!("  Triángulos: {}", mesh_indices.len() / 3);
 
-    let vertex_array: Vec<vertex::Vertex> = obj
-        .indices
+    let vertex_array: Vec<vertex::Vertex> = mesh_indices
         .iter()
-        .map(|&index| vertex::Vertex::new(obj.vertices[index], obj.vertex_normals[index]))
+        .map(|&index| mesh_vertices[index].clone())
         .collect();
 
     let (min, max) = obj.bounds();

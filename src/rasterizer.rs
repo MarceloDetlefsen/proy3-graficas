@@ -17,6 +17,19 @@ pub const WINDOW_WIDTH: i32 = 800;
 pub const WINDOW_HEIGHT: i32 = 600;
 pub const TILE_SIZE: usize = 64;
 const DEGENERATE_EPS: f32 = 1e-6;
+const MAX_SCREEN_COORD: f32 = 65536.0;
+
+#[inline]
+fn has_valid_screen_coords(tri: &ScreenTriangle) -> bool {
+    tri.vertices.iter().all(|v| {
+        v.x.is_finite()
+            && v.y.is_finite()
+            && v.z.is_finite()
+            && v.inv_w.is_finite()
+            && v.x.abs() <= MAX_SCREEN_COORD
+            && v.y.abs() <= MAX_SCREEN_COORD
+    })
+}
 
 #[derive(Clone, Debug)]
 pub struct TileGrid {
@@ -58,6 +71,9 @@ impl TileGrid {
         let w_i32 = width as i32;
         let h_i32 = height as i32;
         for (tri_idx, tri) in triangles.iter().enumerate() {
+            if !has_valid_screen_coords(tri) {
+                continue;
+            }
             let [v0, v1, v2] = tri.vertices;
             let pa = (v0.x, v0.y);
             let pb = (v1.x, v1.y);
@@ -140,6 +156,9 @@ pub fn rasterize_visibility(
     let mut writes = 0usize;
 
     for (tri_idx, tri) in triangles.iter().enumerate() {
+        if !has_valid_screen_coords(tri) {
+            continue;
+        }
         let [v0, v1, v2] = tri.vertices;
         let pa = (v0.x, v0.y);
         let pb = (v1.x, v1.y);
@@ -209,6 +228,9 @@ pub fn rasterize_band(
         let x1 = (x0 + TILE_SIZE).min(width);
         for &tri_id in bin {
             let tri = &triangles[tri_id as usize];
+            if !has_valid_screen_coords(tri) {
+                continue;
+            }
             let [v0, v1, v2] = tri.vertices;
             let pa = (v0.x, v0.y);
             let pb = (v1.x, v1.y);
@@ -717,6 +739,76 @@ mod tests {
         assert_eq!(fb_full.depth_buffer, fb_tiled.depth_buffer);
         assert_eq!(fb_full.tri_id_buffer, fb_tiled.tri_id_buffer);
         assert_eq!(fb_full.color_pixels, fb_tiled.color_pixels);
+    }
+
+    #[test]
+    fn crossing_near_plane_with_camera_never_panics_or_stretches() {
+        use crate::Uniforms;
+        use crate::camera::Camera;
+        use crate::framebuffer::Framebuffer;
+        use crate::noise::Noise;
+        use crate::primitive::assemble_screen_triangles;
+        use crate::scene::build_model_matrix;
+        use crate::vertex::Vertex;
+        use raylib::prelude::Color;
+
+        let obj = load_obj("assets/sphere.obj").expect("sphere.obj debe cargar");
+        let (min, max) = obj.bounds();
+        let max_extent = (max.x - min.x).max(max.y - min.y).max(max.z - min.z);
+        let model_matrix = build_model_matrix(&obj, 0.0, 0.0, 2.0 / max_extent);
+        let (mesh_verts, mesh_indices) = obj.to_indexed_mesh();
+        let vertex_array: Vec<Vertex> = mesh_indices
+            .iter()
+            .map(|&i| mesh_verts[i].clone())
+            .collect();
+
+        let mut clip_scratch = Vec::new();
+        let mut screen_tris = Vec::new();
+        let mut grid = TileGrid::new(160, 120);
+        let mut fb = Framebuffer::new(160, 120, Color::BLACK);
+        let noise = Noise::new(0);
+
+        for dist in [1.001_f32, 0.5, 0.05, -0.5] {
+            fb.clear();
+            let cam = Camera::new(
+                Vector3::new(0.0, 0.0, dist),
+                Vector3::new(0.0, 0.0, dist - 2.0),
+                45.0_f32.to_radians(),
+                0.1,
+                100.0,
+            );
+            let uniforms = Uniforms {
+                model_matrix,
+                view_matrix: cam.view_matrix(),
+                projection_matrix: cam.projection_matrix(160.0 / 120.0),
+                time: 0.0,
+                light_dir: Vector3::new(0.0, 0.0, 1.0),
+                camera_pos: cam.position,
+                debug_noise: false,
+                noise_frequency: 4.0,
+                rocky_debug_view: 3,
+                viewport_width: 160,
+                viewport_height: 120,
+                noise: noise.clone(),
+                baked: None,
+            };
+
+            assemble_screen_triangles(&vertex_array, &uniforms, &mut clip_scratch, &mut screen_tris);
+            for tri in &screen_tris {
+                for v in &tri.vertices {
+                    assert!(v.x.is_finite() && v.y.is_finite() && v.z.is_finite());
+                    assert!(v.inv_w.is_finite() && v.inv_w > 0.0);
+                    assert!(v.z >= -1e-4, "vértice detrás de near no recortado: z={}", v.z);
+                }
+            }
+            rasterize_visibility_tiled(&screen_tris, &mut grid, &mut fb, true, 2);
+            shade_visibility_tiled(&screen_tris, &mut fb, Shader::Star, &uniforms, 2);
+            for &d in &fb.depth_buffer {
+                if d < f32::INFINITY {
+                    assert!(d.is_finite() && (-1e-4..=1.0001).contains(&d));
+                }
+            }
+        }
     }
 
     #[test]
