@@ -366,6 +366,8 @@ fn main() {
         ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
     let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
     let mut physics_stepper = physics::PhysicsStepper::new();
+    let mut gravity_enabled = true;
+    let mut gravity_mag = 0.0_f32;
     let mut show_help = false;
     let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
     let mut follow_mode = true;
@@ -420,6 +422,9 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_H) {
             show_help = !show_help;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_G) {
+            gravity_enabled = !gravity_enabled;
         }
         if window.is_key_pressed(KeyboardKey::KEY_MINUS) {
             time_scale_idx = time_scale_idx.saturating_sub(1);
@@ -551,7 +556,13 @@ fn main() {
             ship.apply_thrust(throttle, boost, sub_dt);
             ship.apply_damping(braking, sub_dt);
             ship.apply_angular_input(pitch_in, yaw_in, roll_in, sub_dt);
-            ship.integrate_pose(sub_dt);
+            gravity_mag = physics::integrate_ship_with_gravity(
+                &mut ship,
+                &bodies,
+                sim_clock.time,
+                sub_dt,
+                gravity_enabled,
+            );
         });
 
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
@@ -714,11 +725,16 @@ fn main() {
             if sim_clock.paused { " PAUSA" } else { "" },
             if follow_mode { "Seguir" } else { "Libre" },
         );
-        let mut overlay = if perf_stats.enabled {
-            perf_stats.overlay_lines()
-        } else {
-            Vec::new()
-        };
+        let mut overlay = Vec::new();
+        overlay.push(format!(
+            "Vel: {:.2} u/s | Gravedad(G): {} ({:.2} u/s^2)",
+            ship.velocity.length(),
+            if gravity_enabled { "ON" } else { "OFF" },
+            gravity_mag,
+        ));
+        if perf_stats.enabled {
+            overlay.extend(perf_stats.overlay_lines());
+        }
         if show_help {
             overlay.extend([
                 "--- Controles de vuelo (H para cerrar) ---".to_string(),
@@ -727,6 +743,7 @@ fn main() {
                 "Espacio     : Frenado progresivo".to_string(),
                 "Mouse/Flech.: Cabeceo y guinada".to_string(),
                 "Q / E       : Alabeo (roll)".to_string(),
+                "G           : Activar / desactivar gravedad".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);
