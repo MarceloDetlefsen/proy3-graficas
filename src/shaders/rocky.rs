@@ -285,15 +285,6 @@ fn surface_color(object_pos: Vector3, height: f32) -> Vector3 {
     noise::mix_color(with_biome, color(COLOR_CRACK), crack_mask(object_pos))
 }
 
-fn model_normal(model: &raylib::prelude::Matrix, normal: Vector3) -> Vector3 {
-    Vector3::new(
-        model.m0 * normal.x + model.m4 * normal.y + model.m8 * normal.z,
-        model.m1 * normal.x + model.m5 * normal.y + model.m9 * normal.z,
-        model.m2 * normal.x + model.m6 * normal.y + model.m10 * normal.z,
-    )
-    .normalize()
-}
-
 fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vector3 {
     let p = fragment.object_pos.normalize();
     let dx = Vector3::new(BUMP_DELTA, 0.0, 0.0);
@@ -308,7 +299,7 @@ fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vecto
     // elevada se inclina contra él. Este signo mantiene las crestas claras hacia la luz.
     let bump_fade = noise::smoothstep(0.12, 0.48, crate::shaders::surface_mu(fragment, uniforms));
     let object_normal = (p - gradient * BUMP_STRENGTH * bump_fade).normalize();
-    model_normal(&uniforms.model_matrix, object_normal)
+    uniforms.model_matrix.transform_normal(object_normal)
 }
 
 fn lit_surface_color(

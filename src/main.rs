@@ -12,6 +12,7 @@ mod triangle;
 mod vertex;
 
 use framebuffer::Framebuffer;
+use math::Mat4;
 use obj::load_obj;
 use primitive::primitive_assembly;
 use rasterizer::{TriangleMode, VIEWPORT_HEIGHT, VIEWPORT_WIDTH, rasterize};
@@ -22,7 +23,9 @@ use std::fs;
 use std::path::PathBuf;
 
 pub struct Uniforms {
-    pub model_matrix: Matrix,
+    pub model_matrix: Mat4,
+    pub view_matrix: Mat4,
+    pub projection_matrix: Mat4,
     pub time: f32,
     pub light_dir: Vector3,
     pub camera_pos: Vector3,
@@ -197,6 +200,8 @@ fn main() {
         let model_matrix = build_model_matrix(&obj, scale, 0.0, 0.0, 1.0);
         let uniforms = Uniforms {
             model_matrix,
+            view_matrix: Mat4::identity(),
+            projection_matrix: Mat4::identity(),
             time: options.time,
             light_dir: options.light_dir,
             camera_pos: Vector3::new(0.0, 0.0, scale * 2.0),
@@ -301,6 +306,8 @@ fn main() {
         .normalize();
         let uniforms = Uniforms {
             model_matrix,
+            view_matrix: Mat4::identity(),
+            projection_matrix: Mat4::identity(),
             time,
             light_dir,
             camera_pos: Vector3::new(0.0, 0.0, scale * zoom * 2.0),

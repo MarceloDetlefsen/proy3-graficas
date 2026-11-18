@@ -112,11 +112,13 @@ pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use raylib::prelude::Matrix;
+    use crate::math::Mat4;
 
     fn uniforms(camera_pos: Vector3) -> Uniforms {
         Uniforms {
-            model_matrix: Matrix::identity(),
+            model_matrix: Mat4::identity(),
+            view_matrix: Mat4::identity(),
+            projection_matrix: Mat4::identity(),
             time: 0.0,
             light_dir: Vector3::new(0.0, 0.0, -1.0),
             camera_pos,

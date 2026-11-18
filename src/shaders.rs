@@ -2,6 +2,7 @@ use raylib::prelude::*;
 
 use crate::Uniforms;
 use crate::fragment::Fragment;
+use crate::math::Vec4;
 use crate::noise;
 use crate::vertex::Vertex;
 
@@ -17,38 +18,18 @@ pub enum Shader {
     GasGiant,
 }
 
-fn multiply_matrix_vector4(matrix: &Matrix, vector: &Vector4) -> Vector4 {
-    Vector4::new(
-        matrix.m0 * vector.x + matrix.m4 * vector.y + matrix.m8 * vector.z + matrix.m12 * vector.w,
-        matrix.m1 * vector.x + matrix.m5 * vector.y + matrix.m9 * vector.z + matrix.m13 * vector.w,
-        matrix.m2 * vector.x + matrix.m6 * vector.y + matrix.m10 * vector.z + matrix.m14 * vector.w,
-        matrix.m3 * vector.x + matrix.m7 * vector.y + matrix.m11 * vector.z + matrix.m15 * vector.w,
-    )
-}
-
 pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
-    let position = Vector4::new(vertex.position.x, vertex.position.y, vertex.position.z, 1.0);
-    let transformed = multiply_matrix_vector4(&uniforms.model_matrix, &position);
+    let position = Vec4::from_point(vertex.position);
+    let transformed = uniforms.model_matrix * position;
 
     let mut result = vertex.clone();
     result.world_position = Vector3::new(
-        transformed.x - uniforms.model_matrix.m12,
-        transformed.y - uniforms.model_matrix.m13,
-        transformed.z - uniforms.model_matrix.m14,
+        transformed.x - uniforms.model_matrix.cols[3][0],
+        transformed.y - uniforms.model_matrix.cols[3][1],
+        transformed.z - uniforms.model_matrix.cols[3][2],
     );
-    result.transformed_position = Vector3::new(transformed.x, transformed.y, transformed.z);
-    result.transformed_normal = Vector3::new(
-        uniforms.model_matrix.m0 * vertex.normal.x
-            + uniforms.model_matrix.m4 * vertex.normal.y
-            + uniforms.model_matrix.m8 * vertex.normal.z,
-        uniforms.model_matrix.m1 * vertex.normal.x
-            + uniforms.model_matrix.m5 * vertex.normal.y
-            + uniforms.model_matrix.m9 * vertex.normal.z,
-        uniforms.model_matrix.m2 * vertex.normal.x
-            + uniforms.model_matrix.m6 * vertex.normal.y
-            + uniforms.model_matrix.m10 * vertex.normal.z,
-    )
-    .normalize();
+    result.transformed_position = transformed.xyz();
+    result.transformed_normal = uniforms.model_matrix.transform_normal(vertex.normal);
     result
 }
 
