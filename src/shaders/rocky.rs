@@ -282,9 +282,8 @@ fn height_color(height: f32) -> Vector3 {
     }
 }
 
-pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
+pub fn sample_static_with_height(noise: &Noise, dir: Vector3, height: f32) -> [f32; 7] {
     let p = dir.normalize();
-    let height = height_field(noise, p);
     let sea = sea_mask(noise, p, height);
     let biome = biome_mask(noise, p);
     let crack = crack_mask(noise, p);
@@ -296,6 +295,12 @@ pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
     let with_biome = noise::mix_color(with_sea, biome_color, biome);
     let albedo = noise::mix_color(with_biome, color(COLOR_CRACK), crack);
     [albedo.x, albedo.y, albedo.z, height, sea, crack, biome]
+}
+
+pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
+    let p = dir.normalize();
+    let height = height_field(noise, p);
+    sample_static_with_height(noise, p, height)
 }
 
 fn tangent_pair(p: Vector3) -> (Vector3, Vector3) {

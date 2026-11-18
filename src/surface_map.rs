@@ -23,11 +23,30 @@ pub struct BakedMaps {
 
 impl BakedMaps {
     pub fn bake(noise: &Noise, width: usize, height: usize) -> Self {
+        Self::bake_with_frequency(noise, width, height, 4.0)
+    }
+
+    pub fn bake_with_frequency(
+        noise: &Noise,
+        width: usize,
+        height: usize,
+        frequency: f32,
+    ) -> Self {
         Self {
-            rocky: EquirectMap::from_fn(width, height, |dir| rocky::sample_static(noise, dir)),
+            rocky: EquirectMap::from_fn(width, height, |dir| {
+                let h = planet_height(noise, dir, frequency);
+                rocky::sample_static_with_height(noise, dir, h)
+            }),
             gas_giant: EquirectMap::from_fn(width, height, |dir| gas_giant::sample_static(noise, dir)),
         }
     }
+}
+
+/// Fuente única de verdad para la altura normalizada `[0, 1]` en una dirección
+/// unitaria `dir`, compartida por deformación de malla, horneado y normales.
+pub fn planet_height(noise: &Noise, dir: Vector3, frequency: f32) -> f32 {
+    let scale = (frequency / 4.0).max(0.1);
+    rocky::height_field(noise, dir.normalize() * scale)
 }
 
 #[derive(Clone, Debug)]
