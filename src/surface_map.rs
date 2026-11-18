@@ -10,7 +10,7 @@ use raylib::prelude::Vector3;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use crate::noise::Noise;
-use crate::shaders::{abismo, ardens, basquia, gas_giant, rocky, vestigio, Shader};
+use crate::shaders::{abismo, ardens, basquia, gas_giant, ocho, rocky, vestigio, Shader};
 
 pub const DEFAULT_BAKE_WIDTH: usize = 512;
 pub const DEFAULT_BAKE_HEIGHT: usize = 256;
@@ -24,6 +24,7 @@ pub struct BakedMaps {
     pub abismo: EquirectMap<4>,
     pub basquia: EquirectMap<4>,
     pub vestigio: EquirectMap<4>,
+    pub ocho: EquirectMap<4>,
 }
 
 impl BakedMaps {
@@ -48,6 +49,7 @@ impl BakedMaps {
         let abismo = EquirectMap::from_fn(pw, ph, |dir| abismo::sample_static(noise, dir));
         let basquia = EquirectMap::from_fn(pw, ph, |dir| basquia::sample_static(noise, dir, 4.0));
         let vestigio = EquirectMap::from_fn(pw, ph, |dir| vestigio::sample_static(noise, dir, 5.0));
+        let ocho = EquirectMap::from_fn(pw, ph, |dir| ocho::sample_static(noise, dir));
         Self {
             rocky,
             rocky_normals,
@@ -56,6 +58,7 @@ impl BakedMaps {
             abismo,
             basquia,
             vestigio,
+            ocho,
         }
     }
 }
@@ -67,6 +70,7 @@ pub fn shader_height(shader: Shader, noise: &Noise, dir: Vector3, frequency: f32
         Shader::Abismo => abismo::height_at(noise, dir, frequency),
         Shader::Basquia => basquia::height_at(noise, dir, frequency),
         Shader::Vestigio => vestigio::height_at(noise, dir, frequency),
+        Shader::Ocho => ocho::height_at(noise, dir, frequency),
         _ => planet_height(noise, dir, frequency),
     }
 }
