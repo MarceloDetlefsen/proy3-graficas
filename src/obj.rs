@@ -80,6 +80,7 @@ impl Obj {
             indices.push(idx);
         }
 
+        compute_tangent_basis(&mut vertices, &indices);
         (vertices, indices)
     }
 
@@ -103,6 +104,69 @@ impl Obj {
         }
 
         (min, max)
+    }
+}
+
+/// Calcula tangentes y bitangentes ortonormalizadas por vértice a partir de
+/// posiciones y coordenadas de textura `uv`.
+pub fn compute_tangent_basis(vertices: &mut [Vertex], indices: &[usize]) {
+    let mut tan_accum = vec![Vector3::zero(); vertices.len()];
+    let mut bitan_accum = vec![Vector3::zero(); vertices.len()];
+
+    for tri in indices.as_chunks::<3>().0 {
+        let (i0, i1, i2) = (tri[0], tri[1], tri[2]);
+        let p0 = vertices[i0].position;
+        let p1 = vertices[i1].position;
+        let p2 = vertices[i2].position;
+        let uv0 = vertices[i0].uv;
+        let uv1 = vertices[i1].uv;
+        let uv2 = vertices[i2].uv;
+
+        let e1 = p1 - p0;
+        let e2 = p2 - p0;
+        let du1 = uv1[0] - uv0[0];
+        let dv1 = uv1[1] - uv0[1];
+        let du2 = uv2[0] - uv0[0];
+        let dv2 = uv2[1] - uv0[1];
+
+        let det = du1 * dv2 - du2 * dv1;
+        if det.abs() <= 1e-8 {
+            continue;
+        }
+        let inv = 1.0 / det;
+        let t = (e1 * dv2 - e2 * dv1) * inv;
+        let b = (e2 * du1 - e1 * du2) * inv;
+
+        for &idx in &[i0, i1, i2] {
+            tan_accum[idx] += t;
+            bitan_accum[idx] += b;
+        }
+    }
+
+    for (i, v) in vertices.iter_mut().enumerate() {
+        let n = if v.normal.length_sqr() > 1e-10 {
+            v.normal.normalize()
+        } else {
+            Vector3::new(0.0, 1.0, 0.0)
+        };
+        let t_raw = tan_accum[i];
+        let t_ortho = t_raw - n * n.dot(t_raw);
+        let tangent = if t_ortho.length_sqr() > 1e-10 {
+            t_ortho.normalize()
+        } else {
+            let axis = if n.y.abs() < 0.9 {
+                Vector3::new(0.0, 1.0, 0.0)
+            } else {
+                Vector3::new(1.0, 0.0, 0.0)
+            };
+            axis.cross(n).normalize()
+        };
+        let mut bitangent = n.cross(tangent).normalize();
+        if bitan_accum[i].length_sqr() > 1e-10 && bitan_accum[i].dot(bitangent) < 0.0 {
+            bitangent = -bitangent;
+        }
+        v.tangent = tangent;
+        v.bitangent = bitangent;
     }
 }
 
