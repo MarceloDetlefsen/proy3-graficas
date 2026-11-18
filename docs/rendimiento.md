@@ -74,3 +74,17 @@ Promedio de 15 cuadros por caso en modo `release` (`lto = true`, `codegen-units 
 - **Cumplimiento de presupuesto**: a la resolución interna por defecto (`1/2`, `400×300`) con `16` hilos se supera tanto el mínimo de **30 FPS** como el deseable de **60 FPS** incluso con un planeta ocupando el 100% de la pantalla (`Star` `113.0 FPS`, `Rocky` `69.0 FPS`, `GasGiant` `162.4 FPS`).
 - **Aceleración a igual resolución (`800×600`, `16` hilos vs. base)**: `Rocky` cerca pasa de `0.31` a `22.6 FPS` (**72.9×**); `GasGiant` cerca pasa de `0.39` a `47.7 FPS` (**122.3×**); `Star` cerca pasa de `1.42` a `37.6 FPS` (**26.5×**).
 - **Cuello de botella restante**: la etapa de **sombreado** sigue representando `75%–94%` del tiempo de frame (especialmente en `Rocky` cerca a `800×600`, donde la capa viva de nubes `cloud_mask` evalúa `fbm` de 3 octavas por píxel junto con el muestreo bilineal triple para el bump).
+
+## Costo por cuerpo con el sistema completo en pantalla (PR H1)
+
+Medido en modo `release` (`400×300`, `16` hilos, promedio de `15` cuadros) con el pipeline completo activo: icosfera deformada con LOD por tamaño proyectado, frustum culling, horneado `512×256`, mapeo de normales en espacio tangente (`Rocky`), instancias en superficie con culling y LOD, nave y fondo estelar por píxel vacío. Acercamiento por cuerpo a `d = 2.4 × radio`.
+
+| Vista | Triángulos | FPS | Total (ms) | Vértices (ms) | Raster (ms) | Shade (ms) |
+|---|---:|---:|---:|---:|---:|---:|
+| Sistema general (`d = 24`) | 5 424 | 135.5 | 7.38 | 0.73 | 0.70 | 5.89 |
+| `Sol` cerca (`Star`) | 5 200 | 117.3 | 8.53 | 0.77 | 0.79 | 6.90 |
+| `Zebes` cerca (`Rocky` + 253 instancias) | 34 412 | 58.6 | 17.06 | 4.51 | 1.71 | 10.79 |
+| `Tau Ceti` cerca (`GasGiant`) | 5 200 | 126.7 | 7.89 | 0.62 | 0.58 | 6.64 |
+
+- **Criterio de 30 FPS**: **cumplido en todos los cuerpos** (`58.6–135.5 FPS`, margen `1.95×–4.5×` sobre los 30 FPS mínimos).
+- **Cuello de botella en `Zebes` cerca**: al subir la icosfera deformada a `L5` (`20 480` tris) junto con las `253` instancias en superficie (`34 412` tris totales), la etapa de vértices sube a `4.51 ms` y el sombreado (`cloud_mask` + `normal_mapping` + fondo estelar) a `10.79 ms`.
