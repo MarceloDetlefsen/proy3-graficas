@@ -14,6 +14,7 @@ mod surface_map;
 mod vertex;
 
 use camera::Camera;
+use clipping::ClipVertex;
 use framebuffer::Framebuffer;
 use math::Mat4;
 use noise::Noise;
@@ -147,7 +148,7 @@ fn next_capture_path() -> PathBuf {
 }
 
 struct RenderBuffers {
-    transformed_vertices: Vec<vertex::Vertex>,
+    clip_vertices: Vec<ClipVertex>,
     screen_triangles: Vec<ScreenTriangle>,
     tile_grid: TileGrid,
 }
@@ -155,7 +156,7 @@ struct RenderBuffers {
 impl RenderBuffers {
     fn new(vertex_capacity: usize) -> Self {
         Self {
-            transformed_vertices: Vec::with_capacity(vertex_capacity),
+            clip_vertices: Vec::with_capacity(vertex_capacity),
             screen_triangles: Vec::with_capacity(vertex_capacity / 3),
             tile_grid: TileGrid::new(WINDOW_WIDTH as usize, WINDOW_HEIGHT as usize),
         }
@@ -177,7 +178,7 @@ fn render(
     assemble_screen_triangles(
         vertex_array,
         uniforms,
-        &mut buffers.transformed_vertices,
+        &mut buffers.clip_vertices,
         &mut buffers.screen_triangles,
     );
     let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! Recorte de triángulos contra el plano near en espacio de recorte.
 //!
 //! Implementa Sutherland–Hodgman sobre la desigualdad `z >= -w` (convención

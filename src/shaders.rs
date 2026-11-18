@@ -1,6 +1,7 @@
 use raylib::prelude::*;
 
 use crate::Uniforms;
+use crate::clipping::ClipVertex;
 use crate::fragment::Fragment;
 use crate::math::Vec4;
 use crate::vertex::Vertex;
@@ -17,6 +18,7 @@ pub enum Shader {
     GasGiant,
 }
 
+#[allow(dead_code)]
 pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     let position = Vec4::from_point(vertex.position);
     let world = uniforms.model_matrix * position;
@@ -42,6 +44,18 @@ pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     result.transformed_normal = uniforms.model_matrix.transform_normal(vertex.normal);
     result.clip_w = clip.w;
     result
+}
+
+pub fn vertex_to_clip(vertex: &Vertex, uniforms: &Uniforms) -> ClipVertex {
+    let world = uniforms.model_matrix * Vec4::from_point(vertex.position);
+    let clip_pos = uniforms.projection_matrix * (uniforms.view_matrix * world);
+    ClipVertex {
+        clip_pos,
+        object_pos: vertex.position,
+        world_pos: world.xyz(),
+        normal: uniforms.model_matrix.transform_normal(vertex.normal),
+        uv: [0.0, 0.0],
+    }
 }
 
 /// Vector desde la superficie hacia la cámara, en espacio mundo.
