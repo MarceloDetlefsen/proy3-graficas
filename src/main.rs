@@ -245,18 +245,21 @@ fn main() {
     window.set_target_fps(60);
 
     let mut mode = TriangleMode::FilledBarycentric;
-    let mut yaw = 0.0_f32;
-    let mut pitch = 0.0_f32;
-    let mut zoom = 1.0_f32;
+    let mut cam_yaw = 0.0_f32;
+    let mut cam_pitch = 0.0_f32;
+    let mut cam_distance = 3.0_f32;
     let mut time = 0.0_f32;
     let mut shader = Shader::Rocky;
     let mut debug_noise = false;
     let mut noise_frequency = 4.0_f32;
     let mut rocky_debug_view = 3_i32;
     let mut light_angle = 0.0_f32;
+    let orbit_speed = 1.8_f32;
+    let light_speed = 1.8_f32;
 
     while !window.window_should_close() {
-        time += window.get_frame_time();
+        let dt = window.get_frame_time();
+        time += dt;
         if window.is_key_pressed(KeyboardKey::KEY_W) {
             mode = TriangleMode::Wireframe;
         }
@@ -279,10 +282,10 @@ fn main() {
             rocky_debug_view = (rocky_debug_view + 1) % 4;
         }
         if window.is_key_down(KeyboardKey::KEY_J) {
-            light_angle -= 0.03;
+            light_angle -= light_speed * dt;
         }
         if window.is_key_down(KeyboardKey::KEY_L) {
-            light_angle += 0.03;
+            light_angle += light_speed * dt;
         }
         if window.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) {
             noise_frequency = (noise_frequency - 0.25).max(0.25);
@@ -292,27 +295,26 @@ fn main() {
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
         if window.is_key_down(KeyboardKey::KEY_LEFT) {
-            yaw -= 0.03;
+            cam_yaw -= orbit_speed * dt;
         }
         if window.is_key_down(KeyboardKey::KEY_RIGHT) {
-            yaw += 0.03;
+            cam_yaw += orbit_speed * dt;
         }
         if window.is_key_down(KeyboardKey::KEY_UP) {
-            pitch -= 0.03;
+            cam_pitch = (cam_pitch + orbit_speed * dt).min(1.5);
         }
         if window.is_key_down(KeyboardKey::KEY_DOWN) {
-            pitch += 0.03;
+            cam_pitch = (cam_pitch - orbit_speed * dt).max(-1.5);
         }
-        zoom = (zoom + window.get_mouse_wheel_move() * 0.1).clamp(0.2, 4.0);
+        cam_distance = (cam_distance - window.get_mouse_wheel_move() * 0.4).clamp(1.2, 20.0);
 
-        let model_matrix = build_model_matrix(&obj, yaw, pitch, base_scale);
-        let cam = Camera::new(
-            Vector3::new(0.0, 0.0, 3.0 / zoom),
-            Vector3::zero(),
-            45.0_f32.to_radians(),
-            0.1,
-            100.0,
+        let model_matrix = build_model_matrix(&obj, 0.0, 0.0, base_scale);
+        let cam_pos = Vector3::new(
+            cam_distance * cam_pitch.cos() * cam_yaw.sin(),
+            cam_distance * cam_pitch.sin(),
+            cam_distance * cam_pitch.cos() * cam_yaw.cos(),
         );
+        let cam = Camera::new(cam_pos, Vector3::zero(), 45.0_f32.to_radians(), 0.1, 100.0);
         // En la convención del renderer, +z es el frente visible hacia la cámara.
         let base_light = Vector3::new(-0.65, 0.80, 1.0).normalize();
         let light_dir = Vector3::new(
