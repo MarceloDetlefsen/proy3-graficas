@@ -833,20 +833,25 @@ fn main() {
 
             // Dibujar instancias sobre la superficie compuestas con la matriz del planeta.
             let planet_rt = scene::body_rt_matrix_at(body, sim_clock.time);
-            let prop_mesh = &icosphere_lods[0];
-            let prop_tris = prop_mesh.len() / 3;
             for inst in &planet_instances[body_idx] {
                 instances_total += 1;
-                tris_before_cull += prop_tris;
                 let world_mat = planet_rt * inst.local_matrix;
                 let inst_world = Vector3::new(
                     world_mat.cols[3][0],
                     world_mat.cols[3][1],
                     world_mat.cols[3][2],
                 );
+                let dist_sq = (inst_world - cam.position).length_sqr();
+                let prop_lod = lod::select_instance_lod(dist_sq);
+                let prop_mesh = if prop_lod == 0 {
+                    &icosphere_lods[1]
+                } else {
+                    &icosphere_lods[0]
+                };
+                let prop_tris = prop_mesh.len() / 3;
+                tris_before_cull += prop_tris;
                 if instance_culling
-                    && ((inst_world - cam.position).length_sqr()
-                        > MAX_PROP_DISTANCE * MAX_PROP_DISTANCE
+                    && (dist_sq > MAX_PROP_DISTANCE * MAX_PROP_DISTANCE
                         || !frustum.intersects_sphere(inst_world, inst.bounding_radius))
                 {
                     continue;
