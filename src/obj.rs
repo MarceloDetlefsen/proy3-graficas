@@ -14,18 +14,22 @@ pub struct FaceCorner {
 #[derive(Debug, Clone)]
 pub struct Obj {
     pub vertices: Vec<Vector3>,
+    pub texcoords: Vec<[f32; 2]>,
     pub vertex_normals: Vec<Vector3>,
     pub source_normals: Vec<Vector3>,
     pub indices: Vec<usize>,
+    pub corner_indices: Vec<FaceCorner>,
 }
 
 impl Obj {
     pub fn new() -> Self {
         Self {
             vertices: Vec::new(),
+            texcoords: Vec::new(),
             vertex_normals: Vec::new(),
             source_normals: Vec::new(),
             indices: Vec::new(),
+            corner_indices: Vec::new(),
         }
     }
 
@@ -56,14 +60,51 @@ impl Obj {
     }
 }
 
-/// Carga un archivo OBJ reconociendo vértices, normales fuente y caras.
+fn resolve_obj_index(token: &str, len: usize) -> Option<usize> {
+    let idx = token.parse::<isize>().ok()?;
+    if idx > 0 {
+        let zero_based = (idx - 1) as usize;
+        (zero_based < len).then_some(zero_based)
+    } else if idx < 0 {
+        let offset = (-idx) as usize;
+        (offset <= len).then(|| len - offset)
+    } else {
+        None
+    }
+}
+
+fn parse_face_corner(
+    token: &str,
+    v_len: usize,
+    vt_len: usize,
+    vn_len: usize,
+) -> Option<FaceCorner> {
+    let mut segs = token.split('/');
+    let v_str = segs.next()?;
+    let pos = resolve_obj_index(v_str, v_len)?;
+    let tex = segs
+        .next()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| resolve_obj_index(s, vt_len));
+    let normal = segs
+        .next()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| resolve_obj_index(s, vn_len));
+    Some(FaceCorner { pos, tex, normal })
+}
+
+/// Carga un archivo OBJ reconociendo vértices, UVs (`vt`), normales (`vn`) y caras.
 pub fn load_obj(path: &str) -> io::Result<Obj> {
     let file = File::open(path)?;
-    let reader = BufReader::new(file);
+    load_obj_from_reader(BufReader::new(file))
+}
 
+pub fn load_obj_from_reader<R: BufRead>(reader: R) -> io::Result<Obj> {
     let mut vertices = Vec::new();
+    let mut texcoords = Vec::new();
     let mut source_normals = Vec::new();
     let mut indices = Vec::new();
+    let mut corner_indices = Vec::new();
     let mut faces = Vec::new();
 
     for line in reader.lines() {
@@ -94,6 +135,13 @@ pub fn load_obj(path: &str) -> io::Result<Obj> {
                     vertices.push(Vector3::new(x, y, z));
                 }
             }
+            "vt" => {
+                if let (Some(u_str), Some(v_str)) = (parts.next(), parts.next())
+                    && let (Ok(u), Ok(v)) = (u_str.parse::<f32>(), v_str.parse::<f32>())
+                {
+                    texcoords.push([u, v]);
+                }
+            }
             "vn" => {
                 if let (Some(x_str), Some(y_str), Some(z_str)) =
                     (parts.next(), parts.next(), parts.next())
@@ -109,22 +157,22 @@ pub fn load_obj(path: &str) -> io::Result<Obj> {
             "f" => {
                 let mut face = Vec::new();
                 for part in parts {
-                    let vertex_idx_str = part.split('/').next().unwrap_or("");
-                    if let Ok(idx_1based) = vertex_idx_str.parse::<usize>()
-                        && idx_1based > 0
-                    {
-                        let index = idx_1based - 1;
-                        indices.push(index);
-                        face.push(index);
+                    if let Some(corner) = parse_face_corner(
+                        part,
+                        vertices.len(),
+                        texcoords.len(),
+                        source_normals.len(),
+                    ) {
+                        indices.push(corner.pos);
+                        corner_indices.push(corner);
+                        face.push(corner.pos);
                     }
                 }
                 if face.len() >= 3 {
                     faces.push(face);
                 }
             }
-            _ => {
-                // Las coordenadas de textura y metadatos no son necesarios aquí.
-            }
+            _ => {}
         }
     }
 
@@ -161,9 +209,11 @@ pub fn load_obj(path: &str) -> io::Result<Obj> {
 
     Ok(Obj {
         vertices,
+        texcoords,
         vertex_normals,
         source_normals,
         indices,
+        corner_indices,
     })
 }
 
