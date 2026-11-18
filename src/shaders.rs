@@ -8,6 +8,7 @@ use crate::vertex::Vertex;
 
 pub mod abismo;
 pub mod ardens;
+pub mod basquia;
 pub mod gas_giant;
 pub mod rocky;
 pub mod ship;
@@ -21,6 +22,7 @@ pub enum Shader {
     GasGiant,
     Ardens,
     Abismo,
+    Basquia,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -98,6 +100,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::GasGiant => gas_giant::shade(fragment, uniforms),
         Shader::Ardens => ardens::shade(fragment, uniforms),
         Shader::Abismo => abismo::shade(fragment, uniforms),
+        Shader::Basquia => basquia::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -120,6 +123,7 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::GasGiant => "Shader: Gas Giant",
         Shader::Ardens => "Shader: Ardens",
         Shader::Abismo => "Shader: Abismo",
+        Shader::Basquia => "Shader: Basquia",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }
