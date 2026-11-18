@@ -96,3 +96,41 @@ pub fn icosphere_level(level: usize) -> IcoMesh {
     }
     mesh
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn icosphere_levels_0_to_5_match_counts_unit_radius_and_outward_winding() {
+        let mut mesh = base_icosahedron();
+        for level in 0..=MAX_ICOSPHERE_LEVEL {
+            let pow4 = 4_usize.pow(level as u32);
+            let expected_verts = 10 * pow4 + 2;
+            let expected_tris = 20 * pow4;
+            assert_eq!(mesh.positions.len(), expected_verts, "nivel {level}");
+            assert_eq!(mesh.indices.len(), expected_tris * 3, "nivel {level}");
+
+            for &p in &mesh.positions {
+                assert!(
+                    (p.length() - 1.0).abs() < 1e-5,
+                    "vértice fuera de esfera unitaria en nivel {level}: {}",
+                    p.length()
+                );
+            }
+
+            for tri in mesh.indices.as_chunks::<3>().0 {
+                let p0 = mesh.positions[tri[0]];
+                let p1 = mesh.positions[tri[1]];
+                let p2 = mesh.positions[tri[2]];
+                let n = (p1 - p0).cross(p2 - p0);
+                let centroid = p0 + p1 + p2;
+                assert!(n.dot(centroid) > 0.0, "cara invertida en nivel {level}");
+            }
+
+            if level < MAX_ICOSPHERE_LEVEL {
+                mesh = subdivide_icosphere(&mesh);
+            }
+        }
+    }
+}
