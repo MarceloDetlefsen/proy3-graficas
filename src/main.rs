@@ -444,6 +444,8 @@ fn main() {
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
     let mut frustum_culling = true;
+    let mut instance_culling = true;
+    const MAX_PROP_DISTANCE: f32 = 32.0;
     let res_scales = [2_u32, 3, 1];
     let mut res_scale_idx = 0_usize; // 1/2 por defecto (400x300)
     let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
@@ -583,6 +585,9 @@ fn main() {
             surface_seed = surface_seed.wrapping_add(1);
             planet_candidates = build_candidates(surface_seed, &bodies);
             planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_SLASH) {
+            instance_culling = !instance_culling;
         }
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
@@ -775,6 +780,8 @@ fn main() {
         let sun_pos = body_position_at(&bodies[0], sim_clock.time);
         let mut tris_before_cull = 0usize;
         let mut tris_after_cull = 0usize;
+        let mut instances_total = 0usize;
+        let mut instances_drawn = 0usize;
         for (body_idx, body) in bodies.iter().enumerate() {
             let body_pos = body_position_at(body, sim_clock.time);
             let radius_px = lod::projected_radius_px(
@@ -829,9 +836,24 @@ fn main() {
             let prop_mesh = &icosphere_lods[0];
             let prop_tris = prop_mesh.len() / 3;
             for inst in &planet_instances[body_idx] {
+                instances_total += 1;
                 tris_before_cull += prop_tris;
+                let world_mat = planet_rt * inst.local_matrix;
+                let inst_world = Vector3::new(
+                    world_mat.cols[3][0],
+                    world_mat.cols[3][1],
+                    world_mat.cols[3][2],
+                );
+                if instance_culling
+                    && ((inst_world - cam.position).length_sqr()
+                        > MAX_PROP_DISTANCE * MAX_PROP_DISTANCE
+                        || !frustum.intersects_sphere(inst_world, inst.bounding_radius))
+                {
+                    continue;
+                }
+                instances_drawn += 1;
                 tris_after_cull += prop_tris;
-                uniforms.model_matrix = planet_rt * inst.local_matrix;
+                uniforms.model_matrix = world_mat;
                 let b_inst = render_buffers.screen_triangles.len();
                 append_screen_triangles(
                     prop_mesh,
@@ -1032,10 +1054,12 @@ fn main() {
             if normal_mapping { "ON" } else { "OFF" },
             if debug_normals { "ON" } else { "OFF" },
         ));
-        let total_surface_objs: usize = planet_candidates.iter().map(Vec::len).sum();
         overlay.push(format!(
-            "Semilla(I/O): {} | Objetos superficie: {}",
-            surface_seed, total_surface_objs
+            "Semilla(I/O): {} | Instancias(/): {}/{} (Cull {})",
+            surface_seed,
+            instances_drawn,
+            instances_total,
+            if instance_culling { "ON" } else { "OFF" }
         ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
@@ -1057,6 +1081,7 @@ fn main() {
                 ", . / [ ]   : Amplitud / Frecuencia deform.".to_string(),
                 "B / Y       : Normal map / Debug normales".to_string(),
                 "I / O       : Cambiar semilla superficie".to_string(),
+                "/           : Culling de instancias ON/OFF".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);
