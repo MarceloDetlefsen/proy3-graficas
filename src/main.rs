@@ -1,5 +1,6 @@
 mod fragment;
 mod framebuffer;
+mod math;
 mod noise;
 mod obj;
 mod primitive;
