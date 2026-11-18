@@ -8,7 +8,8 @@
 
 use raylib::prelude::Vector3;
 
-use crate::scene::{body_position_at, effective_radius, Body};
+use crate::scene::{body_position_at, body_velocity_at, effective_radius, Body};
+use crate::ship::Ship;
 
 pub const LOCAL_ENTER_RADII: f32 = 2.5;
 pub const LOCAL_EXIT_RADII: f32 = 3.0;
@@ -87,6 +88,75 @@ impl NavState {
             },
         }
     }
+}
+
+/// Posición de la nave expresada en el marco activo (`Global` o relativo al cuerpo `Local`).
+pub fn frame_position(pos: Vector3, mode: NavMode, bodies: &[Body], time: f32) -> Vector3 {
+    match mode {
+        NavMode::Global => pos,
+        NavMode::Local(idx) => bodies
+            .get(idx)
+            .map_or(pos, |b| pos - body_position_at(b, time)),
+    }
+}
+
+/// Velocidad de la nave expresada en el marco activo (`Global` o relativa a la órbita del cuerpo).
+pub fn frame_velocity(vel: Vector3, mode: NavMode, bodies: &[Body], time: f32) -> Vector3 {
+    match mode {
+        NavMode::Global => vel,
+        NavMode::Local(idx) => bodies
+            .get(idx)
+            .map_or(vel, |b| vel - body_velocity_at(b, time)),
+    }
+}
+
+/// Convierte una posición y velocidad desde el marco activo de vuelta a espacio mundial.
+pub fn to_world_state(
+    local_pos: Vector3,
+    local_vel: Vector3,
+    mode: NavMode,
+    bodies: &[Body],
+    time: f32,
+) -> (Vector3, Vector3) {
+    match mode {
+        NavMode::Global => (local_pos, local_vel),
+        NavMode::Local(idx) => match bodies.get(idx) {
+            Some(b) => (
+                local_pos + body_position_at(b, time),
+                local_vel + body_velocity_at(b, time),
+            ),
+            None => (local_pos, local_vel),
+        },
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FlightControls {
+    pub throttle: f32,
+    pub boost: bool,
+    pub braking: bool,
+}
+
+/// Aplica empuje y frenado en el marco de referencia activo (`Global` o `Local`),
+/// de modo que frenar en modo local detiene la nave respecto al planeta cercano.
+pub fn apply_controls_in_frame(
+    ship: &mut Ship,
+    mode: NavMode,
+    bodies: &[Body],
+    time: f32,
+    controls: FlightControls,
+    dt: f32,
+) {
+    let ref_vel = match mode {
+        NavMode::Global => Vector3::zero(),
+        NavMode::Local(idx) => bodies
+            .get(idx)
+            .map_or(Vector3::zero(), |b| body_velocity_at(b, time)),
+    };
+    ship.velocity -= ref_vel;
+    ship.apply_thrust(controls.throttle, controls.boost, dt);
+    ship.apply_damping(controls.braking, dt);
+    ship.velocity += ref_vel;
 }
 
 #[derive(Clone, Copy, Debug)]
