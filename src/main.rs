@@ -1,5 +1,6 @@
 mod camera;
 mod clipping;
+mod culling;
 mod fragment;
 mod framebuffer;
 mod icosphere;
