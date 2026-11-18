@@ -278,4 +278,35 @@ mod tests {
         // Escala (2,0,0) -> rota Z 90° (0,2,0) -> traslada (10,2,0)
         assert_vec4_near(m * p, Vec4::new(10.0, 2.0, 0.0, 1.0), 1e-6);
     }
+
+    #[test]
+    fn perspective_maps_near_far_and_optical_axis_and_preserves_distance_w() {
+        let near = 0.5_f32;
+        let far = 50.0_f32;
+        let eye = Vector3::new(0.0, 0.0, 10.0);
+        let target = Vector3::new(0.0, 0.0, 0.0);
+        let up = Vector3::new(0.0, 1.0, 0.0);
+
+        let view = Mat4::look_at(eye, target, up);
+        let proj = Mat4::perspective(std::f32::consts::FRAC_PI_3, 4.0 / 3.0, near, far);
+        let vp = proj * view;
+
+        // Punto frente a la cámara sobre el eje óptico a distancia 10.0
+        let clip_center = vp * Vec4::from_point(target);
+        assert!((clip_center.w - 10.0).abs() <= 1e-5);
+        assert!((clip_center.x / clip_center.w).abs() <= 1e-6);
+        assert!((clip_center.y / clip_center.w).abs() <= 1e-6);
+
+        // Plano near (a distancia `near` desde eye hacia -Z) mapea a z = -1 en NDC
+        let near_point = Vec4::from_point(Vector3::new(0.0, 0.0, 10.0 - near));
+        let clip_near = vp * near_point;
+        assert!((clip_near.w - near).abs() <= 1e-5);
+        assert!((clip_near.z / clip_near.w - (-1.0)).abs() <= 1e-5);
+
+        // Plano far (a distancia `far` desde eye hacia -Z) mapea a z = 1 en NDC
+        let far_point = Vec4::from_point(Vector3::new(0.0, 0.0, 10.0 - far));
+        let clip_far = vp * far_point;
+        assert!((clip_far.w - far).abs() <= 1e-4);
+        assert!((clip_far.z / clip_far.w - 1.0).abs() <= 1e-5);
+    }
 }
