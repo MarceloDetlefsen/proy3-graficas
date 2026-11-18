@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use raylib::prelude::Vector3;
 
 use crate::Uniforms;

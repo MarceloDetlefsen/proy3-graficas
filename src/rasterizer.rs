@@ -1,6 +1,8 @@
 use crate::fragment::Fragment;
+use crate::primitive::ScreenTriangle;
 use crate::triangle::{triangle_barycentric, triangle_wireframe};
 use crate::vertex::Vertex;
+use raylib::prelude::Vector2;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TriangleMode {
@@ -10,6 +12,43 @@ pub enum TriangleMode {
 
 pub const WINDOW_WIDTH: i32 = 800;
 pub const WINDOW_HEIGHT: i32 = 600;
+
+#[inline]
+pub fn edge_2d(p: (f32, f32), q: (f32, f32), r: (f32, f32)) -> f32 {
+    (r.0 - p.0) * (q.1 - p.1) - (r.1 - p.1) * (q.0 - p.0)
+}
+
+#[inline]
+pub fn perspective_weights(tri: &ScreenTriangle, screen_w: (f32, f32, f32)) -> (f32, f32, f32) {
+    let p0 = screen_w.0 * tri.vertices[0].inv_w;
+    let p1 = screen_w.1 * tri.vertices[1].inv_w;
+    let p2 = screen_w.2 * tri.vertices[2].inv_w;
+    let denom = p0 + p1 + p2;
+    if denom.abs() > 1e-12 {
+        let inv_d = 1.0 / denom;
+        (p0 * inv_d, p1 * inv_d, p2 * inv_d)
+    } else {
+        screen_w
+    }
+}
+
+#[inline]
+pub fn interpolate_screen_fragment(
+    tri: &ScreenTriangle,
+    px: f32,
+    py: f32,
+    screen_w: (f32, f32, f32),
+) -> Fragment {
+    let [v0, v1, v2] = tri.vertices;
+    let (pw0, pw1, pw2) = perspective_weights(tri, screen_w);
+    Fragment {
+        position: Vector2::new(px, py),
+        object_pos: v0.object_pos * pw0 + v1.object_pos * pw1 + v2.object_pos * pw2,
+        world_pos: v0.world_pos * pw0 + v1.world_pos * pw1 + v2.world_pos * pw2,
+        normal: (v0.normal * pw0 + v1.normal * pw1 + v2.normal * pw2).normalize(),
+        depth: v0.z * screen_w.0 + v1.z * screen_w.1 + v2.z * screen_w.2,
+    }
+}
 
 pub fn rasterize(
     triangles: &[[Vertex; 3]],
