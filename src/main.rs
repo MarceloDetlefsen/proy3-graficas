@@ -19,6 +19,7 @@ use camera::Camera;
 use clipping::ClipVertex;
 use framebuffer::Framebuffer;
 use math::Mat4;
+use mesh_lod::load_ship_lods;
 use noise::Noise;
 use obj::load_obj;
 use perf::{FrameSample, PerfStats};
@@ -349,6 +350,8 @@ fn main() {
     let mut sim_clock = SimClock::new();
     let time_scales = [0.25_f32, 0.5, 1.0, 2.0, 5.0];
     let mut time_scale_idx = 2_usize;
+    let ship_lods = load_ship_lods();
+    let _ = &ship_lods;
     let bodies = solar_system();
     let _ = build_model_matrix;
     let _ = shader_name;

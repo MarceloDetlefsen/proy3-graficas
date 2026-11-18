@@ -6,10 +6,11 @@
 //! y elimina los triángulos degenerados resultantes. Sirve como respaldo en
 //! tiempo de carga cuando los archivos `ship_lod*.obj` de Blender no existen.
 
+use crate::obj::load_obj;
+use crate::vertex::Vertex;
 use raylib::prelude::Vector3;
 use std::collections::HashMap;
-
-use crate::vertex::Vertex;
+use std::path::Path;
 
 pub fn mesh_bounds(vertices: &[Vertex]) -> (Vector3, Vector3) {
     if vertices.is_empty() {
@@ -151,10 +152,48 @@ pub fn decimate_to_target(
     best
 }
 
+pub struct ShipLods {
+    pub levels: [(Vec<Vertex>, Vec<usize>); 3],
+}
+
+pub fn load_ship_lods() -> ShipLods {
+    let specs = [
+        ("assets/ship_lod0.obj", 3000usize),
+        ("assets/ship_lod1.obj", 800usize),
+        ("assets/ship_lod2.obj", 150usize),
+    ];
+    let mut base_mesh: Option<(Vec<Vertex>, Vec<usize>)> = None;
+
+    let mut load_level = |path: &str, target: usize| -> (Vec<Vertex>, Vec<usize>) {
+        if Path::new(path).exists()
+            && let Ok(obj) = load_obj(path)
+        {
+            return obj.to_indexed_mesh();
+        }
+        let (base_v, base_i) = base_mesh.get_or_insert_with(|| {
+            let obj = load_obj("assets/ship.obj").expect("assets/ship.obj debe existir");
+            obj.to_indexed_mesh()
+        });
+        decimate_to_target(base_v, base_i, target)
+    };
+
+    let l0 = load_level(specs[0].0, specs[0].1);
+    let l1 = load_level(specs[1].0, specs[1].1);
+    let l2 = load_level(specs[2].0, specs[2].1);
+    println!(
+        "LODs de nave listos: lod0={} tris, lod1={} tris, lod2={} tris",
+        l0.1.len() / 3,
+        l1.1.len() / 3,
+        l2.1.len() / 3,
+    );
+    ShipLods {
+        levels: [l0, l1, l2],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::obj::load_obj;
 
     #[test]
     fn decimation_reduces_triangles_and_preserves_bounding_box() {
