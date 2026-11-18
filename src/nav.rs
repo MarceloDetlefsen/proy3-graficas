@@ -10,6 +10,85 @@ use raylib::prelude::Vector3;
 
 use crate::scene::{body_position_at, effective_radius, Body};
 
+pub const LOCAL_ENTER_RADII: f32 = 2.5;
+pub const LOCAL_EXIT_RADII: f32 = 3.0;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NavMode {
+    Global,
+    Local(usize),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NavOverride {
+    Auto,
+    ForceLocal,
+    ForceGlobal,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct NavState {
+    pub mode: NavMode,
+    pub override_mode: NavOverride,
+    pub nearest: Option<NearestBody>,
+}
+
+impl NavState {
+    pub fn new() -> Self {
+        Self {
+            mode: NavMode::Global,
+            override_mode: NavOverride::Auto,
+            nearest: None,
+        }
+    }
+
+    pub fn cycle_override(&mut self) {
+        self.override_mode = match self.override_mode {
+            NavOverride::Auto => NavOverride::ForceLocal,
+            NavOverride::ForceLocal => NavOverride::ForceGlobal,
+            NavOverride::ForceGlobal => NavOverride::Auto,
+        };
+    }
+
+    /// Actualiza el modo (Global vs Local) aplicando histéresis de altitud.
+    pub fn update_mode(&mut self, pos: Vector3, bodies: &[Body], time: f32) {
+        self.nearest = nearest_body(pos, bodies, time);
+        match self.override_mode {
+            NavOverride::ForceGlobal => {
+                self.mode = NavMode::Global;
+            }
+            NavOverride::ForceLocal => {
+                self.mode = match self.nearest {
+                    Some(n) => NavMode::Local(n.body_index),
+                    None => NavMode::Global,
+                };
+            }
+            NavOverride::Auto => match self.mode {
+                NavMode::Global => {
+                    if let Some(n) = self.nearest {
+                        let threshold = LOCAL_ENTER_RADII * effective_radius(&bodies[n.body_index]);
+                        if n.altitude < threshold {
+                            self.mode = NavMode::Local(n.body_index);
+                        }
+                    }
+                }
+                NavMode::Local(idx) => {
+                    if let Some(body) = bodies.get(idx) {
+                        let dist = (pos - body_position_at(body, time)).length();
+                        let alt = dist - effective_radius(body);
+                        let exit_threshold = LOCAL_EXIT_RADII * effective_radius(body);
+                        if alt > exit_threshold {
+                            self.mode = NavMode::Global;
+                        }
+                    } else {
+                        self.mode = NavMode::Global;
+                    }
+                }
+            },
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct NearestBody {
     pub body_index: usize,
