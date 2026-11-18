@@ -9,6 +9,7 @@ mod primitive;
 mod rasterizer;
 mod scene;
 mod shaders;
+mod surface_map;
 mod triangle;
 mod vertex;
 
