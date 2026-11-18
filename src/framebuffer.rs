@@ -60,6 +60,13 @@ impl Framebuffer {
         self.color_buffer.get_color(x, y)
     }
 
+    pub fn visible_pixel_count(&self) -> usize {
+        self.depth_buffer
+            .iter()
+            .filter(|&&depth| depth < f32::INFINITY)
+            .count()
+    }
+
     pub fn point(&mut self, point: Vector2) {
         let x = point.x.round() as i32;
         let y = point.y.round() as i32;
@@ -82,12 +89,25 @@ impl Framebuffer {
         }
     }
 
-    pub fn draw_in_window(&self, window: &mut RaylibHandle, thread: &RaylibThread, label: &str) {
+    pub fn draw_in_window(
+        &self,
+        window: &mut RaylibHandle,
+        thread: &RaylibThread,
+        label: &str,
+        overlay: &[String],
+    ) {
         if let Ok(texture) = window.load_texture_from_image(thread, &self.color_buffer) {
             let mut drawing = window.begin_drawing(thread);
             drawing.clear_background(Color::BLACK);
             drawing.draw_texture(&texture, 0, 0, Color::WHITE);
             drawing.draw_text(label, 16, 16, 20, Color::WHITE);
+            if !overlay.is_empty() {
+                let box_h = 16 + overlay.len() as i32 * 20;
+                drawing.draw_rectangle(12, 44, 460, box_h, Color::new(0, 0, 0, 175));
+                for (i, line) in overlay.iter().enumerate() {
+                    drawing.draw_text(line, 20, 52 + i as i32 * 20, 16, Color::GREEN);
+                }
+            }
         }
     }
 

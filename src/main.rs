@@ -4,6 +4,7 @@ mod framebuffer;
 mod math;
 mod noise;
 mod obj;
+mod perf;
 mod primitive;
 mod rasterizer;
 mod scene;
@@ -15,6 +16,7 @@ use camera::Camera;
 use framebuffer::Framebuffer;
 use math::Mat4;
 use obj::load_obj;
+use perf::{FrameSample, PerfStats};
 use primitive::primitive_assembly;
 use rasterizer::{TriangleMode, VIEWPORT_HEIGHT, VIEWPORT_WIDTH, rasterize};
 use raylib::prelude::*;
@@ -140,7 +142,8 @@ fn render(
     vertex_array: &[vertex::Vertex],
     mode: TriangleMode,
     shader: Shader,
-) {
+) -> FrameSample {
+    let t_vtx = std::time::Instant::now();
     let transformed_vertices: Vec<vertex::Vertex> = vertex_array
         .iter()
         .map(|vertex| vertex_shader(vertex, uniforms))
@@ -155,10 +158,21 @@ fn render(
                 .all(|v| v.clip_w > 0.0 && v.transformed_position.z >= 0.0)
         })
         .collect();
-    let fragments = rasterize(&triangles, mode);
+    let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
-    for fragment in fragments {
-        let fragment_color = fragment_shader(&fragment, shader, uniforms);
+    let t_rast = std::time::Instant::now();
+    let fragments = rasterize(&triangles, mode);
+    let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
+    let frag_count = fragments.len();
+
+    let mut shading_ns = 0u128;
+    let mut fb_ns = 0u128;
+    for fragment in &fragments {
+        let t_s = std::time::Instant::now();
+        let fragment_color = fragment_shader(fragment, shader, uniforms);
+        shading_ns += t_s.elapsed().as_nanos();
+
+        let t_f = std::time::Instant::now();
         let color = Color::new(
             (fragment_color.x.clamp(0.0, 1.0) * 255.0) as u8,
             (fragment_color.y.clamp(0.0, 1.0) * 255.0) as u8,
@@ -171,6 +185,19 @@ fn render(
             fragment.depth,
             color,
         );
+        fb_ns += t_f.elapsed().as_nanos();
+    }
+
+    FrameSample {
+        vertex_ms,
+        raster_ms,
+        shading_ms: shading_ns as f64 / 1_000_000.0,
+        fb_ms: fb_ns as f64 / 1_000_000.0,
+        present_ms: 0.0,
+        total_ms: 0.0,
+        fragments: frag_count,
+        shader_calls: frag_count,
+        visible_pixels: framebuffer.visible_pixel_count(),
     }
 }
 
@@ -264,10 +291,15 @@ fn main() {
     let mut light_angle = 0.0_f32;
     let orbit_speed = 1.8_f32;
     let light_speed = 1.8_f32;
+    let mut perf_stats = PerfStats::new();
 
     while !window.window_should_close() {
+        let frame_start = std::time::Instant::now();
         let dt = window.get_frame_time();
         time += dt;
+        if window.is_key_pressed(KeyboardKey::KEY_F3) {
+            perf_stats.enabled = !perf_stats.enabled;
+        }
         if window.is_key_pressed(KeyboardKey::KEY_W) {
             mode = TriangleMode::Wireframe;
         }
@@ -343,8 +375,11 @@ fn main() {
             rocky_debug_view,
         };
 
+        let t_clear = std::time::Instant::now();
         framebuffer.clear();
-        render(&mut framebuffer, &uniforms, &vertex_array, mode, shader);
+        let clear_ms = t_clear.elapsed().as_secs_f64() * 1000.0;
+        let mut sample = render(&mut framebuffer, &uniforms, &vertex_array, mode, shader);
+        sample.fb_ms += clear_ms;
         if capture_requested {
             let capture_path = next_capture_path();
             framebuffer.render_to_file(capture_path.to_str().expect("Ruta de captura inválida"));
@@ -361,6 +396,15 @@ fn main() {
             light_dir.z,
             noise_frequency,
         );
-        framebuffer.draw_in_window(&mut window, &thread, &label);
+        let overlay = if perf_stats.enabled {
+            perf_stats.overlay_lines()
+        } else {
+            Vec::new()
+        };
+        let t_pres = std::time::Instant::now();
+        framebuffer.draw_in_window(&mut window, &thread, &label, &overlay);
+        sample.present_ms = t_pres.elapsed().as_secs_f64() * 1000.0;
+        sample.total_ms = frame_start.elapsed().as_secs_f64() * 1000.0;
+        perf_stats.push(sample);
     }
 }
