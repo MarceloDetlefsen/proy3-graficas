@@ -1,7 +1,10 @@
 mod camera;
 mod clipping;
+mod culling;
 mod fragment;
 mod framebuffer;
+mod icosphere;
+mod lod;
 mod math;
 mod mesh_lod;
 mod nav;
@@ -33,7 +36,10 @@ use rasterizer::{
     shade_visibility_tiled_materials,
 };
 use raylib::prelude::*;
-use scene::{body_model_matrix_at, body_position_at, build_model_matrix, solar_system};
+use scene::{
+    body_model_matrix_at, body_model_matrix_unit, body_position_at, build_model_matrix,
+    solar_system,
+};
 use shaders::{Shader, shader_name};
 use ship::Ship;
 use sim::SimClock;
@@ -239,6 +245,8 @@ fn render(
         fragments,
         shader_calls,
         visible_pixels,
+        tris_before_cull: vertex_array.len() / 3,
+        tris_after_cull: buffers.screen_triangles.len(),
         width: framebuffer.width,
         height: framebuffer.height,
         threads,
@@ -355,7 +363,7 @@ fn main() {
     let time_scales = [0.25_f32, 0.5, 1.0, 2.0, 5.0];
     let mut time_scale_idx = 2_usize;
     let ship_lods = load_ship_lods();
-    let (ship_v0, ship_i0) = &ship_lods.levels[0];
+    let (ship_v0, _ship_i0) = &ship_lods.levels[0];
     let (ship_min, ship_max) = mesh_bounds(ship_v0);
     let ship_center = (ship_min + ship_max) * 0.5;
     let ship_extent = (ship_max.x - ship_min.x)
@@ -363,8 +371,11 @@ fn main() {
         .max(ship_max.z - ship_min.z)
         .max(1e-4);
     let ship_unit_scale = 2.0 / ship_extent;
-    let ship_vertex_array: Vec<vertex::Vertex> =
-        ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
+    let ship_vertex_arrays: [Vec<vertex::Vertex>; 3] = std::array::from_fn(|lvl| {
+        let (verts, idxs) = &ship_lods.levels[lvl];
+        idxs.iter().map(|&i| verts[i].clone()).collect()
+    });
+    let mut ship_lod = 0_usize;
     let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
     let mut physics_stepper = physics::PhysicsStepper::new();
     let mut nav_state = nav::NavState::new();
@@ -375,7 +386,10 @@ fn main() {
     let mut follow_mode = true;
     window.disable_cursor();
     let bodies = solar_system();
-    let _ = build_model_matrix;
+    let icosphere_lods = icosphere::build_icosphere_lods();
+    let mut body_lods = vec![3_usize; bodies.len()];
+    let mut forced_lod: Option<usize> = None;
+    let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
     let mut debug_noise = false;
@@ -383,6 +397,7 @@ fn main() {
     let mut rocky_debug_view = 3_i32;
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
+    let mut frustum_culling = true;
     let res_scales = [2_u32, 3, 1];
     let mut res_scale_idx = 0_usize; // 1/2 por defecto (400x300)
     let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
@@ -475,6 +490,22 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_F2) {
             mode = TriangleMode::FilledBarycentric;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_M) {
+            mode = match mode {
+                TriangleMode::FilledBarycentric => TriangleMode::Wireframe,
+                TriangleMode::Wireframe => TriangleMode::FilledBarycentric,
+            };
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_X) {
+            frustum_culling = !frustum_culling;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_Z) {
+            forced_lod = match forced_lod {
+                None => Some(0),
+                Some(l) if l + 1 < icosphere_lods.len() => Some(l + 1),
+                Some(_) => None,
+            };
         }
         if window.is_key_pressed(KeyboardKey::KEY_ONE) {
             shader = Shader::Star;
@@ -639,19 +670,47 @@ fn main() {
         let t_vtx = std::time::Instant::now();
         render_buffers.screen_triangles.clear();
         render_buffers.tri_materials.clear();
+        let vp = uniforms.projection_matrix * uniforms.view_matrix;
+        let frustum = culling::Frustum::from_vp(&vp);
         let sun_pos = body_position_at(&bodies[0], sim_clock.time);
-        for body in &bodies {
+        let mut tris_before_cull = 0usize;
+        let mut tris_after_cull = 0usize;
+        for (body_idx, body) in bodies.iter().enumerate() {
             let body_pos = body_position_at(body, sim_clock.time);
+            let radius_px = lod::projected_radius_px(
+                &cam,
+                body_pos,
+                scene::effective_radius(body),
+                internal_height as f32,
+            );
+            let level = match forced_lod {
+                Some(f) => f.min(icosphere_lods.len() - 1),
+                None => lod::select_detail_level_hysteresis(
+                    body_lods[body_idx],
+                    radius_px,
+                    &lod::ICOSPHERE_THRESHOLDS_PX,
+                    lod::DEFAULT_HYSTERESIS,
+                ),
+            };
+            body_lods[body_idx] = level;
+            let body_mesh = &icosphere_lods[level];
+            let body_tris = body_mesh.len() / 3;
+            tris_before_cull += body_tris;
+            if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
+            {
+                continue;
+            }
+            tris_after_cull += body_tris;
             let to_sun = sun_pos - body_pos;
             let body_light = if to_sun.length_sqr() > 1e-6 {
                 to_sun.normalize()
             } else {
                 light_dir
             };
-            uniforms.model_matrix = body_model_matrix_at(&obj, body, sim_clock.time);
+            uniforms.model_matrix = body_model_matrix_unit(body, sim_clock.time);
             let before = render_buffers.screen_triangles.len();
             append_screen_triangles(
-                &vertex_array,
+                body_mesh,
                 &uniforms,
                 &mut render_buffers.clip_vertices,
                 &mut render_buffers.screen_triangles,
@@ -666,29 +725,53 @@ fn main() {
             );
         }
 
-        // Dibujar nave (LOD0)
-        let ship_to_sun = sun_pos - ship.position;
-        let ship_light = if ship_to_sun.length_sqr() > 1e-6 {
-            ship_to_sun.normalize()
-        } else {
-            light_dir
+        // Dibujar nave con LOD según distancia a la cámara
+        let ship_radius_px = lod::projected_radius_px(
+            &cam,
+            ship.position,
+            ship.radius,
+            internal_height as f32,
+        );
+        ship_lod = match forced_lod {
+            Some(f) => f.min(2),
+            None => {
+                let ship_detail = lod::select_detail_level_hysteresis(
+                    2 - ship_lod.min(2),
+                    ship_radius_px,
+                    &lod::SHIP_THRESHOLDS_PX,
+                    lod::DEFAULT_HYSTERESIS,
+                );
+                2 - ship_detail
+            }
         };
-        uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
-        let before_ship = render_buffers.screen_triangles.len();
-        append_screen_triangles(
-            &ship_vertex_array,
-            &uniforms,
-            &mut render_buffers.clip_vertices,
-            &mut render_buffers.screen_triangles,
-        );
-        let added_ship = render_buffers.screen_triangles.len() - before_ship;
-        render_buffers.tri_materials.resize(
-            before_ship + added_ship,
-            TriMaterial {
-                shader: Shader::Ship,
-                light_dir: ship_light,
-            },
-        );
+        let ship_mesh = &ship_vertex_arrays[ship_lod];
+        let ship_tris = ship_mesh.len() / 3;
+        tris_before_cull += ship_tris;
+        if !frustum_culling || frustum.intersects_sphere(ship.position, ship.radius * 1.5) {
+            tris_after_cull += ship_tris;
+            let ship_to_sun = sun_pos - ship.position;
+            let ship_light = if ship_to_sun.length_sqr() > 1e-6 {
+                ship_to_sun.normalize()
+            } else {
+                light_dir
+            };
+            uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
+            let before_ship = render_buffers.screen_triangles.len();
+            append_screen_triangles(
+                ship_mesh,
+                &uniforms,
+                &mut render_buffers.clip_vertices,
+                &mut render_buffers.screen_triangles,
+            );
+            let added_ship = render_buffers.screen_triangles.len() - before_ship;
+            render_buffers.tri_materials.resize(
+                before_ship + added_ship,
+                TriMaterial {
+                    shader: Shader::Ship,
+                    light_dir: ship_light,
+                },
+            );
+        }
         let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
         let (raster_ms, shading_ms, fragments, shader_calls, visible_pixels) = match mode {
@@ -738,6 +821,8 @@ fn main() {
             fragments,
             shader_calls,
             visible_pixels,
+            tris_before_cull,
+            tris_after_cull,
             width: framebuffer.width,
             height: framebuffer.height,
             threads,
@@ -779,6 +864,37 @@ fn main() {
             "Modo(L): {} [{}] | Altitud: {}",
             mode_str, override_str, alt_str
         ));
+        let lod_mode_str = match forced_lod {
+            None => "Auto".to_string(),
+            Some(l) => format!("Forzar L{l}"),
+        };
+        let body_lod_summary: Vec<String> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                let lvl = body_lods[i];
+                let tris = icosphere_lods[lvl].len() / 3;
+                format!("{}:L{}({})", &b.name[..b.name.len().min(3)], lvl, tris)
+            })
+            .collect();
+        overlay.push(format!(
+            "LOD(Z): {} | Nave: L{}({}) | Malla(M): {}",
+            lod_mode_str,
+            ship_lod,
+            ship_vertex_arrays[ship_lod].len() / 3,
+            if matches!(mode, TriangleMode::Wireframe) {
+                "Wireframe"
+            } else {
+                "Solido"
+            },
+        ));
+        overlay.push(format!(
+            "Cuerpos: {} | Frustum(X): {} ({}->{})",
+            body_lod_summary.join(" "),
+            if frustum_culling { "ON" } else { "OFF" },
+            tris_before_cull,
+            tris_after_cull,
+        ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
         }
@@ -795,6 +911,7 @@ fn main() {
                 "Q / E       : Alabeo (roll)".to_string(),
                 "G           : Activar / desactivar gravedad".to_string(),
                 "L           : Modo control (Auto/Local/Global)".to_string(),
+                "Z / X / M   : Forzar LOD / Frustum / Wireframe".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);

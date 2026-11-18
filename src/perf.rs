@@ -21,6 +21,8 @@ pub struct FrameSample {
     pub fragments: usize,
     pub shader_calls: usize,
     pub visible_pixels: usize,
+    pub tris_before_cull: usize,
+    pub tris_after_cull: usize,
     pub width: u32,
     pub height: u32,
     pub threads: usize,
@@ -64,6 +66,8 @@ impl PerfStats {
             sum.fragments += s.fragments;
             sum.shader_calls += s.shader_calls;
             sum.visible_pixels += s.visible_pixels;
+            sum.tris_before_cull += s.tris_before_cull;
+            sum.tris_after_cull += s.tris_after_cull;
         }
         FrameSample {
             vertex_ms: sum.vertex_ms * inv,
@@ -75,6 +79,8 @@ impl PerfStats {
             fragments: sum.fragments / count,
             shader_calls: sum.shader_calls / count,
             visible_pixels: sum.visible_pixels / count,
+            tris_before_cull: sum.tris_before_cull / count,
+            tris_after_cull: sum.tris_after_cull / count,
             width: 0,
             height: 0,
             threads: 0,
@@ -105,6 +111,10 @@ impl PerfStats {
             format!(
                 "Z-writes: {} | Shader: {} | Visibles: {}",
                 avg.fragments, avg.shader_calls, avg.visible_pixels
+            ),
+            format!(
+                "Tris frustum: {} -> {}",
+                avg.tris_before_cull, avg.tris_after_cull
             ),
         ]
     }

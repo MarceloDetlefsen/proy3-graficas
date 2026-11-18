@@ -170,6 +170,19 @@ pub fn body_model_matrix_at(obj: &Obj, body: &Body, time: f32) -> Mat4 {
         * Mat4::translation(Vector3::new(-center.x, -center.y, -center.z))
 }
 
+pub fn body_model_matrix_unit(body: &Body, time: f32) -> Mat4 {
+    let pos = body_position_at(body, time);
+    let spin = if body.rotation_period.abs() > 1e-6 {
+        std::f32::consts::TAU * (time / body.rotation_period)
+    } else {
+        0.0
+    };
+    Mat4::translation(pos)
+        * Mat4::rotation_z(body.axial_tilt)
+        * Mat4::rotation_y(spin)
+        * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
+}
+
 pub fn build_model_matrix(obj: &Obj, yaw: f32, pitch: f32, scale: f32) -> Mat4 {
     let (min, max) = obj.bounds();
     let model_center = Vector3::new(
