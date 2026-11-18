@@ -7,6 +7,7 @@ mod mesh_lod;
 mod noise;
 mod obj;
 mod perf;
+mod physics;
 mod primitive;
 mod rasterizer;
 mod scene;
