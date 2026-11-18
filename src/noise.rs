@@ -229,4 +229,30 @@ mod tests {
             assert!((0.0..=1.0).contains(&value));
         }
     }
+
+    #[test]
+    fn fast_noise_is_reproducible_bounded_and_continuous() {
+        let a1 = Noise::new(42);
+        let a2 = Noise::new(42);
+        let b = Noise::new(99);
+
+        let mut differs = false;
+        for i in 0..200 {
+            let p = Vector3::new(i as f32 * 0.13 - 5.0, i as f32 * 0.07, i as f32 * -0.11);
+            let va1 = a1.noise3(p);
+            let va2 = a2.noise3(p);
+            let vb = b.noise3(p);
+            assert!((0.0..=1.0).contains(&va1));
+            assert_eq!(va1, va2, "Misma semilla debe producir el mismo valor");
+            if (va1 - vb).abs() > 1e-4 {
+                differs = true;
+            }
+            let neighbor = a1.noise3(p + Vector3::new(0.01, 0.01, 0.01));
+            assert!(
+                (va1 - neighbor).abs() < 0.1,
+                "Continuidad violada: {va1} vs {neighbor}"
+            );
+        }
+        assert!(differs, "Semillas distintas deben producir ruido distinto");
+    }
 }
