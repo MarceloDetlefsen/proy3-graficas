@@ -266,6 +266,55 @@ mod tests {
     }
 
     #[test]
+    fn shader_calls_never_exceed_visible_pixels_with_overlapping_triangles() {
+        use crate::Uniforms;
+        use crate::framebuffer::Framebuffer;
+        use crate::math::Mat4;
+        use crate::noise::Noise;
+        use raylib::prelude::Color;
+
+        let mk_tri = |z: f32| {
+            let mk_v = |x: f32, y: f32| ScreenVertex {
+                x,
+                y,
+                z,
+                inv_w: 1.0,
+                object_pos: Vector3::new(0.0, 0.0, 1.0),
+                world_pos: Vector3::new(0.0, 0.0, 1.0),
+                normal: Vector3::new(0.0, 0.0, 1.0),
+                uv: [0.0, 0.0],
+            };
+            ScreenTriangle {
+                vertices: [mk_v(0.0, 0.0), mk_v(0.0, 32.0), mk_v(32.0, 0.0)],
+            }
+        };
+
+        let triangles = [mk_tri(0.8), mk_tri(0.2)];
+        let mut fb = Framebuffer::new(64, 64, Color::BLACK);
+        let uniforms = Uniforms {
+            model_matrix: Mat4::identity(),
+            view_matrix: Mat4::identity(),
+            projection_matrix: Mat4::identity(),
+            time: 0.0,
+            light_dir: Vector3::new(0.0, 0.0, 1.0),
+            camera_pos: Vector3::new(0.0, 0.0, 5.0),
+            debug_noise: false,
+            noise_frequency: 4.0,
+            rocky_debug_view: 3,
+            viewport_width: 64,
+            viewport_height: 64,
+            noise: Noise::new(0),
+            baked: None,
+        };
+
+        let writes = rasterize_visibility(&triangles, &mut fb, true);
+        let (calls, visible) = shade_visibility(&triangles, &mut fb, Shader::Star, &uniforms);
+        assert!(writes >= visible);
+        assert_eq!(calls, visible);
+        assert!(calls <= fb.visible_pixel_count());
+    }
+
+    #[test]
     fn sphere_obj_triangles_are_oriented_outward() {
         let obj = load_obj("assets/sphere.obj").expect("sphere.obj debe cargar");
         let mut inward = 0usize;
