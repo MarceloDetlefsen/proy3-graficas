@@ -240,4 +240,18 @@ mod tests {
         );
         assert!(ship.velocity.x >= -1e-4);
     }
+
+    #[test]
+    fn collision_uses_deformed_effective_radius() {
+        let mut planet = crate::scene::solar_system().remove(1);
+        planet.orbit_radius = 0.0;
+        planet.radius = 1.0;
+        planet.surface.deformation_amplitude = 0.25;
+        planet.surface.max_deformation = 0.25;
+        let bodies = [planet];
+
+        // Posición fuera del radio base + ship.radius (1.7), pero dentro de 1.25 + 0.7 = 1.95.
+        let ship = crate::ship::Ship::new(Vector3::new(1.85, 0.0, 0.0));
+        assert!(detect_body_collision(&ship, &bodies, 0.0).is_some());
+    }
 }

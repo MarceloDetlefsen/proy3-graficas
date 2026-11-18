@@ -118,7 +118,9 @@ pub fn solar_system() -> Vec<Body> {
 }
 
 pub fn effective_radius(body: &Body) -> f32 {
-    body.radius + body.surface.max_deformation.max(0.0)
+    let amp_deform = body.radius * body.surface.deformation_amplitude.max(0.0);
+    let deform = body.surface.max_deformation.max(amp_deform).max(0.0);
+    body.radius + deform
 }
 
 pub fn body_position_at(body: &Body, time: f32) -> Vector3 {
