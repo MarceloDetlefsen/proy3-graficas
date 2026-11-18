@@ -367,6 +367,7 @@ fn main() {
         ship_i0.iter().map(|&i| ship_v0[i].clone()).collect();
     let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
     let mut physics_stepper = physics::PhysicsStepper::new();
+    let mut nav_state = nav::NavState::new();
     let mut gravity_enabled = true;
     let mut gravity_mag = 0.0_f32;
     let mut show_help = false;
@@ -426,6 +427,9 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_G) {
             gravity_enabled = !gravity_enabled;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_L) {
+            nav_state.cycle_override();
         }
         if window.is_key_pressed(KeyboardKey::KEY_MINUS) {
             time_scale_idx = time_scale_idx.saturating_sub(1);
@@ -490,7 +494,7 @@ fn main() {
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
         }
-        if window.is_key_down(KeyboardKey::KEY_L) {
+        if window.is_key_down(KeyboardKey::KEY_U) {
             light_angle += light_speed * dt;
         }
         if window.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) {
@@ -554,10 +558,29 @@ fn main() {
         }
 
         let mut collision_body: Option<usize> = None;
+        let controls = nav::FlightControls {
+            throttle,
+            boost,
+            braking,
+        };
         physics_stepper.step(dt, |sub_dt| {
-            ship.apply_thrust(throttle, boost, sub_dt);
-            ship.apply_damping(braking, sub_dt);
-            ship.apply_angular_input(pitch_in, yaw_in, roll_in, sub_dt);
+            nav_state.update_mode(ship.position, &bodies, sim_clock.time);
+            nav::apply_controls_in_frame(
+                &mut ship,
+                nav_state.mode,
+                &bodies,
+                sim_clock.time,
+                controls,
+                sub_dt,
+            );
+            let (_, turn_scale) =
+                nav::local_flight_scales(ship.position, nav_state.mode, &bodies, sim_clock.time);
+            ship.apply_angular_input(
+                pitch_in * turn_scale,
+                yaw_in * turn_scale,
+                roll_in * turn_scale,
+                sub_dt,
+            );
             gravity_mag = physics::integrate_ship_with_gravity(
                 &mut ship,
                 &bodies,
@@ -565,6 +588,7 @@ fn main() {
                 sub_dt,
                 gravity_enabled,
             );
+            nav::align_up_to_surface(&mut ship, nav_state.mode, &bodies, sim_clock.time, sub_dt);
             if let Some(idx) = physics::resolve_body_collisions(&mut ship, &bodies, sim_clock.time)
             {
                 collision_body = Some(idx);
@@ -731,12 +755,29 @@ fn main() {
             if sim_clock.paused { " PAUSA" } else { "" },
             if follow_mode { "Seguir" } else { "Libre" },
         );
+        let mode_str = match nav_state.mode {
+            nav::NavMode::Global => "Global".to_string(),
+            nav::NavMode::Local(idx) => format!("Local({})", bodies[idx].name),
+        };
+        let override_str = match nav_state.override_mode {
+            nav::NavOverride::Auto => "Auto",
+            nav::NavOverride::ForceLocal => "ForzarLocal",
+            nav::NavOverride::ForceGlobal => "ForzarGlobal",
+        };
+        let alt_str = match nav_state.nearest {
+            Some(n) => format!("{:.2} u ({})", n.altitude.max(0.0), bodies[n.body_index].name),
+            None => "--".to_string(),
+        };
         let mut overlay = Vec::new();
         overlay.push(format!(
             "Vel: {:.2} u/s | Gravedad(G): {} ({:.2} u/s^2)",
             ship.velocity.length(),
             if gravity_enabled { "ON" } else { "OFF" },
             gravity_mag,
+        ));
+        overlay.push(format!(
+            "Modo(L): {} [{}] | Altitud: {}",
+            mode_str, override_str, alt_str
         ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
@@ -753,6 +794,7 @@ fn main() {
                 "Mouse/Flech.: Cabeceo y guinada".to_string(),
                 "Q / E       : Alabeo (roll)".to_string(),
                 "G           : Activar / desactivar gravedad".to_string(),
+                "L           : Modo control (Auto/Local/Global)".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);
