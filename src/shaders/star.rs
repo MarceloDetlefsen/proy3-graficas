@@ -102,7 +102,9 @@ pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     let value = temperature_from_mu(fragment, uniforms, mu);
     let mut color = palette_color(value);
 
-    let corona = (1.0 - mu).powf(CORONA_EXPONENT) * CORONA_INTENSITY;
+    let corona = (1.0 - mu).powf(CORONA_EXPONENT)
+        * CORONA_INTENSITY
+        * (1.0 + 0.12 * (uniforms.time * 3.1 + mu * 6.0).sin());
     color += Vector3::new(CORONA_COLOR[0], CORONA_COLOR[1], CORONA_COLOR[2]) * corona;
 
     let pulse = 1.0 + PULSE_AMP * (uniforms.time * PULSE_SPEED).sin();
@@ -185,5 +187,22 @@ mod tests {
             percentile(0.95),
             values[values.len() - 1],
         );
+    }
+
+    #[test]
+    fn star_does_not_self_shadow_and_animates_over_time() {
+        let frag = fragment(Vector3::new(0.0, 0.0, 1.0), Vector3::new(0.0, 0.0, 1.0));
+        let mut u1 = uniforms(Vector3::new(0.0, 0.0, 5.0));
+        u1.light_dir = Vector3::new(0.0, 0.0, 1.0);
+        let mut u2 = u1.clone();
+        u2.light_dir = Vector3::new(0.0, 0.0, -1.0);
+        let c1 = shade(&frag, &u1);
+        let c2 = shade(&frag, &u2);
+        assert!((c1 - c2).length() < 1e-6);
+
+        let mut u_later = u1.clone();
+        u_later.time = 2.0;
+        let c_later = shade(&frag, &u_later);
+        assert!((c1 - c_later).length() > 1e-4);
     }
 }

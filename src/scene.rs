@@ -192,6 +192,19 @@ pub fn body_model_matrix_unit(body: &Body, time: f32) -> Mat4 {
         * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
 }
 
+/// Calcula la dirección unitaria de luz desde `body_pos` hacia `sun_pos`,
+/// usando `fallback` cuando ambos coinciden (p. ej. el propio Sol).
+pub fn body_light_dir(body_pos: Vector3, sun_pos: Vector3, fallback: Vector3) -> Vector3 {
+    let to_sun = sun_pos - body_pos;
+    if to_sun.length_sqr() > 1e-6 {
+        to_sun.normalize()
+    } else if fallback.length_sqr() > 1e-6 {
+        fallback.normalize()
+    } else {
+        Vector3::new(0.0, 1.0, 0.0)
+    }
+}
+
 pub fn build_model_matrix(obj: &Obj, yaw: f32, pitch: f32, scale: f32) -> Mat4 {
     let (min, max) = obj.bounds();
     let model_center = Vector3::new(
@@ -207,4 +220,46 @@ pub fn build_model_matrix(obj: &Obj, yaw: f32, pitch: f32, scale: f32) -> Mat4 {
             -model_center.y,
             -model_center.z,
         ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rocky_planet_zebes_has_orbit_deformation_and_light_direction() {
+        let bodies = solar_system();
+        let sol = &bodies[0];
+        let zebes = &bodies[1];
+        assert!(matches!(sol.shader, Shader::Star));
+        assert_eq!(sol.orbit_radius, 0.0);
+        assert!(sol.rotation_period > 0.0);
+
+        assert_eq!(zebes.name, "Zebes");
+        assert!(matches!(zebes.shader, Shader::Rocky));
+        assert!(zebes.orbit_radius > 0.0 && zebes.orbit_period > 0.0);
+        assert!(zebes.surface.deformation_amplitude > 0.0);
+        assert!(effective_radius(zebes) > zebes.radius);
+
+        let sun_pos = body_position_at(sol, 5.0);
+        let zebes_pos = body_position_at(zebes, 5.0);
+        let ldir = body_light_dir(zebes_pos, sun_pos, Vector3::new(0.0, 1.0, 0.0));
+        assert!((ldir.length() - 1.0).abs() < 1e-5);
+        assert!(ldir.dot(sun_pos - zebes_pos) > 0.0);
+    }
+
+    #[test]
+    fn gas_giant_tau_ceti_has_orbit_and_animated_bands() {
+        let bodies = solar_system();
+        let tau = &bodies[2];
+        assert_eq!(tau.name, "Tau Ceti");
+        assert!(matches!(tau.shader, Shader::GasGiant));
+        assert!(tau.orbit_radius > 0.0 && tau.orbit_period > 0.0);
+        assert!(tau.rotation_period > 0.0);
+        assert_eq!(tau.surface.deformation_amplitude, 0.0);
+
+        let p0 = body_position_at(tau, 0.0);
+        let p1 = body_position_at(tau, 10.0);
+        assert!((p1 - p0).length() > 1.0);
+    }
 }
