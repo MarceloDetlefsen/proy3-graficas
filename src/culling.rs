@@ -56,4 +56,16 @@ impl Frustum {
             planes: [left, right, bottom, top, near, far],
         }
     }
+
+    /// Devuelve `true` si la esfera `(center, radius)` está total o parcialmente
+    /// dentro de los 6 planos del frustum.
+    pub fn intersects_sphere(&self, center: Vector3, radius: f32) -> bool {
+        let r = radius.max(0.0);
+        for plane in &self.planes {
+            if plane.signed_distance(center) < -r {
+                return false;
+            }
+        }
+        true
+    }
 }
