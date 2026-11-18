@@ -3,6 +3,7 @@ mod clipping;
 mod fragment;
 mod framebuffer;
 mod math;
+mod mesh_lod;
 mod noise;
 mod obj;
 mod perf;
