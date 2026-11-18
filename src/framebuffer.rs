@@ -6,11 +6,14 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+pub const INVALID_TRI_ID: u32 = u32::MAX;
+
 pub struct Framebuffer {
     pub width: u32,
     pub height: u32,
-    color_pixels: Vec<u8>,
-    depth_buffer: Vec<f32>,
+    pub color_pixels: Vec<u8>,
+    pub depth_buffer: Vec<f32>,
+    pub tri_id_buffer: Vec<u32>,
     background_color: Color,
     pub current_color: Color,
     texture: Option<Texture2D>,
@@ -35,6 +38,7 @@ impl Framebuffer {
             height,
             color_pixels,
             depth_buffer: vec![f32::INFINITY; len],
+            tri_id_buffer: vec![INVALID_TRI_ID; len],
             background_color,
             current_color: Color::WHITE,
             texture: None,
@@ -52,6 +56,7 @@ impl Framebuffer {
             *px = bg;
         }
         self.depth_buffer.fill(f32::INFINITY);
+        self.tri_id_buffer.fill(INVALID_TRI_ID);
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
@@ -63,6 +68,7 @@ impl Framebuffer {
         self.height = height;
         self.color_pixels = vec![0u8; len * 4];
         self.depth_buffer = vec![f32::INFINITY; len];
+        self.tri_id_buffer = vec![INVALID_TRI_ID; len];
         self.texture = None;
         self.clear();
     }
