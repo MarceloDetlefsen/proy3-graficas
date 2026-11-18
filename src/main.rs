@@ -176,13 +176,7 @@ fn main() {
     let vertex_array: Vec<vertex::Vertex> = obj
         .indices
         .iter()
-        .map(|&index| {
-            vertex::Vertex::new(
-                obj.vertices[index],
-                obj.vertex_normals[index],
-                Vector3::new(0.25, 0.55, 0.95),
-            )
-        })
+        .map(|&index| vertex::Vertex::new(obj.vertices[index], obj.vertex_normals[index]))
         .collect();
 
     let (min, max) = obj.bounds();

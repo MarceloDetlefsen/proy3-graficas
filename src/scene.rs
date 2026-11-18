@@ -1,11 +1,7 @@
 use raylib::prelude::{Matrix, Vector3};
 
-use crate::Uniforms;
 use crate::obj::Obj;
-use crate::primitive::primitive_assembly;
 use crate::rasterizer::{VIEWPORT_HEIGHT, VIEWPORT_WIDTH};
-use crate::shaders::vertex_shader;
-use crate::vertex::Vertex;
 
 pub fn build_model_matrix(obj: &Obj, scale: f32, yaw: f32, pitch: f32, zoom: f32) -> Matrix {
     let (min, max) = obj.bounds();
@@ -27,22 +23,4 @@ pub fn build_model_matrix(obj: &Obj, scale: f32, yaw: f32, pitch: f32, zoom: f32
     model_matrix.m13 = VIEWPORT_HEIGHT as f32 / 2.0 - transformed_center.y;
     model_matrix.m14 = -transformed_center.z;
     model_matrix
-}
-
-pub fn build_triangles(obj: &Obj, uniforms: &Uniforms) -> Vec<[Vertex; 3]> {
-    let vertices: Vec<Vertex> = obj
-        .indices
-        .iter()
-        .enumerate()
-        .map(|(i, &index)| {
-            let color = match i % 3 {
-                0 => Vector3::new(1.0, 0.0, 0.0),
-                1 => Vector3::new(0.0, 1.0, 0.0),
-                _ => Vector3::new(0.0, 0.0, 1.0),
-            };
-            Vertex::new(obj.vertices[index], obj.vertex_normals[index], color)
-        })
-        .map(|vertex| vertex_shader(&vertex, uniforms))
-        .collect();
-    primitive_assembly(&vertices)
 }
