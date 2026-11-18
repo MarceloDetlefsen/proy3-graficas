@@ -114,6 +114,25 @@ pub fn solar_system() -> Vec<Body> {
                 max_deformation: 0.10,
             },
         },
+        Body {
+            name: "Ardens",
+            kind: BodyKind::Planet,
+            radius: 1.1,
+            mass: 12.0,
+            orbit_radius: 34.0,
+            orbit_period: 70.0,
+            phase: 1.1,
+            orbit_inclination: 0.04,
+            rotation_period: 35.0,
+            axial_tilt: 0.10,
+            shader: Shader::Ardens,
+            surface: SurfaceParams {
+                seed: 11,
+                noise_frequency: 6.0,
+                deformation_amplitude: 0.04,
+                max_deformation: 1.1 * 0.04,
+            },
+        },
     ]
 }
 
