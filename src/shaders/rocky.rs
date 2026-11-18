@@ -377,9 +377,16 @@ pub fn shade_from_static(
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     print_statistics_once(&uniforms.noise);
     let p = fragment.object_pos.normalize();
-    let s = sample_static(&uniforms.noise, p);
     let (t1, t2) = tangent_pair(p);
-    let h1 = height_field(&uniforms.noise, p + t1 * BUMP_DELTA);
-    let h2 = height_field(&uniforms.noise, p + t2 * BUMP_DELTA);
-    shade_from_static(fragment, uniforms, s, (h1, h2))
+    if let Some(baked) = uniforms.baked.as_ref() {
+        let s = baked.rocky.sample_dir(p);
+        let h1 = baked.rocky.sample_dir(p + t1 * BUMP_DELTA)[3];
+        let h2 = baked.rocky.sample_dir(p + t2 * BUMP_DELTA)[3];
+        shade_from_static(fragment, uniforms, s, (h1, h2))
+    } else {
+        let s = sample_static(&uniforms.noise, p);
+        let h1 = height_field(&uniforms.noise, p + t1 * BUMP_DELTA);
+        let h2 = height_field(&uniforms.noise, p + t2 * BUMP_DELTA);
+        shade_from_static(fragment, uniforms, s, (h1, h2))
+    }
 }

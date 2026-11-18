@@ -255,6 +255,10 @@ pub fn shade_from_static(fragment: &Fragment, uniforms: &Uniforms, s: [f32; 5]) 
 
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     print_statistics_once(&uniforms.noise);
-    let s = sample_static(&uniforms.noise, fragment.object_pos);
+    let s = if let Some(baked) = uniforms.baked.as_ref() {
+        baked.gas_giant.sample_dir(fragment.object_pos)
+    } else {
+        sample_static(&uniforms.noise, fragment.object_pos)
+    };
     shade_from_static(fragment, uniforms, s)
 }
