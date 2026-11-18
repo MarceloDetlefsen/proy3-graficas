@@ -388,6 +388,7 @@ fn main() {
     let bodies = solar_system();
     let icosphere_lods = icosphere::build_icosphere_lods();
     let mut body_lods = vec![3_usize; bodies.len()];
+    let mut forced_lod: Option<usize> = None;
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
@@ -498,6 +499,13 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_X) {
             frustum_culling = !frustum_culling;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_Z) {
+            forced_lod = match forced_lod {
+                None => Some(0),
+                Some(l) if l + 1 < icosphere_lods.len() => Some(l + 1),
+                Some(_) => None,
+            };
         }
         if window.is_key_pressed(KeyboardKey::KEY_ONE) {
             shader = Shader::Star;
@@ -675,12 +683,15 @@ fn main() {
                 scene::effective_radius(body),
                 internal_height as f32,
             );
-            let level = lod::select_detail_level_hysteresis(
-                body_lods[body_idx],
-                radius_px,
-                &lod::ICOSPHERE_THRESHOLDS_PX,
-                lod::DEFAULT_HYSTERESIS,
-            );
+            let level = match forced_lod {
+                Some(f) => f.min(icosphere_lods.len() - 1),
+                None => lod::select_detail_level_hysteresis(
+                    body_lods[body_idx],
+                    radius_px,
+                    &lod::ICOSPHERE_THRESHOLDS_PX,
+                    lod::DEFAULT_HYSTERESIS,
+                ),
+            };
             body_lods[body_idx] = level;
             let body_mesh = &icosphere_lods[level];
             let body_tris = body_mesh.len() / 3;
@@ -721,13 +732,18 @@ fn main() {
             ship.radius,
             internal_height as f32,
         );
-        let ship_detail = lod::select_detail_level_hysteresis(
-            2 - ship_lod.min(2),
-            ship_radius_px,
-            &lod::SHIP_THRESHOLDS_PX,
-            lod::DEFAULT_HYSTERESIS,
-        );
-        ship_lod = 2 - ship_detail;
+        ship_lod = match forced_lod {
+            Some(f) => f.min(2),
+            None => {
+                let ship_detail = lod::select_detail_level_hysteresis(
+                    2 - ship_lod.min(2),
+                    ship_radius_px,
+                    &lod::SHIP_THRESHOLDS_PX,
+                    lod::DEFAULT_HYSTERESIS,
+                );
+                2 - ship_detail
+            }
+        };
         let ship_mesh = &ship_vertex_arrays[ship_lod];
         let ship_tris = ship_mesh.len() / 3;
         tris_before_cull += ship_tris;
@@ -848,14 +864,33 @@ fn main() {
             "Modo(L): {} [{}] | Altitud: {}",
             mode_str, override_str, alt_str
         ));
+        let lod_mode_str = match forced_lod {
+            None => "Auto".to_string(),
+            Some(l) => format!("Forzar L{l}"),
+        };
+        let body_lod_summary: Vec<String> = bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                let lvl = body_lods[i];
+                let tris = icosphere_lods[lvl].len() / 3;
+                format!("{}:L{}({})", &b.name[..b.name.len().min(3)], lvl, tris)
+            })
+            .collect();
         overlay.push(format!(
-            "LOD cuerpos: {:?} | Malla(M): {} | Frustum(X): {} ({}->{})",
-            body_lods,
+            "LOD(Z): {} | Nave: L{}({}) | Malla(M): {}",
+            lod_mode_str,
+            ship_lod,
+            ship_vertex_arrays[ship_lod].len() / 3,
             if matches!(mode, TriangleMode::Wireframe) {
                 "Wireframe"
             } else {
                 "Solido"
             },
+        ));
+        overlay.push(format!(
+            "Cuerpos: {} | Frustum(X): {} ({}->{})",
+            body_lod_summary.join(" "),
             if frustum_culling { "ON" } else { "OFF" },
             tris_before_cull,
             tris_after_cull,
@@ -876,6 +911,7 @@ fn main() {
                 "Q / E       : Alabeo (roll)".to_string(),
                 "G           : Activar / desactivar gravedad".to_string(),
                 "L           : Modo control (Auto/Local/Global)".to_string(),
+                "Z / X / M   : Forzar LOD / Frustum / Wireframe".to_string(),
                 "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
                 "Tab / - =   : Pausa / Escala de tiempo".to_string(),
             ]);
