@@ -100,3 +100,34 @@ pub fn filter_candidates_by_noise(
     }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn surface_distribution_is_reproducible_and_seed_sensitive() {
+        let pts_a = fibonacci_sphere_points(500, 42, 0.03);
+        let pts_b = fibonacci_sphere_points(500, 42, 0.03);
+        let pts_c = fibonacci_sphere_points(500, 99, 0.03);
+
+        let cand_a = filter_candidates_by_noise(&pts_a, 42, true);
+        let cand_b = filter_candidates_by_noise(&pts_b, 42, true);
+        let cand_c = filter_candidates_by_noise(&pts_c, 99, true);
+
+        assert!(!cand_a.is_empty());
+        assert_eq!(cand_a.len(), cand_b.len());
+        for (a, b) in cand_a.iter().zip(cand_b.iter()) {
+            assert_eq!(a.kind, b.kind);
+            assert!((a.dir - b.dir).length() < 1e-6);
+            assert!((a.yaw - b.yaw).abs() < 1e-6);
+        }
+
+        let same_prefix = cand_a
+            .iter()
+            .zip(cand_c.iter())
+            .filter(|(a, c)| (a.dir - c.dir).length() < 1e-4)
+            .count();
+        assert!(same_prefix < cand_a.len());
+    }
+}
