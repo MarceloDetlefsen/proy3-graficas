@@ -423,6 +423,16 @@ fn main() {
             .collect::<Vec<_>>()
     };
     let mut planet_candidates = build_candidates(surface_seed, &bodies);
+    let build_all_instances = |bodies: &[scene::Body],
+                               cands: &[Vec<surface_scatter::SurfaceCandidate>],
+                               noise: &Noise| {
+        bodies
+            .iter()
+            .zip(cands.iter())
+            .map(|(b, c)| surface_scatter::build_body_instances(b, c, noise))
+            .collect::<Vec<_>>()
+    };
+    let mut planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
@@ -567,10 +577,12 @@ fn main() {
         if window.is_key_pressed(KeyboardKey::KEY_I) {
             surface_seed = surface_seed.wrapping_sub(1);
             planet_candidates = build_candidates(surface_seed, &bodies);
+            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
         }
         if window.is_key_pressed(KeyboardKey::KEY_O) {
             surface_seed = surface_seed.wrapping_add(1);
             planet_candidates = build_candidates(surface_seed, &bodies);
+            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
         }
         if window.is_key_down(KeyboardKey::KEY_J) {
             light_angle -= light_speed * dt;
@@ -617,6 +629,7 @@ fn main() {
                     noise_frequency,
                 ));
             }
+            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
             last_rebuild_ms = t_reb.elapsed().as_secs_f64() * 1000.0;
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
@@ -810,6 +823,31 @@ fn main() {
                     light_dir: body_light,
                 },
             );
+
+            // Dibujar instancias sobre la superficie compuestas con la matriz del planeta.
+            let planet_rt = scene::body_rt_matrix_at(body, sim_clock.time);
+            let prop_mesh = &icosphere_lods[0];
+            let prop_tris = prop_mesh.len() / 3;
+            for inst in &planet_instances[body_idx] {
+                tris_before_cull += prop_tris;
+                tris_after_cull += prop_tris;
+                uniforms.model_matrix = planet_rt * inst.local_matrix;
+                let b_inst = render_buffers.screen_triangles.len();
+                append_screen_triangles(
+                    prop_mesh,
+                    &uniforms,
+                    &mut render_buffers.clip_vertices,
+                    &mut render_buffers.screen_triangles,
+                );
+                let added_inst = render_buffers.screen_triangles.len() - b_inst;
+                render_buffers.tri_materials.resize(
+                    b_inst + added_inst,
+                    TriMaterial {
+                        shader: Shader::Prop(inst.kind),
+                        light_dir: body_light,
+                    },
+                );
+            }
         }
 
         // Dibujar nave con LOD según distancia a la cámara
