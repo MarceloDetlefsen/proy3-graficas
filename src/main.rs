@@ -161,7 +161,7 @@ fn render(
     let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
     let t_rast = std::time::Instant::now();
-    let fragments = rasterize(&triangles, mode);
+    let fragments = rasterize(&triangles, mode, true);
     let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
     let frag_count = fragments.len();
 

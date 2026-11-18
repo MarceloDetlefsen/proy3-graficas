@@ -32,13 +32,6 @@ fn interpolated_fragment(
     }
 }
 
-pub fn is_degenerate(a: &Vertex, b: &Vertex, c: &Vertex) -> bool {
-    let pa = (a.transformed_position.x, a.transformed_position.y);
-    let pb = (b.transformed_position.x, b.transformed_position.y);
-    let pc = (c.transformed_position.x, c.transformed_position.y);
-    edge(pa, pb, pc).abs() <= DEGENERATE_EPS
-}
-
 pub fn triangle_wireframe(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
     let mut fragments = Vec::new();
     let edges = [(a, b, 0), (b, c, 1), (c, a, 2)];
@@ -66,17 +59,21 @@ pub fn triangle_wireframe(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
     fragments
 }
 
-pub fn triangle_barycentric(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
+pub fn triangle_barycentric(
+    a: &Vertex,
+    b: &Vertex,
+    c: &Vertex,
+    backface_culling: bool,
+) -> Vec<Fragment> {
     // La función de arista puede redondear distinto a la interpolación de x
     // de scanline cuando el centro cae casi exactamente sobre un borde.
-    if is_degenerate(a, b, c) {
-        return Vec::new();
-    }
-
     let pa = (a.transformed_position.x, a.transformed_position.y);
     let pb = (b.transformed_position.x, b.transformed_position.y);
     let pc = (c.transformed_position.x, c.transformed_position.y);
     let area = edge(pa, pb, pc);
+    if area.abs() <= DEGENERATE_EPS || (backface_culling && area <= 0.0) {
+        return Vec::new();
+    }
     let inverse_area = 1.0 / area;
 
     let min_x = pa.0.min(pb.0).min(pc.0).floor() as i32;
