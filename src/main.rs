@@ -34,7 +34,10 @@ use rasterizer::{
     shade_visibility_tiled_materials,
 };
 use raylib::prelude::*;
-use scene::{body_model_matrix_at, body_position_at, build_model_matrix, solar_system};
+use scene::{
+    body_model_matrix_at, body_model_matrix_unit, body_position_at, build_model_matrix,
+    solar_system,
+};
 use shaders::{Shader, shader_name};
 use ship::Ship;
 use sim::SimClock;
@@ -376,7 +379,9 @@ fn main() {
     let mut follow_mode = true;
     window.disable_cursor();
     let bodies = solar_system();
-    let _ = build_model_matrix;
+    let icosphere_lods = icosphere::build_icosphere_lods();
+    let mut ico_level = 3_usize;
+    let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
     let mut debug_noise = false;
@@ -476,6 +481,15 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_F2) {
             mode = TriangleMode::FilledBarycentric;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_M) {
+            mode = match mode {
+                TriangleMode::FilledBarycentric => TriangleMode::Wireframe,
+                TriangleMode::Wireframe => TriangleMode::FilledBarycentric,
+            };
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_Z) {
+            ico_level = (ico_level + 1) % icosphere_lods.len();
         }
         if window.is_key_pressed(KeyboardKey::KEY_ONE) {
             shader = Shader::Star;
@@ -649,10 +663,10 @@ fn main() {
             } else {
                 light_dir
             };
-            uniforms.model_matrix = body_model_matrix_at(&obj, body, sim_clock.time);
+            uniforms.model_matrix = body_model_matrix_unit(body, sim_clock.time);
             let before = render_buffers.screen_triangles.len();
             append_screen_triangles(
-                &vertex_array,
+                &icosphere_lods[ico_level],
                 &uniforms,
                 &mut render_buffers.clip_vertices,
                 &mut render_buffers.screen_triangles,
@@ -779,6 +793,16 @@ fn main() {
         overlay.push(format!(
             "Modo(L): {} [{}] | Altitud: {}",
             mode_str, override_str, alt_str
+        ));
+        overlay.push(format!(
+            "Icosfera(Z): L{} ({} tris) | Malla(M): {}",
+            ico_level,
+            icosphere_lods[ico_level].len() / 3,
+            if matches!(mode, TriangleMode::Wireframe) {
+                "Wireframe"
+            } else {
+                "Solido"
+            }
         ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
