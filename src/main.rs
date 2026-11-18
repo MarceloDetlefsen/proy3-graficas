@@ -244,6 +244,8 @@ fn render(
         fragments,
         shader_calls,
         visible_pixels,
+        tris_before_cull: vertex_array.len() / 3,
+        tris_after_cull: buffers.screen_triangles.len(),
         width: framebuffer.width,
         height: framebuffer.height,
         threads,
@@ -390,7 +392,7 @@ fn main() {
     let mut rocky_debug_view = 3_i32;
     let mut light_angle = 0.0_f32;
     let mut backface_culling = true;
-    let frustum_culling = true;
+    let mut frustum_culling = true;
     let res_scales = [2_u32, 3, 1];
     let mut res_scale_idx = 0_usize; // 1/2 por defecto (400x300)
     let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
@@ -492,6 +494,9 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_Z) {
             ico_level = (ico_level + 1) % icosphere_lods.len();
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_X) {
+            frustum_culling = !frustum_culling;
         }
         if window.is_key_pressed(KeyboardKey::KEY_ONE) {
             shader = Shader::Star;
@@ -659,12 +664,18 @@ fn main() {
         let vp = uniforms.projection_matrix * uniforms.view_matrix;
         let frustum = culling::Frustum::from_vp(&vp);
         let sun_pos = body_position_at(&bodies[0], sim_clock.time);
+        let mut tris_before_cull = 0usize;
+        let mut tris_after_cull = 0usize;
         for body in &bodies {
+            let body_mesh = &icosphere_lods[ico_level];
+            let body_tris = body_mesh.len() / 3;
+            tris_before_cull += body_tris;
             let body_pos = body_position_at(body, sim_clock.time);
             if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
             {
                 continue;
             }
+            tris_after_cull += body_tris;
             let to_sun = sun_pos - body_pos;
             let body_light = if to_sun.length_sqr() > 1e-6 {
                 to_sun.normalize()
@@ -674,7 +685,7 @@ fn main() {
             uniforms.model_matrix = body_model_matrix_unit(body, sim_clock.time);
             let before = render_buffers.screen_triangles.len();
             append_screen_triangles(
-                &icosphere_lods[ico_level],
+                body_mesh,
                 &uniforms,
                 &mut render_buffers.clip_vertices,
                 &mut render_buffers.screen_triangles,
@@ -690,7 +701,10 @@ fn main() {
         }
 
         // Dibujar nave (LOD0)
+        let ship_tris = ship_vertex_array.len() / 3;
+        tris_before_cull += ship_tris;
         if !frustum_culling || frustum.intersects_sphere(ship.position, ship.radius * 1.5) {
+            tris_after_cull += ship_tris;
             let ship_to_sun = sun_pos - ship.position;
             let ship_light = if ship_to_sun.length_sqr() > 1e-6 {
                 ship_to_sun.normalize()
@@ -763,6 +777,8 @@ fn main() {
             fragments,
             shader_calls,
             visible_pixels,
+            tris_before_cull,
+            tris_after_cull,
             width: framebuffer.width,
             height: framebuffer.height,
             threads,
@@ -805,14 +821,17 @@ fn main() {
             mode_str, override_str, alt_str
         ));
         overlay.push(format!(
-            "Icosfera(Z): L{} ({} tris) | Malla(M): {}",
+            "Icosfera(Z): L{} ({} tris) | Malla(M): {} | Frustum(X): {} ({}->{})",
             ico_level,
             icosphere_lods[ico_level].len() / 3,
             if matches!(mode, TriangleMode::Wireframe) {
                 "Wireframe"
             } else {
                 "Solido"
-            }
+            },
+            if frustum_culling { "ON" } else { "OFF" },
+            tris_before_cull,
+            tris_after_cull,
         ));
         if let Some(idx) = collision_body {
             overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
