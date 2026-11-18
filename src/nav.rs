@@ -159,6 +159,51 @@ pub fn apply_controls_in_frame(
     ship.velocity += ref_vel;
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scene::solar_system;
+
+    #[test]
+    fn switching_frames_produces_zero_position_or_velocity_jump() {
+        let bodies = solar_system();
+        let zebes = &bodies[1];
+        let time = 7.5_f32;
+        let planet_pos = body_position_at(zebes, time);
+        let r = effective_radius(zebes);
+
+        // Posición justo dentro del umbral de entrada (< 2.5 * r de altitud).
+        let pos_in = planet_pos + Vector3::new(0.0, 0.0, r + 2.0 * r);
+        let vel_world = Vector3::new(3.2, -1.4, 2.1);
+
+        let mut nav = NavState::new();
+        assert_eq!(nav.mode, NavMode::Global);
+
+        nav.update_mode(pos_in, &bodies, time);
+        assert_eq!(nav.mode, NavMode::Local(1));
+
+        let local_p = frame_position(pos_in, nav.mode, &bodies, time);
+        let local_v = frame_velocity(vel_world, nav.mode, &bodies, time);
+        let (round_p, round_v) = to_world_state(local_p, local_v, nav.mode, &bodies, time);
+        assert!((round_p - pos_in).length() < 1e-5);
+        assert!((round_v - vel_world).length() < 1e-5);
+
+        // En la banda de histéresis (2.75 * r) sigue en modo local.
+        let pos_hyst = planet_pos + Vector3::new(0.0, 0.0, r + 2.75 * r);
+        nav.update_mode(pos_hyst, &bodies, time);
+        assert_eq!(nav.mode, NavMode::Local(1));
+
+        // Al salir (> 3.0 * r) regresa a Global sin alterar el estado mundial.
+        let pos_out = planet_pos + Vector3::new(0.0, 0.0, r + 3.2 * r);
+        nav.update_mode(pos_out, &bodies, time);
+        assert_eq!(nav.mode, NavMode::Global);
+
+        let (global_p, global_v) = to_world_state(pos_out, vel_world, nav.mode, &bodies, time);
+        assert!((global_p - pos_out).length() < 1e-6);
+        assert!((global_v - vel_world).length() < 1e-6);
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct NearestBody {
     pub body_index: usize,
