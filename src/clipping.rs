@@ -127,3 +127,83 @@ pub fn clip_triangle_near(tri: &[ClipVertex; 3]) -> ClippedTriangles {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn mk_v(x: f32, y: f32, z: f32, w: f32, attr: f32) -> ClipVertex {
+        ClipVertex {
+            clip_pos: Vec4::new(x, y, z, w),
+            object_pos: Vector3::new(attr, attr * 2.0, 0.0),
+            world_pos: Vector3::new(attr, 0.0, 0.0),
+            normal: Vector3::new(0.0, 0.0, 1.0),
+            uv: [attr, 1.0 - attr],
+        }
+    }
+
+    #[test]
+    fn zero_vertices_behind_near_keeps_triangle() {
+        let tri = [
+            mk_v(-1.0, 0.0, 0.0, 2.0, 0.0),
+            mk_v(1.0, 0.0, 0.0, 2.0, 0.5),
+            mk_v(0.0, 1.0, 0.0, 2.0, 1.0),
+        ];
+        let clipped = clip_triangle_near(&tri);
+        assert_eq!(clipped.count, 1);
+    }
+
+    #[test]
+    fn all_vertices_behind_near_discards_triangle() {
+        let tri = [
+            mk_v(-1.0, 0.0, -3.0, 2.0, 0.0),
+            mk_v(1.0, 0.0, -4.0, 2.0, 0.5),
+            mk_v(0.0, 1.0, -2.5, 2.0, 1.0),
+        ];
+        let clipped = clip_triangle_near(&tri);
+        assert_eq!(clipped.count, 0);
+    }
+
+    #[test]
+    fn one_vertex_behind_near_splits_into_two_triangles_with_interpolated_attrs() {
+        // v0 detrás (z+w = -1), v1 y v2 delante (z+w = +1) -> t = 0.5 en las dos aristas cortadas
+        let tri = [
+            mk_v(0.0, 0.0, -2.0, 1.0, 0.0),
+            mk_v(2.0, 0.0, 0.0, 1.0, 1.0),
+            mk_v(0.0, 2.0, 0.0, 1.0, 1.0),
+        ];
+        let clipped = clip_triangle_near(&tri);
+        assert_eq!(clipped.count, 2);
+        for t in clipped.as_slice() {
+            for v in t {
+                assert!(v.clip_pos.z + v.clip_pos.w >= -1e-5);
+            }
+        }
+        // Debe contener vértices interpolados en z+w == 0 con attr == 0.5
+        let has_mid = clipped
+            .as_slice()
+            .iter()
+            .flatten()
+            .any(|v| (v.clip_pos.z + v.clip_pos.w).abs() < 1e-5 && (v.uv[0] - 0.5).abs() < 1e-5);
+        assert!(has_mid);
+    }
+
+    #[test]
+    fn two_vertices_behind_near_produces_one_triangle_with_interpolated_attrs() {
+        // v0 delante (z+w = +1), v1 detrás (z+w = -1 -> t=0.5), v2 detrás (z+w = -3 -> t=0.25)
+        let tri = [
+            mk_v(0.0, 0.0, 0.0, 1.0, 0.0),
+            mk_v(2.0, 0.0, -2.0, 1.0, 1.0),
+            mk_v(0.0, 2.0, -4.0, 1.0, 1.0),
+        ];
+        let clipped = clip_triangle_near(&tri);
+        assert_eq!(clipped.count, 1);
+        let out_tri = &clipped.as_slice()[0];
+        for v in out_tri {
+            assert!(v.clip_pos.z + v.clip_pos.w >= -1e-5);
+        }
+        assert!((out_tri[0].uv[0] - 0.5).abs() < 1e-5);
+        assert!((out_tri[1].uv[0] - 0.25).abs() < 1e-5);
+        assert!((out_tri[2].uv[0] - 0.0).abs() < 1e-5);
+    }
+}
