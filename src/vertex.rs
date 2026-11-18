@@ -1,6 +1,6 @@
 use raylib::prelude::Vector3;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Vertex {
     pub position: Vector3,
     pub normal: Vector3,

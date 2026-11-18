@@ -5,6 +5,8 @@
 //! hacia afuera (CCW), y lo subdivide recursivamente usando una caché de puntos
 //! medios por arista proyectados a la esfera unitaria para niveles 0..=5.
 
+use crate::noise::Noise;
+use crate::surface_map::planet_height;
 use crate::vertex::Vertex;
 use raylib::prelude::Vector3;
 use std::collections::HashMap;
@@ -115,8 +117,8 @@ impl IcoMesh {
             .positions
             .iter()
             .map(|&pos| {
-                let normal = pos.normalize();
-                Vertex::with_uv(normal, normal, spherical_uv(normal))
+                let dir = pos.normalize();
+                Vertex::with_uv(pos, dir, spherical_uv(dir))
             })
             .collect();
         self.indices
@@ -137,6 +139,77 @@ pub fn build_icosphere_lods() -> Vec<Vec<Vertex>> {
         }
     }
     levels
+}
+
+/// Desplaza cada vértice de la icosfera unitaria en dirección radial según `planet_height`.
+pub fn deform_icosphere(
+    unit_mesh: &IcoMesh,
+    noise: &Noise,
+    amplitude: f32,
+    frequency: f32,
+) -> IcoMesh {
+    if amplitude.abs() <= 1e-6 {
+        return unit_mesh.clone();
+    }
+    let positions = unit_mesh
+        .positions
+        .iter()
+        .map(|&p| {
+            let dir = p.normalize();
+            let h = planet_height(noise, dir, frequency);
+            dir * (1.0 + amplitude * h)
+        })
+        .collect();
+    IcoMesh {
+        positions,
+        indices: unit_mesh.indices.clone(),
+    }
+}
+
+/// Caché perezoso por nivel de subdivisión para mallas deformadas.
+#[derive(Clone, Debug)]
+pub struct DeformedIcosphereCache {
+    unit_meshes: [Option<IcoMesh>; MAX_ICOSPHERE_LEVEL + 1],
+    deformed_arrays: [Option<Vec<Vertex>>; MAX_ICOSPHERE_LEVEL + 1],
+    amplitude: f32,
+    frequency: f32,
+}
+
+impl DeformedIcosphereCache {
+    pub fn new(amplitude: f32, frequency: f32) -> Self {
+        Self {
+            unit_meshes: std::array::from_fn(|_| None),
+            deformed_arrays: std::array::from_fn(|_| None),
+            amplitude,
+            frequency,
+        }
+    }
+
+    pub fn invalidate(&mut self, amplitude: f32, frequency: f32) {
+        self.amplitude = amplitude;
+        self.frequency = frequency;
+        self.deformed_arrays.fill(None);
+    }
+
+    fn ensure_unit_mesh(&mut self, level: usize) -> &IcoMesh {
+        let lvl = level.min(MAX_ICOSPHERE_LEVEL);
+        if self.unit_meshes[lvl].is_none() {
+            self.unit_meshes[lvl] = Some(icosphere_level(lvl));
+        }
+        self.unit_meshes[lvl].as_ref().unwrap()
+    }
+
+    pub fn get_or_build(&mut self, level: usize, noise: &Noise) -> &[Vertex] {
+        let lvl = level.min(MAX_ICOSPHERE_LEVEL);
+        if self.deformed_arrays[lvl].is_none() {
+            let amp = self.amplitude;
+            let freq = self.frequency;
+            let unit = self.ensure_unit_mesh(lvl);
+            let deformed = deform_icosphere(unit, noise, amp, freq);
+            self.deformed_arrays[lvl] = Some(deformed.to_vertex_array());
+        }
+        self.deformed_arrays[lvl].as_deref().unwrap()
+    }
 }
 
 #[cfg(test)]
