@@ -101,7 +101,7 @@ impl PerfStats {
                 avg.fb_ms, avg.present_ms
             ),
             format!(
-                "Frags: {} | Shader: {} | Visibles: {}",
+                "Z-writes: {} | Shader: {} | Visibles: {}",
                 avg.fragments, avg.shader_calls, avg.visible_pixels
             ),
         ]
