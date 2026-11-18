@@ -16,6 +16,7 @@ pub enum BodyKind {
 pub struct SurfaceParams {
     pub seed: u32,
     pub noise_frequency: f32,
+    pub deformation_amplitude: f32,
     pub max_deformation: f32,
 }
 
@@ -52,6 +53,7 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 0,
                 noise_frequency: 4.0,
+                deformation_amplitude: 0.0,
                 max_deformation: 0.0,
             },
         },
@@ -70,7 +72,8 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 0,
                 noise_frequency: 4.0,
-                max_deformation: 0.0,
+                deformation_amplitude: 0.12,
+                max_deformation: 1.25 * 0.12,
             },
         },
         Body {
@@ -88,6 +91,7 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 0,
                 noise_frequency: 4.0,
+                deformation_amplitude: 0.0,
                 max_deformation: 0.0,
             },
         },
@@ -106,7 +110,8 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 1,
                 noise_frequency: 4.0,
-                max_deformation: 0.0,
+                deformation_amplitude: 0.10,
+                max_deformation: 0.10,
             },
         },
     ]
