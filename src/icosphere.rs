@@ -5,8 +5,10 @@
 //! hacia afuera (CCW), y lo subdivide recursivamente usando una caché de puntos
 //! medios por arista proyectados a la esfera unitaria para niveles 0..=5.
 
+use crate::vertex::Vertex;
 use raylib::prelude::Vector3;
 use std::collections::HashMap;
+use std::f32::consts::{PI, TAU};
 
 pub const MAX_ICOSPHERE_LEVEL: usize = 5;
 
@@ -95,6 +97,46 @@ pub fn icosphere_level(level: usize) -> IcoMesh {
         mesh = subdivide_icosphere(&mesh);
     }
     mesh
+}
+
+/// Calcula coordenadas UV esféricas `(u, v) in [0, 1]^2` para un punto unitario.
+pub fn spherical_uv(unit_pos: Vector3) -> [f32; 2] {
+    let p = unit_pos.normalize();
+    let u = (0.5 + p.z.atan2(p.x) / TAU).rem_euclid(1.0);
+    let v = (0.5 - p.y.clamp(-1.0, 1.0).asin() / PI).clamp(0.0, 1.0);
+    [u, v]
+}
+
+impl IcoMesh {
+    /// Expande la malla indexada en un arreglo de vértices por triángulo con
+    /// normales suaves unitarias y coordenadas esféricas.
+    pub fn to_vertex_array(&self) -> Vec<Vertex> {
+        let vertices: Vec<Vertex> = self
+            .positions
+            .iter()
+            .map(|&pos| {
+                let normal = pos.normalize();
+                Vertex::with_uv(normal, normal, spherical_uv(normal))
+            })
+            .collect();
+        self.indices
+            .iter()
+            .map(|&idx| vertices[idx].clone())
+            .collect()
+    }
+}
+
+/// Genera todos los niveles `0..=MAX_ICOSPHERE_LEVEL` listos para renderizar.
+pub fn build_icosphere_lods() -> Vec<Vec<Vertex>> {
+    let mut levels = Vec::with_capacity(MAX_ICOSPHERE_LEVEL + 1);
+    let mut mesh = base_icosahedron();
+    for level in 0..=MAX_ICOSPHERE_LEVEL {
+        levels.push(mesh.to_vertex_array());
+        if level < MAX_ICOSPHERE_LEVEL {
+            mesh = subdivide_icosphere(&mesh);
+        }
+    }
+    levels
 }
 
 #[cfg(test)]
