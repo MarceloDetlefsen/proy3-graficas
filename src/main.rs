@@ -14,6 +14,7 @@ mod perf;
 mod physics;
 mod primitive;
 mod rasterizer;
+mod rng;
 mod scene;
 mod shaders;
 mod ship;
