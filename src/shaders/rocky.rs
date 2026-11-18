@@ -5,7 +5,7 @@ use std::sync::Once;
 
 use crate::Uniforms;
 use crate::fragment::Fragment;
-use crate::noise;
+use crate::noise::{self, Noise};
 use crate::shaders::{diffuse_factor, surface_view};
 
 // Percentil inferior usado para remapear el campo y evitar una masa gris plana.
@@ -111,9 +111,9 @@ fn swirl_domain(mut p: Vector3) -> Vector3 {
     p
 }
 
-fn terrain_domain(object_pos: Vector3) -> Vector3 {
+fn terrain_domain(noise: &Noise, object_pos: Vector3) -> Vector3 {
     let p = swirl_domain(object_pos.normalize());
-    let warp = noise::fbm(p * WARP_FREQ, 3, 2.0, 0.5) * 2.0 - 1.0;
+    let warp = noise.fbm(p * WARP_FREQ, 3, 2.0, 0.5) * 2.0 - 1.0;
     let (sin_angle, cos_angle) = VEIN_ANGLE.sin_cos();
     let rotated = Vector3::new(
         p.x * cos_angle - p.y * sin_angle,
@@ -127,35 +127,39 @@ fn terrain_domain(object_pos: Vector3) -> Vector3 {
     )
 }
 
-fn raw_height_field(object_pos: Vector3) -> f32 {
-    let warped = terrain_domain(object_pos);
-    let broad_ridges = noise::ridged(warped, TERRAIN_OCTAVES, 2.0, 0.5).powf(RIDGE_SHARPNESS);
-    let fine_ridges = noise::ridged(warped * RIDGE_DETAIL_FREQ, 3, 2.0, 0.5).powf(RIDGE_SHARPNESS);
+fn raw_height_field(noise: &Noise, object_pos: Vector3) -> f32 {
+    let warped = terrain_domain(noise, object_pos);
+    let broad_ridges = noise.ridged(warped, TERRAIN_OCTAVES, 2.0, 0.5).powf(RIDGE_SHARPNESS);
+    let fine_ridges = noise
+        .ridged(warped * RIDGE_DETAIL_FREQ, 3, 2.0, 0.5)
+        .powf(RIDGE_SHARPNESS);
     (broad_ridges * (1.0 - RIDGE_DETAIL_AMP) + fine_ridges * RIDGE_DETAIL_AMP).clamp(0.0, 1.0)
 }
 
-fn fine_ridge_field(object_pos: Vector3) -> f32 {
-    let warped = terrain_domain(object_pos);
-    noise::ridged(warped * RIDGE_DETAIL_FREQ, 3, 2.0, 0.5).powf(RIDGE_SHARPNESS)
+fn fine_ridge_field(noise: &Noise, object_pos: Vector3) -> f32 {
+    let warped = terrain_domain(noise, object_pos);
+    noise
+        .ridged(warped * RIDGE_DETAIL_FREQ, 3, 2.0, 0.5)
+        .powf(RIDGE_SHARPNESS)
 }
 
-pub fn height_field(object_pos: Vector3) -> f32 {
-    noise::remap(raw_height_field(object_pos), H_LOW, H_HIGH, 0.0, 1.0).clamp(0.0, 1.0)
+pub fn height_field(noise: &Noise, object_pos: Vector3) -> f32 {
+    noise::remap(raw_height_field(noise, object_pos), H_LOW, H_HIGH, 0.0, 1.0).clamp(0.0, 1.0)
 }
 
-pub fn biome_mask(object_pos: Vector3) -> f32 {
-    let value = noise::fbm(object_pos.normalize() * BIOME_FREQ, 3, 2.0, 0.5);
+pub fn biome_mask(noise: &Noise, object_pos: Vector3) -> f32 {
+    let value = noise.fbm(object_pos.normalize() * BIOME_FREQ, 3, 2.0, 0.5);
     noise::smoothstep(BIOME_THRESHOLD, BIOME_THRESHOLD + BIOME_SOFTNESS, value)
 }
 
-fn sea_mask(object_pos: Vector3, height: f32) -> f32 {
+fn sea_mask(noise: &Noise, object_pos: Vector3, height: f32) -> f32 {
     let basin = 1.0 - noise::smoothstep(SEA_LEVEL, SEA_LEVEL + 0.09, height);
-    let patches = noise::fbm(object_pos.normalize() * 4.5, 3, 2.0, 0.5);
+    let patches = noise.fbm(object_pos.normalize() * 4.5, 3, 2.0, 0.5);
     basin * noise::smoothstep(0.46, 0.62, patches)
 }
 
-pub fn crack_mask(object_pos: Vector3) -> f32 {
-    let fine_ridge = fine_ridge_field(object_pos);
+pub fn crack_mask(noise: &Noise, object_pos: Vector3) -> f32 {
+    let fine_ridge = fine_ridge_field(noise, object_pos);
     noise::smoothstep(
         CRACK_THRESHOLD,
         CRACK_THRESHOLD + CRACK_SOFTNESS,
@@ -163,7 +167,7 @@ pub fn crack_mask(object_pos: Vector3) -> f32 {
     )
 }
 
-pub fn cloud_mask(object_pos: Vector3, time: f32) -> f32 {
+pub fn cloud_mask(noise: &Noise, object_pos: Vector3, time: f32) -> f32 {
     let p = object_pos.normalize();
     let angle = time * CLOUD_SPEED;
     let (sin_angle, cos_angle) = angle.sin_cos();
@@ -172,7 +176,12 @@ pub fn cloud_mask(object_pos: Vector3, time: f32) -> f32 {
         p.y,
         p.x * sin_angle + p.z * cos_angle,
     );
-    let cloud_noise = noise::fbm4(rotated * CLOUD_FREQ, time * 0.12, 3, 2.0, 0.5);
+    let cloud_noise = noise.fbm(
+        rotated * CLOUD_FREQ + Vector3::new(0.0, time * 0.08, time * 0.05),
+        3,
+        2.0,
+        0.5,
+    );
     noise::smoothstep(CLOUD_COVERAGE, CLOUD_COVERAGE + 0.14, cloud_noise)
 }
 
@@ -180,7 +189,7 @@ fn percentile(sorted: &[f32], fraction: f32) -> f32 {
     sorted[(fraction * (sorted.len() - 1) as f32) as usize]
 }
 
-fn print_statistics_once() {
+fn print_statistics_once(noise: &Noise) {
     PRINTED_STATS.call_once(|| {
         let sample_count = 4096;
         let golden_angle = std::f32::consts::PI * (3.0 - 5.0_f32.sqrt());
@@ -195,13 +204,13 @@ fn print_statistics_once() {
             let radius = (1.0 - y * y).sqrt();
             let angle = golden_angle * i as f32;
             let point = Vector3::new(radius * angle.cos(), y, radius * angle.sin());
-            let raw = raw_height_field(point);
+            let raw = raw_height_field(noise, point);
             raw_values.push(raw);
-            let height = height_field(point);
+            let height = height_field(noise, point);
             height_values.push(height);
-            sea_values.push(sea_mask(point, height));
-            biome_values.push(biome_mask(point));
-            fine_ridges.push(fine_ridge_field(point));
+            sea_values.push(sea_mask(noise, point, height));
+            biome_values.push(biome_mask(noise, point));
+            fine_ridges.push(fine_ridge_field(noise, point));
         }
 
         raw_values.sort_by(f32::total_cmp);
@@ -273,28 +282,45 @@ fn height_color(height: f32) -> Vector3 {
     }
 }
 
-fn surface_color(object_pos: Vector3, height: f32) -> Vector3 {
+pub fn sample_static(noise: &Noise, dir: Vector3) -> [f32; 7] {
+    let p = dir.normalize();
+    let height = height_field(noise, p);
+    let sea = sea_mask(noise, p, height);
+    let biome = biome_mask(noise, p);
+    let crack = crack_mask(noise, p);
     let base = height_color(height);
-    let sea = sea_mask(object_pos, height);
     let with_sea = noise::mix_color(base, color(COLOR_SEA), sea);
-    let biome = biome_mask(object_pos);
-    let pink_noise = noise::fbm(object_pos.normalize() * 8.0, 3, 2.0, 0.5);
+    let pink_noise = noise.fbm(p * 8.0, 3, 2.0, 0.5);
     let pink_amount = noise::smoothstep(0.55, 0.72, pink_noise);
     let biome_color = noise::mix_color(color(COLOR_TOXIC_GREEN), color(COLOR_PINK), pink_amount);
     let with_biome = noise::mix_color(with_sea, biome_color, biome);
-    noise::mix_color(with_biome, color(COLOR_CRACK), crack_mask(object_pos))
+    let albedo = noise::mix_color(with_biome, color(COLOR_CRACK), crack);
+    [albedo.x, albedo.y, albedo.z, height, sea, crack, biome]
 }
 
-fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vector3 {
+fn tangent_pair(p: Vector3) -> (Vector3, Vector3) {
+    let ref_axis = if p.y.abs() < 0.9 {
+        Vector3::new(0.0, 1.0, 0.0)
+    } else {
+        Vector3::new(1.0, 0.0, 0.0)
+    };
+    let t1 = ref_axis.cross(p).normalize();
+    let t2 = p.cross(t1).normalize();
+    (t1, t2)
+}
+
+fn bumped_normal_from_heights(
+    fragment: &Fragment,
+    uniforms: &Uniforms,
+    height: f32,
+    h1: f32,
+    h2: f32,
+) -> Vector3 {
     let p = fragment.object_pos.normalize();
-    let dx = Vector3::new(BUMP_DELTA, 0.0, 0.0);
-    let dy = Vector3::new(0.0, BUMP_DELTA, 0.0);
-    let dz = Vector3::new(0.0, 0.0, BUMP_DELTA);
-    let gradient = Vector3::new(
-        (height_field(p + dx) - height) / BUMP_DELTA,
-        (height_field(p + dy) - height) / BUMP_DELTA,
-        (height_field(p + dz) - height) / BUMP_DELTA,
-    ) * BUMP_GRADIENT_SCALE;
+    let (t1, t2) = tangent_pair(p);
+    let g1 = (h1 - height) / BUMP_DELTA;
+    let g2 = (h2 - height) / BUMP_DELTA;
+    let gradient = (t1 * g1 + t2 * g2) * BUMP_GRADIENT_SCALE;
     // La altura aumenta en la dirección del gradiente; la normal de una superficie
     // elevada se inclina contra él. Este signo mantiene las crestas claras hacia la luz.
     let bump_fade = noise::smoothstep(0.12, 0.48, crate::shaders::surface_mu(fragment, uniforms));
@@ -302,66 +328,65 @@ fn bumped_normal(fragment: &Fragment, uniforms: &Uniforms, height: f32) -> Vecto
     uniforms.model_matrix.transform_normal(object_normal)
 }
 
-fn lit_surface_color(
-    fragment: &Fragment,
-    uniforms: &Uniforms,
-    height: f32,
-    base: Vector3,
-) -> Vector3 {
-    let sea = sea_mask(fragment.object_pos, height);
-    let normal = if sea > 0.5 {
-        fragment.normal.normalize()
-    } else {
-        bumped_normal(fragment, uniforms, height)
-    };
-    let diffuse = diffuse_factor(normal, uniforms);
-    let mut result = base * (AMBIENT + (1.0 - AMBIENT) * diffuse);
-
-    let view = surface_view(fragment, uniforms);
-    let half_vector = (uniforms.light_dir + view).normalize();
-    let specular = normal.dot(half_vector).max(0.0).powf(SEA_SPEC_POWER) * SEA_SPEC_STRENGTH * sea;
-    result += Vector3::new(1.0, 1.0, 1.0) * specular;
-
-    let crack = crack_mask(fragment.object_pos);
-    let n_dot_l = diffuse_factor(fragment.normal, uniforms);
-    result += color(COLOR_CRACK) * (crack * LAVA_GLOW * (1.0 - n_dot_l));
-    result
-}
-
 fn lit_cloud_color(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     let diffuse = diffuse_factor(fragment.normal, uniforms);
     color(CLOUD_COLOR) * (AMBIENT + (1.0 - AMBIENT) * diffuse)
 }
 
-pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
-    print_statistics_once();
-    let height = height_field(fragment.object_pos);
+pub fn shade_from_static(
+    fragment: &Fragment,
+    uniforms: &Uniforms,
+    s: [f32; 7],
+    bump_heights: (f32, f32),
+) -> Vector3 {
+    let [r, g, b, height, sea, crack, biome] = s;
     match uniforms.rocky_debug_view {
-        1 => {
-            let value = biome_mask(fragment.object_pos);
-            Vector3::new(value, value, value)
-        }
-        2 => {
-            let value = crack_mask(fragment.object_pos);
-            Vector3::new(value, value, value)
-        }
+        1 => Vector3::new(biome, biome, biome),
+        2 => Vector3::new(crack, crack, crack),
         3 => {
-            let base = surface_color(fragment.object_pos, height);
-            let surface = lit_surface_color(fragment, uniforms, height, base);
-            let clouds = cloud_mask(fragment.object_pos, uniforms.time);
+            let base = Vector3::new(r, g, b);
+            let normal = if sea > 0.5 {
+                fragment.normal.normalize()
+            } else {
+                bumped_normal_from_heights(fragment, uniforms, height, bump_heights.0, bump_heights.1)
+            };
+            let diffuse = diffuse_factor(normal, uniforms);
+            let mut surface = base * (AMBIENT + (1.0 - AMBIENT) * diffuse);
+
+            let view = surface_view(fragment, uniforms);
+            let half_vector = (uniforms.light_dir + view).normalize();
+            let specular =
+                normal.dot(half_vector).max(0.0).powf(SEA_SPEC_POWER) * SEA_SPEC_STRENGTH * sea;
+            surface += Vector3::new(1.0, 1.0, 1.0) * specular;
+
+            let n_dot_l = diffuse_factor(fragment.normal, uniforms);
+            let lava = color(COLOR_CRACK) * (crack * LAVA_GLOW * (1.0 - n_dot_l));
+            surface += lava;
+
+            let clouds = cloud_mask(&uniforms.noise, fragment.object_pos, uniforms.time);
             let cloud_alpha = clouds * CLOUD_OPACITY;
             let cloud_color = lit_cloud_color(fragment, uniforms);
             let mut result = noise::mix_color(surface, cloud_color, cloud_alpha);
-
-            // La nube oscurece la lava, pero conserva una fracción de su brillo nocturno
-            // para que las grietas sigan leyendo debajo de la capa.
-            let lava = color(COLOR_CRACK)
-                * (crack_mask(fragment.object_pos)
-                    * LAVA_GLOW
-                    * (1.0 - diffuse_factor(fragment.normal, uniforms)));
             result += lava * (clouds * 0.18);
             result
         }
         _ => Vector3::new(height, height, height),
+    }
+}
+
+pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
+    print_statistics_once(&uniforms.noise);
+    let p = fragment.object_pos.normalize();
+    let (t1, t2) = tangent_pair(p);
+    if let Some(baked) = uniforms.baked.as_ref() {
+        let s = baked.rocky.sample_dir(p);
+        let h1 = baked.rocky.sample_dir(p + t1 * BUMP_DELTA)[3];
+        let h2 = baked.rocky.sample_dir(p + t2 * BUMP_DELTA)[3];
+        shade_from_static(fragment, uniforms, s, (h1, h2))
+    } else {
+        let s = sample_static(&uniforms.noise, p);
+        let h1 = height_field(&uniforms.noise, p + t1 * BUMP_DELTA);
+        let h2 = height_field(&uniforms.noise, p + t2 * BUMP_DELTA);
+        shade_from_static(fragment, uniforms, s, (h1, h2))
     }
 }

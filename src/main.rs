@@ -4,22 +4,29 @@ mod framebuffer;
 mod math;
 mod noise;
 mod obj;
+mod perf;
 mod primitive;
 mod rasterizer;
 mod scene;
 mod shaders;
-mod triangle;
+mod surface_map;
 mod vertex;
 
 use camera::Camera;
 use framebuffer::Framebuffer;
 use math::Mat4;
+use noise::Noise;
 use obj::load_obj;
-use primitive::primitive_assembly;
-use rasterizer::{TriangleMode, VIEWPORT_HEIGHT, VIEWPORT_WIDTH, rasterize};
+use perf::{FrameSample, PerfStats};
+use primitive::{ScreenTriangle, assemble_screen_triangles};
+use rasterizer::{
+    TILE_SIZE, TileGrid, TriangleMode, WINDOW_HEIGHT, WINDOW_WIDTH, rasterize_visibility_tiled,
+    render_wireframe, shade_visibility_tiled,
+};
 use raylib::prelude::*;
 use scene::build_model_matrix;
-use shaders::{Shader, fragment_shader, shader_name, vertex_shader};
+use shaders::{Shader, shader_name};
+use surface_map::{BakedMaps, DEFAULT_BAKE_HEIGHT, DEFAULT_BAKE_WIDTH};
 use std::fs;
 use std::path::PathBuf;
 
@@ -33,6 +40,10 @@ pub struct Uniforms {
     pub debug_noise: bool,
     pub noise_frequency: f32,
     pub rocky_debug_view: i32,
+    pub viewport_width: i32,
+    pub viewport_height: i32,
+    pub noise: Noise,
+    pub baked: Option<BakedMaps>,
 }
 
 struct CaptureOptions {
@@ -134,43 +145,88 @@ fn next_capture_path() -> PathBuf {
     }
 }
 
+struct RenderBuffers {
+    transformed_vertices: Vec<vertex::Vertex>,
+    screen_triangles: Vec<ScreenTriangle>,
+    tile_grid: TileGrid,
+}
+
+impl RenderBuffers {
+    fn new(vertex_capacity: usize) -> Self {
+        Self {
+            transformed_vertices: Vec::with_capacity(vertex_capacity),
+            screen_triangles: Vec::with_capacity(vertex_capacity / 3),
+            tile_grid: TileGrid::new(WINDOW_WIDTH as usize, WINDOW_HEIGHT as usize),
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn render(
     framebuffer: &mut Framebuffer,
     uniforms: &Uniforms,
     vertex_array: &[vertex::Vertex],
+    buffers: &mut RenderBuffers,
     mode: TriangleMode,
     shader: Shader,
-) {
-    let transformed_vertices: Vec<vertex::Vertex> = vertex_array
-        .iter()
-        .map(|vertex| vertex_shader(vertex, uniforms))
-        .collect();
+    backface_culling: bool,
+    threads: usize,
+) -> FrameSample {
+    let t_vtx = std::time::Instant::now();
+    assemble_screen_triangles(
+        vertex_array,
+        uniforms,
+        &mut buffers.transformed_vertices,
+        &mut buffers.screen_triangles,
+    );
+    let vertex_ms = t_vtx.elapsed().as_secs_f64() * 1000.0;
 
-    // Solución temporal: descartar triángulos con algún vértice detrás del plano near;
-    // reemplazar en el issue de clipping.
-    let triangles: Vec<[vertex::Vertex; 3]> = primitive_assembly(&transformed_vertices)
-        .into_iter()
-        .filter(|tri| {
-            tri.iter()
-                .all(|v| v.clip_w > 0.0 && v.transformed_position.z >= 0.0)
-        })
-        .collect();
-    let fragments = rasterize(&triangles, mode);
+    let (raster_ms, shading_ms, fragments, shader_calls, visible_pixels) = match mode {
+        TriangleMode::FilledBarycentric => {
+            let t_rast = std::time::Instant::now();
+            let writes = rasterize_visibility_tiled(
+                &buffers.screen_triangles,
+                &mut buffers.tile_grid,
+                framebuffer,
+                backface_culling,
+                threads,
+            );
+            let _ = TILE_SIZE;
+            let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
 
-    for fragment in fragments {
-        let fragment_color = fragment_shader(&fragment, shader, uniforms);
-        let color = Color::new(
-            (fragment_color.x.clamp(0.0, 1.0) * 255.0) as u8,
-            (fragment_color.y.clamp(0.0, 1.0) * 255.0) as u8,
-            (fragment_color.z.clamp(0.0, 1.0) * 255.0) as u8,
-            255,
-        );
-        framebuffer.set_pixel_depth(
-            fragment.position.x as i32,
-            fragment.position.y as i32,
-            fragment.depth,
-            color,
-        );
+            let t_shade = std::time::Instant::now();
+            let (calls, visible) = shade_visibility_tiled(
+                &buffers.screen_triangles,
+                framebuffer,
+                shader,
+                uniforms,
+                threads,
+            );
+            let shading_ms = t_shade.elapsed().as_secs_f64() * 1000.0;
+            (raster_ms, shading_ms, writes, calls, visible)
+        }
+        TriangleMode::Wireframe => {
+            let t_wire = std::time::Instant::now();
+            let (calls, visible) =
+                render_wireframe(&buffers.screen_triangles, framebuffer, shader, uniforms);
+            let wire_ms = t_wire.elapsed().as_secs_f64() * 1000.0;
+            (0.0, wire_ms, calls, calls, visible)
+        }
+    };
+
+    FrameSample {
+        vertex_ms,
+        raster_ms,
+        shading_ms,
+        fb_ms: 0.0,
+        present_ms: 0.0,
+        total_ms: 0.0,
+        fragments,
+        shader_calls,
+        visible_pixels,
+        width: framebuffer.width,
+        height: framebuffer.height,
+        threads,
     }
 }
 
@@ -199,15 +255,27 @@ fn main() {
         .max(max.z - min.z)
         .max(1e-4);
     let base_scale = 2.0 / max_extent;
-    let aspect = VIEWPORT_WIDTH as f32 / VIEWPORT_HEIGHT as f32;
+    let internal_width = WINDOW_WIDTH;
+    let internal_height = WINDOW_HEIGHT;
 
     let mut framebuffer = Framebuffer::new(
-        VIEWPORT_WIDTH as u32,
-        VIEWPORT_HEIGHT as u32,
+        internal_width as u32,
+        internal_height as u32,
         Color::new(15, 18, 28, 255),
     );
 
+    let noise = Noise::new(0);
+    let bake_start = std::time::Instant::now();
+    let mut baked = BakedMaps::bake(&noise, DEFAULT_BAKE_WIDTH, DEFAULT_BAKE_HEIGHT);
+    println!(
+        "Mapas estáticos horneados ({}x{}) en {:.2} ms",
+        DEFAULT_BAKE_WIDTH,
+        DEFAULT_BAKE_HEIGHT,
+        bake_start.elapsed().as_secs_f64() * 1000.0
+    );
+
     if let Some(options) = parse_capture_options() {
+        let aspect = internal_width as f32 / internal_height as f32;
         let model_matrix = build_model_matrix(&obj, 0.0, 0.0, base_scale);
         let cam = Camera::new(
             Vector3::new(0.0, 0.0, 3.0),
@@ -226,14 +294,25 @@ fn main() {
             debug_noise: false,
             noise_frequency: 4.0,
             rocky_debug_view: options.view,
+            viewport_width: internal_width,
+            viewport_height: internal_height,
+            noise: noise.clone(),
+            baked: Some(baked.clone()),
         };
+        let mut render_buffers = RenderBuffers::new(vertex_array.len());
         framebuffer.clear();
+        let default_threads = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
         render(
             &mut framebuffer,
             &uniforms,
             &vertex_array,
+            &mut render_buffers,
             TriangleMode::FilledBarycentric,
             options.shader,
+            true,
+            default_threads,
         );
         if let Some(parent) = options.output.parent() {
             fs::create_dir_all(parent).expect("No se pudo crear el directorio de captura");
@@ -247,7 +326,7 @@ fn main() {
     }
 
     let (mut window, thread) = raylib::init()
-        .size(VIEWPORT_WIDTH, VIEWPORT_HEIGHT)
+        .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title("Proyecto 3 - Base del sistema solar")
         .build();
     window.set_target_fps(60);
@@ -262,12 +341,58 @@ fn main() {
     let mut noise_frequency = 4.0_f32;
     let mut rocky_debug_view = 3_i32;
     let mut light_angle = 0.0_f32;
+    let mut backface_culling = true;
+    let res_scales = [2_u32, 3, 1];
+    let mut res_scale_idx = 0_usize; // 1/2 por defecto (400x300)
+    let mut internal_width = WINDOW_WIDTH / res_scales[res_scale_idx] as i32;
+    let mut internal_height = WINDOW_HEIGHT / res_scales[res_scale_idx] as i32;
+    framebuffer.resize(internal_width as u32, internal_height as u32);
+    let max_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let mut thread_options: Vec<usize> = [1, 2, 4, 8, 16]
+        .into_iter()
+        .filter(|&n| n < max_threads)
+        .collect();
+    thread_options.push(max_threads);
+    let mut thread_idx = thread_options.len() - 1;
+    let mut threads = thread_options[thread_idx];
     let orbit_speed = 1.8_f32;
     let light_speed = 1.8_f32;
+    let mut perf_stats = PerfStats::new();
+    let mut render_buffers = RenderBuffers::new(vertex_array.len());
 
     while !window.window_should_close() {
+        let frame_start = std::time::Instant::now();
         let dt = window.get_frame_time();
         time += dt;
+        if window.is_key_pressed(KeyboardKey::KEY_F3) {
+            perf_stats.enabled = !perf_stats.enabled;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_C) {
+            backface_culling = !backface_culling;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_T) {
+            thread_idx = (thread_idx + 1) % thread_options.len();
+            threads = thread_options[thread_idx];
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_K) {
+            let t_bake = std::time::Instant::now();
+            baked = BakedMaps::bake(&noise, DEFAULT_BAKE_WIDTH, DEFAULT_BAKE_HEIGHT);
+            println!(
+                "Mapas re-horneados ({}x{}) en {:.2} ms",
+                DEFAULT_BAKE_WIDTH,
+                DEFAULT_BAKE_HEIGHT,
+                t_bake.elapsed().as_secs_f64() * 1000.0
+            );
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_R) {
+            res_scale_idx = (res_scale_idx + 1) % res_scales.len();
+            let div = res_scales[res_scale_idx] as i32;
+            internal_width = WINDOW_WIDTH / div;
+            internal_height = WINDOW_HEIGHT / div;
+            framebuffer.resize(internal_width as u32, internal_height as u32);
+        }
         if window.is_key_pressed(KeyboardKey::KEY_W) {
             mode = TriangleMode::Wireframe;
         }
@@ -316,6 +441,7 @@ fn main() {
         }
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 0.4).clamp(1.2, 20.0);
 
+        let aspect = internal_width as f32 / internal_height as f32;
         let model_matrix = build_model_matrix(&obj, 0.0, 0.0, base_scale);
         let cam_pos = Vector3::new(
             cam_distance * cam_pitch.cos() * cam_yaw.sin(),
@@ -341,10 +467,26 @@ fn main() {
             debug_noise,
             noise_frequency,
             rocky_debug_view,
+            viewport_width: internal_width,
+            viewport_height: internal_height,
+            noise: noise.clone(),
+            baked: Some(baked.clone()),
         };
 
+        let t_clear = std::time::Instant::now();
         framebuffer.clear();
-        render(&mut framebuffer, &uniforms, &vertex_array, mode, shader);
+        let clear_ms = t_clear.elapsed().as_secs_f64() * 1000.0;
+        let mut sample = render(
+            &mut framebuffer,
+            &uniforms,
+            &vertex_array,
+            &mut render_buffers,
+            mode,
+            shader,
+            backface_culling,
+            threads,
+        );
+        sample.fb_ms += clear_ms;
         if capture_requested {
             let capture_path = next_capture_path();
             framebuffer.render_to_file(capture_path.to_str().expect("Ruta de captura inválida"));
@@ -352,15 +494,22 @@ fn main() {
         }
         let debug_label = if debug_noise { " | DEBUG FBM" } else { "" };
         let label = format!(
-            "{}{} | Rocky: {} | Luz: ({:.2},{:.2},{:.2}) | Noise freq: {:.2}",
+            "{}{} | Rocky: {} | Cull(C): {} | Noise: {:.2}",
             shader_name(shader),
             debug_label,
             ["altura", "bioma", "grietas", "color"][rocky_debug_view as usize],
-            light_dir.x,
-            light_dir.y,
-            light_dir.z,
+            if backface_culling { "ON" } else { "OFF" },
             noise_frequency,
         );
-        framebuffer.draw_in_window(&mut window, &thread, &label);
+        let overlay = if perf_stats.enabled {
+            perf_stats.overlay_lines()
+        } else {
+            Vec::new()
+        };
+        let t_pres = std::time::Instant::now();
+        framebuffer.draw_in_window(&mut window, &thread, &label, &overlay);
+        sample.present_ms = t_pres.elapsed().as_secs_f64() * 1000.0;
+        sample.total_ms = frame_start.elapsed().as_secs_f64() * 1000.0;
+        perf_stats.push(sample);
     }
 }

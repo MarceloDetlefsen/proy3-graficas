@@ -6,38 +6,80 @@ use std::fs::File;
 use std::io::{BufWriter, Write};
 use std::path::Path;
 
+pub const INVALID_TRI_ID: u32 = u32::MAX;
+
 pub struct Framebuffer {
     pub width: u32,
     pub height: u32,
-    color_buffer: Image,
-    depth_buffer: Vec<f32>,
+    pub color_pixels: Vec<u8>,
+    pub depth_buffer: Vec<f32>,
+    pub tri_id_buffer: Vec<u32>,
     background_color: Color,
     pub current_color: Color,
+    texture: Option<Texture2D>,
 }
 
 impl Framebuffer {
     pub fn new(width: u32, height: u32, background_color: Color) -> Self {
-        let color_buffer = Image::gen_image_color(width as i32, height as i32, background_color);
+        let len = (width * height) as usize;
+        let mut color_pixels = vec![0u8; len * 4];
+        let bg = [
+            background_color.r,
+            background_color.g,
+            background_color.b,
+            background_color.a,
+        ];
+        for px in color_pixels.as_chunks_mut::<4>().0 {
+            *px = bg;
+        }
 
         Self {
             width,
             height,
-            color_buffer,
-            depth_buffer: vec![f32::INFINITY; (width * height) as usize],
+            color_pixels,
+            depth_buffer: vec![f32::INFINITY; len],
+            tri_id_buffer: vec![INVALID_TRI_ID; len],
             background_color,
             current_color: Color::WHITE,
+            texture: None,
         }
     }
 
     pub fn clear(&mut self) {
-        self.color_buffer =
-            Image::gen_image_color(self.width as i32, self.height as i32, self.background_color);
+        let bg = [
+            self.background_color.r,
+            self.background_color.g,
+            self.background_color.b,
+            self.background_color.a,
+        ];
+        for px in self.color_pixels.as_chunks_mut::<4>().0 {
+            *px = bg;
+        }
         self.depth_buffer.fill(f32::INFINITY);
+        self.tri_id_buffer.fill(INVALID_TRI_ID);
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) {
+        if self.width == width && self.height == height {
+            return;
+        }
+        let len = (width * height) as usize;
+        self.width = width;
+        self.height = height;
+        self.color_pixels = vec![0u8; len * 4];
+        self.depth_buffer = vec![f32::INFINITY; len];
+        self.tri_id_buffer = vec![INVALID_TRI_ID; len];
+        self.texture = None;
+        self.clear();
     }
 
     pub fn set_pixel(&mut self, x: i32, y: i32, color: Color) {
         if x >= 0 && y >= 0 && x < self.width as i32 && y < self.height as i32 {
-            self.color_buffer.draw_pixel(x, y, color);
+            let idx = (y as usize * self.width as usize + x as usize) * 4;
+            self.color_pixels[idx] = color.r;
+            self.color_pixels[idx + 1] = color.g;
+            self.color_pixels[idx + 2] = color.b;
+            self.color_pixels[idx + 3] = color.a;
         }
     }
 
@@ -52,12 +94,29 @@ impl Framebuffer {
         }
 
         self.depth_buffer[index] = depth;
-        self.color_buffer.draw_pixel(x, y, color);
+        let p = index * 4;
+        self.color_pixels[p] = color.r;
+        self.color_pixels[p + 1] = color.g;
+        self.color_pixels[p + 2] = color.b;
+        self.color_pixels[p + 3] = color.a;
         true
     }
 
     pub fn pixel_color(&self, x: i32, y: i32) -> Color {
-        self.color_buffer.get_color(x, y)
+        let idx = (y as usize * self.width as usize + x as usize) * 4;
+        Color::new(
+            self.color_pixels[idx],
+            self.color_pixels[idx + 1],
+            self.color_pixels[idx + 2],
+            self.color_pixels[idx + 3],
+        )
+    }
+
+    pub fn visible_pixel_count(&self) -> usize {
+        self.depth_buffer
+            .iter()
+            .filter(|&&depth| depth < f32::INFINITY)
+            .count()
     }
 
     pub fn point(&mut self, point: Vector2) {
@@ -78,16 +137,59 @@ impl Framebuffer {
         {
             self.render_to_bmp_file(filename);
         } else {
-            self.color_buffer.export_image(filename);
+            let mut image = Image::gen_image_color(
+                self.width as i32,
+                self.height as i32,
+                self.background_color,
+            );
+            for y in 0..self.height as i32 {
+                for x in 0..self.width as i32 {
+                    image.draw_pixel(x, y, self.pixel_color(x, y));
+                }
+            }
+            image.export_image(filename);
         }
     }
 
-    pub fn draw_in_window(&self, window: &mut RaylibHandle, thread: &RaylibThread, label: &str) {
-        if let Ok(texture) = window.load_texture_from_image(thread, &self.color_buffer) {
+    pub fn draw_in_window(
+        &mut self,
+        window: &mut RaylibHandle,
+        thread: &RaylibThread,
+        label: &str,
+        overlay: &[String],
+    ) {
+        if self.texture.is_none() {
+            let image = Image::gen_image_color(
+                self.width as i32,
+                self.height as i32,
+                self.background_color,
+            );
+            if let Ok(tex) = window.load_texture_from_image(thread, &image) {
+                tex.set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
+                self.texture = Some(tex);
+            }
+        }
+        let win_w = window.get_screen_width() as f32;
+        let win_h = window.get_screen_height() as f32;
+        let scale = (win_w / self.width as f32).min(win_h / self.height as f32);
+        let dst_w = self.width as f32 * scale;
+        let dst_h = self.height as f32 * scale;
+        let dst = Rectangle::new((win_w - dst_w) * 0.5, (win_h - dst_h) * 0.5, dst_w, dst_h);
+        let src = Rectangle::new(0.0, 0.0, self.width as f32, self.height as f32);
+
+        if let Some(texture) = self.texture.as_mut() {
+            let _ = texture.update_texture(&self.color_pixels);
             let mut drawing = window.begin_drawing(thread);
             drawing.clear_background(Color::BLACK);
-            drawing.draw_texture(&texture, 0, 0, Color::WHITE);
+            drawing.draw_texture_pro(texture, src, dst, Vector2::zero(), 0.0, Color::WHITE);
             drawing.draw_text(label, 16, 16, 20, Color::WHITE);
+            if !overlay.is_empty() {
+                let box_h = 16 + overlay.len() as i32 * 20;
+                drawing.draw_rectangle(12, 44, 460, box_h, Color::new(0, 0, 0, 175));
+                for (i, line) in overlay.iter().enumerate() {
+                    drawing.draw_text(line, 20, 52 + i as i32 * 20, 16, Color::GREEN);
+                }
+            }
         }
     }
 
@@ -154,7 +256,7 @@ impl Framebuffer {
         let padding = [0u8; 3];
         for y in (0..height).rev() {
             for x in 0..width {
-                let color = self.color_buffer.get_color(x as i32, y as i32);
+                let color = self.pixel_color(x as i32, y as i32);
                 writer
                     .write_all(&[color.b, color.g, color.r])
                     .expect("failed to write BMP pixel data");

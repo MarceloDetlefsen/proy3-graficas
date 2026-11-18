@@ -3,13 +3,11 @@ use raylib::prelude::*;
 use crate::Uniforms;
 use crate::fragment::Fragment;
 use crate::math::Vec4;
-use crate::noise;
-use crate::rasterizer::{VIEWPORT_HEIGHT, VIEWPORT_WIDTH};
 use crate::vertex::Vertex;
 
-mod gas_giant;
-mod rocky;
-mod star;
+pub mod gas_giant;
+pub mod rocky;
+pub mod star;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy)]
@@ -33,8 +31,8 @@ pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     let ndc_y = clip.y * inv_w;
     let ndc_z = clip.z * inv_w;
 
-    let screen_x = (ndc_x * 0.5 + 0.5) * VIEWPORT_WIDTH as f32;
-    let screen_y = (0.5 - ndc_y * 0.5) * VIEWPORT_HEIGHT as f32;
+    let screen_x = (ndc_x * 0.5 + 0.5) * uniforms.viewport_width as f32;
+    let screen_y = (0.5 - ndc_y * 0.5) * uniforms.viewport_height as f32;
     let depth = ndc_z * 0.5 + 0.5;
 
     let mut result = vertex.clone();
@@ -69,7 +67,7 @@ pub fn diffuse_factor(normal: Vector3, uniforms: &Uniforms) -> f32 {
 pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms) -> Vector3 {
     if uniforms.debug_noise {
         let sample_position = fragment.object_pos.normalize() * uniforms.noise_frequency;
-        let value = noise::fbm(sample_position, 5, 2.0, 0.5);
+        let value = uniforms.noise.fbm(sample_position, 5, 2.0, 0.5);
         return Vector3::new(value, value, value);
     }
 
