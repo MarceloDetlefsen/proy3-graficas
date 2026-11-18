@@ -156,6 +156,55 @@ impl Mat4 {
         .normalize()
     }
 
+    /// Calcula la inversa 4x4 por eliminación de Gauss-Jordan con pivoteo parcial.
+    pub fn inverse(&self) -> Option<Self> {
+        let mut a = [[0.0_f32; 8]; 4];
+        for r in 0..4 {
+            for (c, col) in self.cols.iter().enumerate() {
+                a[r][c] = col[r];
+            }
+            a[r][4 + r] = 1.0;
+        }
+        for col in 0..4 {
+            let mut pivot = col;
+            let mut best = a[col][col].abs();
+            for (r, row) in a.iter().enumerate().skip(col + 1) {
+                if row[col].abs() > best {
+                    best = row[col].abs();
+                    pivot = r;
+                }
+            }
+            if best <= 1e-12 {
+                return None;
+            }
+            if pivot != col {
+                a.swap(col, pivot);
+            }
+            let inv_diag = 1.0 / a[col][col];
+            for val in &mut a[col] {
+                *val *= inv_diag;
+            }
+            let pivot_row = a[col];
+            for (r, row) in a.iter_mut().enumerate() {
+                if r != col {
+                    let factor = row[col];
+                    if factor != 0.0 {
+                        for (dst, src) in row.iter_mut().zip(pivot_row.iter()) {
+                            *dst -= factor * *src;
+                        }
+                    }
+                }
+            }
+        }
+        let mut out = [[0.0_f32; 4]; 4];
+        for r in 0..4 {
+            for (c, col) in out.iter_mut().enumerate() {
+                col[r] = a[r][4 + c];
+            }
+        }
+        Some(Self { cols: out })
+    }
+
     pub fn look_at(eye: Vector3, target: Vector3, up: Vector3) -> Self {
         let forward = (target - eye).normalize();
         let right = forward.cross(up).normalize();

@@ -18,6 +18,7 @@ mod scene;
 mod shaders;
 mod ship;
 mod sim;
+mod sky;
 mod surface_map;
 mod vertex;
 
