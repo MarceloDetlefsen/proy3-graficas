@@ -53,6 +53,8 @@ Tabla generada desde `CONTROLS` (`src/hud.rs`):
 | Normal map / Debug normales / Cull instancias | `B / Y / /` |
 | Métricas / Resolución interna / Hilos | `F3 / R / T` |
 | Backface culling / Re-hornear / Captura PNG | `C / K / P` |
+| Galería: cambiar cuerpo / reiniciar vista | `A / D / R` |
+| Volver al menú (en menú: salir) | `Esc` |
 | Mostrar u ocultar este panel de ayuda | `H` |
 
 ## Arquitectura o pipeline
@@ -219,7 +221,7 @@ proy3-graficas/
 
 - Los 4 modelos `.obj` de superficie (`assets/surface/{tree,rock,building,monument}.obj`) no han sido agregados aún; el motor utiliza los marcadores procedurales de respaldo de `src/surface_props.rs`.
 - Los LOD de la nave (`assets/ship_lod0.obj`, `ship_lod1.obj`, `ship_lod2.obj`, con `3000`/`800`/`610` triángulos) ya se cargan desde archivo; el respaldo por decimación en `src/mesh_lod.rs::load_ship_lods` se mantiene únicamente si faltaran.
-- La galería de planetas y el segundo sistema solar pertenecen al siguiente milestone.
+- El menú principal y la galería de trofeos ya están implementados; el sistema de favoritos cuenta con 10 entradas registradas en estado `Placeholder` ("en construcción") y se habilitará para vuelo cuando tenga su estrella y al menos 3 cuerpos en estado `Ready`.
 
 ## Dependencias principales
 
