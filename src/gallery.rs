@@ -166,6 +166,12 @@ impl GalleryViewer {
             self.distance = 3.2;
             self.target = Vector3::zero();
             self.spin = 0.0;
+        } else if showcase_id == "la_bombonera" {
+            self.yaw = 0.65;
+            self.pitch = 0.62;
+            self.distance = 2.9;
+            self.target = Vector3::zero();
+            self.spin = 0.0;
         } else {
             self.reset_view(body_radius);
         }

@@ -1176,6 +1176,208 @@ pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+/// Construye un bloque rectangular estanco con la cara superior subdividida en `nx × nz`
+/// para poder pintar líneas de cancha por color de vértice.
+fn subdivided_pitch_slab(width: f32, height: f32, depth: f32, nx: usize, nz: usize) -> Mesh {
+    let mut m = Mesh::new();
+    let hx = width * 0.5;
+    let hy = height * 0.5;
+    let hz = depth * 0.5;
+    let mut top = Vec::with_capacity((nx + 1) * (nz + 1));
+    let mut bot = Vec::with_capacity((nx + 1) * (nz + 1));
+    for iz in 0..=nz {
+        let z = -hz + depth * (iz as f32 / nz as f32);
+        for ix in 0..=nx {
+            let x = -hx + width * (ix as f32 / nx as f32);
+            top.push(m.push_vertex(Vector3::new(x, hy, z), Vector3::new(0.0, 1.0, 0.0), [0.0, 0.0]));
+            bot.push(m.push_vertex(Vector3::new(x, -hy, z), Vector3::new(0.0, -1.0, 0.0), [0.0, 0.0]));
+        }
+    }
+    let stride = nx + 1;
+    for iz in 0..nz {
+        for ix in 0..nx {
+            let t00 = top[iz * stride + ix];
+            let t10 = top[iz * stride + ix + 1];
+            let t01 = top[(iz + 1) * stride + ix];
+            let t11 = top[(iz + 1) * stride + ix + 1];
+            m.push_triangle(t00, t01, t11);
+            m.push_triangle(t00, t11, t10);
+
+            let b00 = bot[iz * stride + ix];
+            let b10 = bot[iz * stride + ix + 1];
+            let b01 = bot[(iz + 1) * stride + ix];
+            let b11 = bot[(iz + 1) * stride + ix + 1];
+            m.push_triangle(b00, b11, b01);
+            m.push_triangle(b00, b10, b11);
+        }
+    }
+    // Paredes laterales estancas compartiendo los mismos vértices del borde.
+    for ix in 0..nx {
+        // Borde -Z (iz = 0)
+        let t0 = top[ix];
+        let t1 = top[ix + 1];
+        let b0 = bot[ix];
+        let b1 = bot[ix + 1];
+        m.push_triangle(t0, t1, b1);
+        m.push_triangle(t0, b1, b0);
+        // Borde +Z (iz = nz)
+        let off = nz * stride;
+        let t0p = top[off + ix];
+        let t1p = top[off + ix + 1];
+        let b0p = bot[off + ix];
+        let b1p = bot[off + ix + 1];
+        m.push_triangle(t0p, b1p, t1p);
+        m.push_triangle(t0p, b0p, b1p);
+    }
+    for iz in 0..nz {
+        // Borde -X (ix = 0)
+        let t0 = top[iz * stride];
+        let t1 = top[(iz + 1) * stride];
+        let b0 = bot[iz * stride];
+        let b1 = bot[(iz + 1) * stride];
+        m.push_triangle(t0, b1, t1);
+        m.push_triangle(t0, b0, b1);
+        // Borde +X (ix = nx)
+        let t0p = top[iz * stride + nx];
+        let t1p = top[(iz + 1) * stride + nx];
+        let b0p = bot[iz * stride + nx];
+        let b1p = bot[(iz + 1) * stride + nx];
+        m.push_triangle(t0p, t1p, b1p);
+        m.push_triangle(t0p, b1p, b0p);
+    }
+    m.compute_flat_normals();
+    m
+}
+
+/// Construye el estadio La Bombonera siguiendo `refs/bombonera.webp`:
+/// 3 lados de gradas empinadas escalonadas (azul `#103F91` y amarillo `#F2B705`),
+/// 1 lado recto de palcos grises con torres, y cancha verde con líneas blancas.
+pub fn build_bombonera_mesh(detail: usize) -> Mesh {
+    let boca_blue = Vector3::new(0x10 as f32 / 255.0, 0x3F as f32 / 255.0, 0x91 as f32 / 255.0);
+    let boca_gold = Vector3::new(0xF2 as f32 / 255.0, 0xB7 as f32 / 255.0, 0x05 as f32 / 255.0);
+    let concrete = Vector3::new(0.64, 0.65, 0.68);
+    let concrete_dark = Vector3::new(0.45, 0.47, 0.50);
+    let grass_a = Vector3::new(0.24, 0.45, 0.17);
+    let grass_b = Vector3::new(0.29, 0.51, 0.21);
+    let line_white = Vector3::new(0.95, 0.96, 0.94);
+
+    let (u_segs, pitch_nx, pitch_nz, smooth_bowl) = match detail {
+        0 => (10usize, 6usize, 8usize, true),
+        1 => (16, 12, 16, false),
+        _ => (24, 16, 22, false),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Cancha verde con franjas de césped y líneas blancas por color de vértice.
+    let pitch_w = 0.86_f32;
+    let pitch_d = 1.24_f32;
+    let mut pitch = subdivided_pitch_slab(pitch_w, 0.08, pitch_d, pitch_nx, pitch_nz);
+    pitch.translate(Vector3::new(-0.04, -0.22, 0.0));
+    pitch.paint_vertices(|_, p, _| {
+        if p.y < -0.19 {
+            return concrete_dark;
+        }
+        let lx = p.x + 0.04;
+        let lz = p.z;
+        let on_outer = lx.abs() > pitch_w * 0.43 || lz.abs() > pitch_d * 0.44;
+        let on_half = lz.abs() < 0.045;
+        let on_circle = ((lx * lx + lz * lz).sqrt() - 0.16).abs() < 0.042;
+        let on_box = (lz.abs() > pitch_d * 0.31 && lz.abs() < pitch_d * 0.36 && lx.abs() < 0.22)
+            || (lz.abs() > pitch_d * 0.31 && (lx.abs() - 0.22).abs() < 0.045);
+        if on_outer || on_half || on_circle || on_box {
+            line_white
+        } else if ((lz * 8.0).floor() as i32).rem_euclid(2) == 0 {
+            grass_a
+        } else {
+            grass_b
+        }
+    });
+    mesh.merge(&pitch);
+
+    // 2. Grada en U de 3 lados (loft / barrido estanco de planta rectangular redondeada).
+    // Se construye en el plano XZ (rotado de XY a XZ después de sweep_profile).
+    let mut u_path = Vec::with_capacity(u_segs + 1);
+    for i in 0..=u_segs {
+        let t = i as f32 / u_segs as f32;
+        // Ángulo desde -75° (esquina +X, -Z) pasando por 180° (-X) hasta +255° (+X, +Z).
+        let a = -0.35 * std::f32::consts::PI + t * (1.70 * std::f32::consts::PI);
+        // Superelipse rectangular redondeada en D.
+        let ca = a.cos();
+        let sa = a.sin();
+        let x = ca.signum() * ca.abs().powf(0.55) * 0.58 - 0.08;
+        let y = sa.signum() * sa.abs().powf(0.55) * 0.78;
+        u_path.push(Vector3::new(x, y, 0.0));
+    }
+
+    // Sección de grada empinada en (u = radial hacia afuera, v = altura).
+    let bowl_profile: Vec<[f32; 2]> = if smooth_bowl {
+        // Nivel bajo: tazón liso.
+        vec![
+            [-0.18, -0.26],
+            [0.18, -0.26],
+            [0.24, 0.24],
+            [0.14, 0.28],
+            [-0.18, -0.14],
+        ]
+    } else {
+        // Nivel medio/alto: 3 bandejas empinadas escalonadas + muro exterior.
+        vec![
+            [-0.22, -0.26],
+            [0.20, -0.26],
+            [0.24, 0.28],
+            [0.15, 0.28],
+            [0.06, 0.14],
+            [0.00, 0.14],
+            [-0.08, 0.00],
+            [-0.14, 0.00],
+            [-0.22, -0.16],
+        ]
+    };
+
+    let widths = vec![1.0_f32; u_path.len()];
+    let depths = vec![1.0_f32; u_path.len()];
+    let mut stands = sweep_profile(&u_path, &widths, &depths, &bowl_profile, false);
+    stands.rotate_x(-FRAC_PI_2);
+    stands.paint_vertices(|_, p, n| {
+        // Franja amarilla central en las gradas y banda amarilla en el muro exterior.
+        let is_outer = n.x * p.x + n.z * p.z > 0.35;
+        if is_outer {
+            if p.y > -0.08 && p.y < 0.06 {
+                boca_gold
+            } else {
+                boca_blue
+            }
+        } else if p.y > -0.03 && p.y < 0.11 {
+            boca_gold
+        } else {
+            boca_blue
+        }
+    });
+    mesh.merge(&stands);
+
+    // 3. Lado recto de palcos (edificio gris con 2 torres laterales).
+    let mut palcos = box_mesh(0.24, 0.62, 1.38);
+    palcos.translate(Vector3::new(0.54, 0.05, 0.0));
+    palcos.paint_vertices(|_, p, _| {
+        if p.x < 0.44 && ((p.y * 12.0).floor() as i32).rem_euclid(2) == 0 {
+            concrete_dark
+        } else {
+            concrete
+        }
+    });
+    mesh.merge(&palcos);
+
+    for side in [-1.0_f32, 1.0] {
+        let mut tower = box_mesh(0.28, 0.72, 0.20);
+        tower.translate(Vector3::new(0.54, 0.10, side * 0.68));
+        tower.set_color(concrete);
+        mesh.merge(&tower);
+    }
+
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1374,6 +1576,22 @@ mod tests {
         let m1 = build_samus_helmet_mesh(1);
         let m0 = build_samus_helmet_mesh(0);
         assert!(m2.tri_count() <= 4000, "Samus L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn bombonera_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_bombonera_mesh(2);
+        let m1 = build_bombonera_mesh(1);
+        let m0 = build_bombonera_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Bombonera L2={} > 4000", m2.tri_count());
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.is_watertight());

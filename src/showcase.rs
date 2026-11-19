@@ -286,11 +286,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "La Bombonera",
         sistema: SystemId::Favoritos,
         tipo: "Estadio",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Estadio en D con 3 lados de gradas empinadas azul #103F91 y franja amarilla #F2B705, edificio de palcos y cancha verde con lineas blancas.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
         light_dir: None,
     },
 ];
@@ -323,6 +323,7 @@ pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_bu
         "joycon_izquierdo" => Some(crate::bodies::build_joycon_left_mesh),
         "joycon_derecho" => Some(crate::bodies::build_joycon_right_mesh),
         "casco_samus" => Some(crate::bodies::build_samus_helmet_mesh),
+        "la_bombonera" => Some(crate::bodies::build_bombonera_mesh),
         "trifuerza" => Some(crate::bodies::build_triforce_mesh),
         "meteoro_ff7" => Some(crate::bodies::build_meteor_mesh),
         _ => None,
@@ -351,7 +352,12 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
         rotation_period: 24.0,
         axial_tilt: if matches!(
             entry.id,
-            "meteoro_ff7" | "phoenix_suns" | "spurs_crest" | "raqueta_tenis" | "casco_samus"
+            "meteoro_ff7"
+                | "phoenix_suns"
+                | "spurs_crest"
+                | "raqueta_tenis"
+                | "casco_samus"
+                | "la_bombonera"
         ) {
             0.0
         } else {
