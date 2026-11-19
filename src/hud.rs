@@ -273,6 +273,8 @@ pub const CONTROLS: &[ControlDoc] = &[
     ControlDoc { key: "B / Y / /", action: "Normal map / Debug normales / Cull instancias" },
     ControlDoc { key: "F3 / R / T", action: "Métricas / Resolución interna / Hilos" },
     ControlDoc { key: "C / K / P", action: "Backface culling / Re-hornear / Captura PNG" },
+    ControlDoc { key: "A / D / R", action: "Galería: cambiar cuerpo / reiniciar vista" },
+    ControlDoc { key: "Esc", action: "Volver al menú (en menú: salir)" },
     ControlDoc { key: "H", action: "Mostrar u ocultar este panel de ayuda" },
 ];
 
