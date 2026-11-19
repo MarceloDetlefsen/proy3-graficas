@@ -41,6 +41,13 @@ impl Mesh {
         self.indices.len() / 3
     }
 
+    pub fn bounding_radius(&self) -> f32 {
+        self.positions
+            .iter()
+            .map(|p| p.length())
+            .fold(0.0_f32, f32::max)
+    }
+
     pub fn push_vertex(&mut self, pos: Vector3, normal: Vector3, uv: [f32; 2]) -> usize {
         let idx = self.positions.len();
         self.positions.push(pos);
@@ -1000,6 +1007,62 @@ pub fn dodecahedron(circumradius: f32) -> Mesh {
     mesh
 }
 
+/// Extruye un contorno 2D en XZ a lo largo de Y con bisel en ambas tapas.
+pub fn beveled_extruded_contour(
+    poly_2d: &[[f32; 2]],
+    height: f32,
+    bevel_scale: f32,
+    bevel_height: f32,
+) -> Mesh {
+    let hy = height * 0.5;
+    let bh = bevel_height.min(hy * 0.45).max(1e-4);
+    let bs = bevel_scale.clamp(0.5, 0.99);
+    let mut cx = 0.0_f32;
+    let mut cz = 0.0_f32;
+    for &[x, z] in poly_2d {
+        cx += x;
+        cz += z;
+    }
+    cx /= poly_2d.len().max(1) as f32;
+    cz /= poly_2d.len().max(1) as f32;
+    let inset_ring: Vec<[f32; 2]> = poly_2d
+        .iter()
+        .map(|&[x, z]| [cx + (x - cx) * bs, cz + (z - cz) * bs])
+        .collect();
+    let full_ring: Vec<[f32; 2]> = poly_2d.to_vec();
+    let mut m = loft_rings(&[
+        (-hy, inset_ring.clone()),
+        (-hy + bh, full_ring.clone()),
+        (hy - bh, full_ring),
+        (hy, inset_ring),
+    ]);
+    m.compute_flat_normals();
+    m
+}
+
+/// Dispersa copias de `proto` sobre `points` con escala y rotación reproducibles por `seed`.
+pub fn scatter_instances_in_mesh(
+    base: &mut Mesh,
+    proto: &Mesh,
+    points: &[Vector3],
+    scale_min: f32,
+    scale_max: f32,
+    seed: u64,
+) {
+    let mut rng = crate::rng::SplitMix64::new(seed);
+    for &pt in points {
+        let s = rng.range_f32(scale_min, scale_max);
+        let ry = rng.range_f32(0.0, TAU);
+        let rx = rng.range_f32(-0.6, 0.6);
+        let mut inst = proto.clone();
+        inst.scale(Vector3::new(s, s, s));
+        inst.rotate_x(rx);
+        inst.rotate_y(ry);
+        inst.translate(pt);
+        base.merge(&inst);
+    }
+}
+
 /// Caché de reconstrucción por nivel de detalle (`0` = bajo, `1` = medio, `2` = alto).
 pub struct LodMeshCache {
     levels: [Option<Vec<Vertex>>; 3],
@@ -1168,5 +1231,38 @@ mod tests {
         assert_eq!(d.tri_count(), 36);
         assert!(d.is_watertight());
         assert!((d.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn beveled_extruded_contour_is_watertight_and_outward() {
+        let shield = [
+            [-0.7, -0.8],
+            [0.7, -0.8],
+            [0.7, 0.2],
+            [0.0, 0.9],
+            [-0.7, 0.2],
+        ];
+        let m = beveled_extruded_contour(&shield, 0.2, 0.92, 0.04);
+        assert!(m.is_watertight());
+        assert!((m.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn scatter_instances_in_mesh_is_reproducible_by_seed() {
+        let proto = box_mesh(1.0, 1.0, 1.0);
+        let pts = [
+            Vector3::new(-1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+        ];
+        let mut a = Mesh::new();
+        let mut b = Mesh::new();
+        scatter_instances_in_mesh(&mut a, &proto, &pts, 0.02, 0.04, 123);
+        scatter_instances_in_mesh(&mut b, &proto, &pts, 0.02, 0.04, 123);
+        assert_eq!(a.tri_count(), 36);
+        assert_eq!(a.positions.len(), b.positions.len());
+        for (pa, pb) in a.positions.iter().zip(b.positions.iter()) {
+            assert!((*pa - *pb).length() < 1e-6);
+        }
     }
 }
