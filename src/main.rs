@@ -1,3 +1,4 @@
+mod app;
 mod camera;
 mod clipping;
 mod culling;
@@ -372,6 +373,7 @@ fn main() {
         .title("Proyecto 3 - Base del sistema solar")
         .build();
     window.set_target_fps(60);
+    window.set_exit_key(None);
 
     let mut mode = TriangleMode::FilledBarycentric;
     let mut cam_yaw = 0.0_f32;
@@ -402,9 +404,11 @@ fn main() {
     let mut overlay_buf = hud::OverlayBuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32);
     let mut selected_body: usize = 0;
     let mut show_help = false;
+    let mut app_ctrl = app::AppController::new();
+    let mut should_exit = false;
     let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
     let mut follow_mode = true;
-    window.disable_cursor();
+    window.enable_cursor();
     let mut bodies = solar_system();
     let mut body_shader_params: Vec<f32> = bodies
         .iter()
@@ -475,9 +479,58 @@ fn main() {
     let mut perf_stats = PerfStats::new();
     let mut render_buffers = RenderBuffers::new(vertex_array.len());
 
-    while !window.window_should_close() {
+    while !window.window_should_close() && !should_exit {
         let frame_start = std::time::Instant::now();
         let dt = window.get_frame_time();
+        if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
+            match app_ctrl.on_escape() {
+                app::TransitionOutcome::ExitApp => {
+                    should_exit = true;
+                    continue;
+                }
+                app::TransitionOutcome::ChangeState(new_state) => {
+                    match new_state {
+                        app::AppState::Flight(_) if follow_mode => window.disable_cursor(),
+                        _ => window.enable_cursor(),
+                    }
+                }
+                _ => {}
+            }
+        }
+        if matches!(app_ctrl.state, app::AppState::Menu) {
+            if window.is_key_pressed(KeyboardKey::KEY_UP) || window.is_key_pressed(KeyboardKey::KEY_W) {
+                app_ctrl.move_menu_up();
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_DOWN) || window.is_key_pressed(KeyboardKey::KEY_S) {
+                app_ctrl.move_menu_down();
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
+                match app_ctrl.activate_menu(false) {
+                    app::TransitionOutcome::ExitApp => {
+                        should_exit = true;
+                        continue;
+                    }
+                    app::TransitionOutcome::ChangeState(app::AppState::Flight(_)) => {
+                        if follow_mode {
+                            window.disable_cursor();
+                        }
+                    }
+                    app::TransitionOutcome::ChangeState(_) => {
+                        window.enable_cursor();
+                    }
+                    _ => {}
+                }
+            }
+            framebuffer.clear();
+            overlay_buf.resize(
+                window.get_screen_width().max(1) as u32,
+                window.get_screen_height().max(1) as u32,
+            );
+            overlay_buf.clear();
+            overlay_buf.draw_text("MENU PRINCIPAL (en construccion)", 24, 24, 2, Color::WHITE);
+            framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);
+            continue;
+        }
         let _sim_dt = sim_clock.advance(dt);
         if window.is_key_pressed(KeyboardKey::KEY_F) {
             follow_mode = !follow_mode;
