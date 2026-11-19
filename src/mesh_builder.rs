@@ -248,6 +248,25 @@ impl Mesh {
         }
     }
 
+    pub fn set_color(&mut self, color: Vector3) {
+        self.colors.fill(color);
+    }
+
+    pub fn paint_vertices(&mut self, mut f: impl FnMut(usize, Vector3, Vector3) -> Vector3) {
+        for i in 0..self.positions.len() {
+            self.colors[i] = f(i, self.positions[i], self.normals[i]);
+        }
+    }
+
+    pub fn merge(&mut self, other: &Mesh) {
+        let base = self.positions.len();
+        self.positions.extend_from_slice(&other.positions);
+        self.normals.extend_from_slice(&other.normals);
+        self.colors.extend_from_slice(&other.colors);
+        self.uvs.extend_from_slice(&other.uvs);
+        self.indices.extend(other.indices.iter().map(|&idx| base + idx));
+    }
+
     pub fn to_vertex_array(&self) -> Vec<Vertex> {
         self.indices
             .iter()
@@ -692,6 +711,130 @@ pub fn extruded_prism(poly_2d: &[[f32; 2]], height: f32) -> Mesh {
     mesh
 }
 
+/// Construye una malla cerrada conectando una lista de anillos poligonales
+/// `(altura_y, poligono_2d)` con el mismo número de vértices (`>= 3`).
+pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
+    assert!(rings.len() >= 2, "loft_rings requiere al menos 2 anillos");
+    let n = rings[0].1.len();
+    assert!(n >= 3, "Cada anillo requiere al menos 3 vértices");
+    for (_, poly) in rings {
+        assert_eq!(poly.len(), n, "Todos los anillos deben tener el mismo número de vértices");
+    }
+
+    // Ordenar anillos por altura ascendente y asegurar orientación CCW en XZ.
+    let mut sorted: Vec<(f32, Vec<[f32; 2]>)> = rings.to_vec();
+    sorted.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    let mut signed_area = 0.0_f32;
+    for i in 0..n {
+        let a = sorted[0].1[i];
+        let b = sorted[0].1[(i + 1) % n];
+        signed_area += a[0] * b[1] - b[0] * a[1];
+    }
+    if signed_area > 0.0 {
+        for (_, poly) in &mut sorted {
+            poly.reverse();
+        }
+    }
+
+    let mut mesh = Mesh::new();
+    let mut ring_idx = Vec::with_capacity(sorted.len());
+    for (r_i, (y, poly)) in sorted.iter().enumerate() {
+        let v_coord = r_i as f32 / (sorted.len() - 1) as f32;
+        let mut row = Vec::with_capacity(n);
+        for (i, &[x, z]) in poly.iter().enumerate() {
+            let radial = Vector3::new(x, 0.0, z);
+            let nrm = if radial.length_sqr() > 1e-8 {
+                radial.normalize()
+            } else {
+                Vector3::new(0.0, 1.0, 0.0)
+            };
+            row.push(mesh.push_vertex(
+                Vector3::new(x, *y, z),
+                nrm,
+                [i as f32 / n as f32, v_coord],
+            ));
+        }
+        ring_idx.push(row);
+    }
+
+    for r in 0..(sorted.len() - 1) {
+        for i in 0..n {
+            let j = (i + 1) % n;
+            mesh.push_quad(
+                ring_idx[r][i],
+                ring_idx[r][j],
+                ring_idx[r + 1][j],
+                ring_idx[r + 1][i],
+            );
+        }
+    }
+
+    // Tapa inferior (-Y)
+    let (y_bot, poly_bot) = &sorted[0];
+    let mut bot_cap = Vec::with_capacity(n);
+    for &[x, z] in poly_bot {
+        bot_cap.push(mesh.push_vertex(
+            Vector3::new(x, *y_bot, z),
+            Vector3::new(0.0, -1.0, 0.0),
+            [x, z],
+        ));
+    }
+    for i in 1..(n - 1) {
+        mesh.push_triangle(bot_cap[0], bot_cap[i + 1], bot_cap[i]);
+    }
+
+    // Tapa superior (+Y)
+    let (y_top, poly_top) = &sorted[sorted.len() - 1];
+    let mut top_cap = Vec::with_capacity(n);
+    for &[x, z] in poly_top {
+        top_cap.push(mesh.push_vertex(
+            Vector3::new(x, *y_top, z),
+            Vector3::new(0.0, 1.0, 0.0),
+            [x, z],
+        ));
+    }
+    for i in 1..(n - 1) {
+        mesh.push_triangle(top_cap[0], top_cap[i], top_cap[i + 1]);
+    }
+
+    mesh.compute_smooth_normals();
+    mesh
+}
+
+/// Caché de reconstrucción por nivel de detalle (`0` = bajo, `1` = medio, `2` = alto).
+pub struct LodMeshCache {
+    levels: [Option<Vec<Vertex>>; 3],
+    tri_counts: [usize; 3],
+    builder: fn(usize) -> Mesh,
+}
+
+impl LodMeshCache {
+    pub fn new(builder: fn(usize) -> Mesh) -> Self {
+        Self {
+            levels: [None, None, None],
+            tri_counts: [0, 0, 0],
+            builder,
+        }
+    }
+
+    pub fn get_or_build(&mut self, level: usize) -> &[Vertex] {
+        let lvl = level.min(2);
+        if self.levels[lvl].is_none() {
+            let mesh = (self.builder)(lvl);
+            self.tri_counts[lvl] = mesh.tri_count();
+            self.levels[lvl] = Some(mesh.to_vertex_array());
+        }
+        self.levels[lvl].as_deref().unwrap_or(&[])
+    }
+
+    pub fn tri_count(&mut self, level: usize) -> usize {
+        let lvl = level.min(2);
+        let _ = self.get_or_build(lvl);
+        self.tri_counts[lvl]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -744,5 +887,52 @@ mod tests {
         m.translate(Vector3::new(3.0, -2.0, 1.0));
         assert!(m.is_watertight());
         assert!((m.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn merge_and_vertex_color_preserve_geometry() {
+        let mut a = box_mesh(1.0, 1.0, 1.0);
+        a.set_color(Vector3::new(1.0, 0.0, 0.0));
+        let mut b = box_mesh(0.5, 0.5, 0.5);
+        b.set_color(Vector3::new(0.0, 0.0, 1.0));
+        b.translate(Vector3::new(2.0, 0.0, 0.0));
+        a.merge(&b);
+
+        assert_eq!(a.tri_count(), 24);
+        assert!(a.is_watertight());
+        let va = a.to_vertex_array();
+        assert_eq!(va.len(), 72);
+    }
+
+    #[test]
+    fn loft_rings_is_watertight_with_outward_normals() {
+        let ring = |r: f32| -> Vec<[f32; 2]> {
+            (0..8)
+                .map(|i| {
+                    let a = (i as f32 / 8.0) * TAU;
+                    [r * a.cos(), -r * a.sin()]
+                })
+                .collect()
+        };
+        let mesh = loft_rings(&[(-1.0, ring(0.8)), (0.0, ring(1.2)), (1.0, ring(0.5))]);
+        assert!(mesh.is_watertight());
+        assert!((mesh.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn lod_mesh_cache_reconstructs_and_caches_levels() {
+        fn build_test(detail: usize) -> Mesh {
+            match detail {
+                0 => sphere(1.0, 4, 6),
+                1 => sphere(1.0, 6, 10),
+                _ => sphere(1.0, 10, 16),
+            }
+        }
+        let mut cache = LodMeshCache::new(build_test);
+        let t0 = cache.tri_count(0);
+        let t1 = cache.tri_count(1);
+        let t2 = cache.tri_count(2);
+        assert!(t0 < t1 && t1 < t2);
+        assert_eq!(cache.get_or_build(1).len(), t1 * 3);
     }
 }
