@@ -374,7 +374,7 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
 }
 
 /// Bandera explícita para habilitar el vuelo del sistema de favoritos cuando esté integrado.
-pub const FAVORITES_FLIGHT_ENABLED: bool = false;
+pub const FAVORITES_FLIGHT_ENABLED: bool = true;
 
 pub fn has_required_favorites_bodies(entries: &[Showcase]) -> bool {
     let mut has_star = false;
@@ -431,7 +431,7 @@ mod tests {
 
     #[test]
     fn favorites_readiness_requires_star_and_three_bodies() {
-        assert!(!is_favorites_system_ready(SHOWCASE_ENTRIES));
+        assert!(is_favorites_system_ready(SHOWCASE_ENTRIES));
         assert!(
             favorites_ready_entries()
                 .iter()
@@ -489,8 +489,9 @@ mod tests {
             },
         ];
         assert!(has_required_favorites_bodies(&sample));
-        const { assert!(!FAVORITES_FLIGHT_ENABLED); }
-        assert!(!is_favorites_system_ready(&sample));
+        const { assert!(FAVORITES_FLIGHT_ENABLED); }
+        assert!(is_favorites_system_ready(&sample));
+        assert!(!is_favorites_system_ready(&sample[..3]));
     }
 
     #[test]

@@ -420,6 +420,7 @@ struct FlightSession {
     bodies: Vec<scene::Body>,
     body_shader_params: Vec<f32>,
     body_caches: Vec<icosphere::DeformedIcosphereCache>,
+    proc_caches: Vec<Option<mesh_builder::LodMeshCache>>,
     body_lods: Vec<usize>,
     planet_candidates: Vec<Vec<surface_scatter::SurfaceCandidate>>,
     planet_instances: Vec<Vec<surface_scatter::SurfaceInstance>>,
@@ -457,6 +458,20 @@ impl FlightSession {
                 )
             })
             .collect();
+        let proc_caches = bodies
+            .iter()
+            .map(|b| {
+                if system_id == app::SystemId::Favoritos {
+                    showcase::SHOWCASE_ENTRIES
+                        .iter()
+                        .find(|e| e.sistema == app::SystemId::Favoritos && e.nombre == b.name)
+                        .and_then(|e| showcase::mesh_builder_for_showcase(e.id))
+                        .map(mesh_builder::LodMeshCache::new)
+                } else {
+                    None
+                }
+            })
+            .collect();
         let body_lods = vec![3_usize; bodies.len()];
         let surface_seed: u64 = 42;
         let planet_candidates: Vec<_> = bodies
@@ -473,13 +488,19 @@ impl FlightSession {
             DEFAULT_BAKE_WIDTH,
             DEFAULT_BAKE_HEIGHT,
         ));
-        let ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
+        let ship_start = if system_id == app::SystemId::Favoritos {
+            Vector3::new(0.0, 2.2, 22.0)
+        } else {
+            Vector3::new(0.0, 1.5, 16.0)
+        };
+        let ship = Ship::new(ship_start);
         let follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
         Self {
             system_id,
             bodies,
             body_shader_params,
             body_caches,
+            proc_caches,
             body_lods,
             planet_candidates,
             planet_instances,
@@ -1271,7 +1292,11 @@ fn main() {
                 ),
             };
             session.body_lods[body_idx] = level;
-            let body_mesh = session.body_caches[body_idx].get_or_build(level, &noise);
+            let body_mesh = if let Some(proc_cache) = &mut session.proc_caches[body_idx] {
+                proc_cache.get_or_build(level.min(2))
+            } else {
+                session.body_caches[body_idx].get_or_build(level, &noise)
+            };
             let body_tris = body_mesh.len() / 3;
             tris_before_cull += body_tris;
             if frustum_culling && !frustum.intersects_sphere(body_pos, scene::culling_radius(body))
@@ -1557,5 +1582,41 @@ fn main() {
         sample.present_ms = t_pres.elapsed().as_secs_f64() * 1000.0;
         sample.total_ms = frame_start.elapsed().as_secs_f64() * 1000.0;
         perf_stats.push(sample);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn favorites_flight_menu_transition_and_ten_session_cycles_drop_cleanly() {
+        let mut ctrl = app::AppController::new();
+        let fav_ready = showcase::is_favorites_system_ready(showcase::SHOWCASE_ENTRIES);
+        assert!(fav_ready);
+        ctrl.move_menu_down();
+        assert_eq!(
+            ctrl.activate_menu(fav_ready),
+            app::TransitionOutcome::ChangeState(app::AppState::Flight(app::SystemId::Favoritos))
+        );
+        assert_eq!(
+            ctrl.on_escape(),
+            app::TransitionOutcome::ChangeState(app::AppState::Menu)
+        );
+
+        let noise = Noise::new(7);
+        for _ in 0..10 {
+            let mut fav_session = FlightSession::new(app::SystemId::Favoritos, &noise);
+            assert_eq!(fav_session.bodies.len(), showcase::favorites_ready_entries().len());
+            assert!(fav_session.proc_caches.iter().all(|c| c.is_some()));
+            if let Some(Some(cache)) = fav_session.proc_caches.first_mut() {
+                assert!(!cache.get_or_build(2).is_empty());
+            }
+            drop(fav_session);
+
+            let real_session = FlightSession::new(app::SystemId::Realista, &noise);
+            assert_eq!(real_session.bodies.len(), 9);
+            drop(real_session);
+        }
     }
 }
