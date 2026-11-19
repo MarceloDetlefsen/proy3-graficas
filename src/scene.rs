@@ -261,6 +261,9 @@ pub fn system_bodies(id: crate::app::SystemId) -> Vec<Body> {
 }
 
 pub fn effective_radius(body: &Body) -> f32 {
+    if matches!(body.shader, Shader::PhoenixSuns) {
+        return body.radius * 3.4;
+    }
     let amp_deform = body.radius * body.surface.deformation_amplitude.max(0.0);
     let deform = body.surface.max_deformation.max(amp_deform).max(0.0);
     body.radius + deform

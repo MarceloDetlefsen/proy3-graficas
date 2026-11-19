@@ -148,6 +148,12 @@ impl GalleryViewer {
             self.distance = 7.4;
             self.target = Vector3::new(0.0, 1.35, 0.0);
             self.spin = 0.0;
+        } else if showcase_id == "phoenix_suns" {
+            self.yaw = 0.0;
+            self.pitch = 0.04;
+            self.distance = 8.4;
+            self.target = Vector3::new(-0.55, -0.35, 0.0);
+            self.spin = 0.0;
         } else {
             self.reset_view(body_radius);
         }
@@ -262,7 +268,8 @@ impl GalleryViewer {
             .unwrap_or_else(|| Vector3::new(-0.65, 0.80, 1.0))
             .normalize();
         let model_matrix = if matches!(body.shader, Shader::PhoenixSuns) {
-            Mat4::rotation_z(self.spin)
+            let osc = (time * std::f32::consts::TAU / 12.0).sin() * std::f32::consts::FRAC_PI_6; // ±30°
+            Mat4::rotation_y(osc)
                 * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
         } else if matches!(body.shader, Shader::Spurs) {
             let osc = (self.spin * 1.4).sin() * 0.6109; // ±35°

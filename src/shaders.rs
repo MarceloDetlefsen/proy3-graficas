@@ -14,11 +14,11 @@ pub mod fundido;
 pub mod gas_giant;
 pub mod meteor;
 pub mod mural;
-pub mod phoenix_suns;
 pub mod rocky;
 pub mod ship;
 pub mod spurs;
 pub mod star;
+pub mod suns;
 pub mod triforce;
 pub mod vestigio;
 
@@ -161,7 +161,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Chunky => chunky::shade(fragment, uniforms),
         Shader::Triforce => triforce::shade(fragment, uniforms),
         Shader::Meteor => meteor::shade(fragment, uniforms),
-        Shader::PhoenixSuns => phoenix_suns::shade(fragment, uniforms),
+        Shader::PhoenixSuns => suns::shade(fragment, uniforms),
         Shader::Spurs => spurs::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {

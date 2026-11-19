@@ -142,7 +142,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Sol de los Phoenix Suns",
         sistema: SystemId::Favoritos,
         tipo: "Estrella",
-        descripcion_es: "Esfera emisiva con logo de Phoenix Suns por proyeccion azimutal en Z en ambos polos, rayos dorados y halo.",
+        descripcion_es: "Balon de basquetbol 3D con costuras giratorias delante de una explosion solar emisiva extruida con estela de rayos.",
         inspiracion: None,
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::PhoenixSuns),

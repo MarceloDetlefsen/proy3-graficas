@@ -607,19 +607,43 @@ pub fn build_joycon_right_mesh(detail: usize) -> Mesh {
     joycon(JoyConSide::Right, detail)
 }
 
-/// Construye la esfera del Sol de los Phoenix Suns en 3 niveles de detalle.
+/// Construye el Sol de los Phoenix Suns: explosión solar con estela de rayos
+/// extruida desde los contornos medidos en `refs/suns_logo.png` y balón 3D al frente.
 pub fn build_suns_mesh(detail: usize) -> Mesh {
-    let ico_lvl = match detail {
-        0 => 1, // 80 tris
-        1 => 2, // 320 tris
-        _ => 3, // 1280 tris
+    let [gr, gg, gb] = crate::logo_data::SUNS_GOLD_RGB;
+    let [or, og, ob] = crate::logo_data::SUNS_ORANGE_RGB;
+    let gold = Vector3::new(gr, gg, gb);
+    let orange = Vector3::new(or, og, ob);
+
+    let (eps, rings, sectors) = match detail {
+        0 => (0.16_f32, 6, 8),
+        1 => (0.06_f32, 10, 14),
+        _ => (0.0_f32, 14, 20),
     };
-    let ico = crate::icosphere::icosphere_level(ico_lvl);
+
     let mut mesh = Mesh::new();
-    for &unit in &ico.positions {
-        mesh.push_vertex(unit, unit, crate::icosphere::spherical_uv(unit));
+
+    // 1. Placas emisivas extruidas de la explosión solar y estela de rayos.
+    for contour in crate::logo_data::SUNS_CONTOURS {
+        let simplified = rdp_simplify_closed(contour, eps);
+        if simplified.len() < 3 {
+            continue;
+        }
+        let contour_xz: Vec<[f32; 2]> = simplified.iter().map(|&[x, y]| [x, -y]).collect();
+        let mut plate = beveled_extruded_contour(&contour_xz, 0.12, 0.92, 0.025);
+        plate.rotate_x(FRAC_PI_2);
+        plate.set_color(gold);
+        plate.set_material(0);
+        mesh.merge(&plate);
     }
-    mesh.indices = ico.indices;
+
+    // 2. Balón de basquetbol 3D ligeramente adelantado frente a la placa solar.
+    let mut ball = sphere(1.0, rings, sectors);
+    ball.translate(Vector3::new(0.0, 0.0, 0.16));
+    ball.set_color(orange);
+    ball.set_material(1);
+    mesh.merge(&ball);
+
     mesh
 }
 
@@ -953,12 +977,15 @@ mod tests {
         let m2 = build_suns_mesh(2);
         let m1 = build_suns_mesh(1);
         let m0 = build_suns_mesh(0);
-        assert!(m2.tri_count() <= 4000);
+        assert!(m2.tri_count() <= 4000, "Suns L2={} > 4000", m2.tri_count());
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
-            assert!((m.bounding_radius() - 1.0).abs() < 1e-4);
+            let br = m.bounding_radius();
+            assert!(br > 3.0 && br < 3.5);
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
         }
     }
 
