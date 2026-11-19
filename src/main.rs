@@ -705,6 +705,7 @@ fn main() {
             }
         }
         if matches!(app_ctrl.state, app::AppState::Menu) {
+            let fav_ready = showcase::is_favorites_system_ready(showcase::SHOWCASE_ENTRIES);
             if window.is_key_pressed(KeyboardKey::KEY_UP) || window.is_key_pressed(KeyboardKey::KEY_W) {
                 app_ctrl.move_menu_up();
             }
@@ -718,7 +719,7 @@ fn main() {
                 app_ctrl.show_menu_controls = false;
             }
             if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
-                match app_ctrl.activate_menu(false) {
+                match app_ctrl.activate_menu(fav_ready) {
                     app::TransitionOutcome::ExitApp => {
                         should_exit = true;
                         continue;
@@ -755,7 +756,7 @@ fn main() {
             hud::render_menu_overlay(
                 &mut overlay_buf,
                 app_ctrl.selected_menu,
-                false,
+                fav_ready,
                 app_ctrl.show_menu_controls,
             );
             framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);

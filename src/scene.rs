@@ -219,10 +219,44 @@ pub fn solar_system() -> Vec<Body> {
     bodies
 }
 
+pub fn favorites_system() -> Vec<Body> {
+    crate::showcase::favorites_ready_entries()
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, entry)| {
+            let shader = entry.shader?;
+            let is_star = entry.tipo == "Estrella";
+            Some(Body {
+                name: entry.nombre,
+                kind: if is_star {
+                    BodyKind::Star
+                } else {
+                    BodyKind::Planet
+                },
+                radius: if is_star { 3.5 } else { 1.2 },
+                mass: if is_star { 1000.0 } else { 12.0 },
+                orbit_radius: if is_star { 0.0 } else { 12.0 + i as f32 * 8.0 },
+                orbit_period: if is_star { 0.0 } else { 28.0 + i as f32 * 14.0 },
+                phase: i as f32 * 1.1,
+                orbit_inclination: 0.04,
+                rotation_period: 25.0,
+                axial_tilt: 0.1,
+                shader,
+                surface: SurfaceParams {
+                    seed: i as u32,
+                    noise_frequency: 4.0,
+                    deformation_amplitude: 0.0,
+                    max_deformation: 0.0,
+                },
+            })
+        })
+        .collect()
+}
+
 pub fn system_bodies(id: crate::app::SystemId) -> Vec<Body> {
     match id {
         crate::app::SystemId::Realista => solar_system(),
-        crate::app::SystemId::Favoritos => Vec::new(),
+        crate::app::SystemId::Favoritos => favorites_system(),
     }
 }
 
@@ -379,6 +413,7 @@ mod tests {
         assert_eq!(realistic[0].name, "Sol");
 
         let favs = system_bodies(crate::app::SystemId::Favoritos);
+        assert_eq!(favs.len(), crate::showcase::favorites_ready_entries().len());
         assert!(favs.is_empty());
     }
 }
