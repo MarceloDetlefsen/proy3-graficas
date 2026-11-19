@@ -16,7 +16,9 @@ pub mod meteor;
 pub mod mural;
 pub mod rocky;
 pub mod ship;
+pub mod spurs;
 pub mod star;
+pub mod suns;
 pub mod triforce;
 pub mod vestigio;
 
@@ -35,6 +37,8 @@ pub enum Shader {
     Chunky,
     Triforce,
     Meteor,
+    PhoenixSuns,
+    Spurs,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -124,6 +128,8 @@ pub fn live_param(shader: Shader) -> LiveParam {
         Shader::Chunky => "Velocidad giro",
         Shader::Triforce => "Velocidad destello",
         Shader::Meteor => "Brillo del trazo",
+        Shader::PhoenixSuns => "Velocidad giro",
+        Shader::Spurs => "Velocidad giro",
         Shader::Ship | Shader::Prop(_) => "Brillo",
     };
     LiveParam {
@@ -155,6 +161,8 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Chunky => chunky::shade(fragment, uniforms),
         Shader::Triforce => triforce::shade(fragment, uniforms),
         Shader::Meteor => meteor::shade(fragment, uniforms),
+        Shader::PhoenixSuns => suns::shade(fragment, uniforms),
+        Shader::Spurs => spurs::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -169,15 +177,17 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         }
     };
     let p = uniforms.shader_param;
-    if !matches!(shader, Shader::Chunky | Shader::Triforce | Shader::Meteor)
-        && (p - 1.0).abs() > 1e-3
+    if !matches!(
+        shader,
+        Shader::Chunky | Shader::Triforce | Shader::Meteor | Shader::PhoenixSuns | Shader::Spurs
+    ) && (p - 1.0).abs() > 1e-3
     {
         let luma = 0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z;
         color.x = (luma + (color.x - luma) * p).clamp(0.0, 1.0);
         color.y = (luma + (color.y - luma) * p).clamp(0.0, 1.0);
         color.z = (luma + (color.z - luma) * p).clamp(0.0, 1.0);
     }
-    if !matches!(shader, Shader::Star) {
+    if !matches!(shader, Shader::Star | Shader::PhoenixSuns) {
         let dist_sun = fragment.world_pos.length();
         let atten = crate::scene_config::solar_attenuation(dist_sun);
         let min_amb = crate::scene_config::MIN_AMBIENT;
@@ -209,6 +219,8 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Chunky => "Shader: Chunky",
         Shader::Triforce => "Shader: Triforce",
         Shader::Meteor => "Shader: Meteoro",
+        Shader::PhoenixSuns => "Shader: Phoenix Suns",
+        Shader::Spurs => "Shader: Tottenham",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }

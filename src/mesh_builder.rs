@@ -41,6 +41,13 @@ impl Mesh {
         self.indices.len() / 3
     }
 
+    pub fn bounding_radius(&self) -> f32 {
+        self.positions
+            .iter()
+            .map(|p| p.length())
+            .fold(0.0_f32, f32::max)
+    }
+
     pub fn push_vertex(&mut self, pos: Vector3, normal: Vector3, uv: [f32; 2]) -> usize {
         let idx = self.positions.len();
         self.positions.push(pos);
@@ -252,6 +259,18 @@ impl Mesh {
         } else {
             outward as f32 / total as f32
         }
+    }
+
+    /// Volumen con signo (`> 0` si las normales apuntan hacia afuera en cualquier malla cerrada).
+    pub fn signed_volume(&self) -> f32 {
+        let mut sum = 0.0_f32;
+        for tri in self.indices.as_chunks::<3>().0 {
+            let p0 = self.positions[tri[0]];
+            let p1 = self.positions[tri[1]];
+            let p2 = self.positions[tri[2]];
+            sum += p0.dot(p1.cross(p2));
+        }
+        sum / 6.0
     }
 
     pub fn set_color(&mut self, color: Vector3) {
@@ -723,6 +742,136 @@ pub fn extruded_prism(poly_2d: &[[f32; 2]], height: f32) -> Mesh {
     mesh
 }
 
+/// Triangula un polígono 2D simple (convexo o cóncavo) en el plano XZ por recorte de orejas.
+/// Asume orientación CCW vista desde `+Y` (`signed_area < 0` en coordenadas `(x, z)`).
+pub fn triangulate_polygon_2d(pts: &[[f32; 2]]) -> Vec<[usize; 3]> {
+    let n = pts.len();
+    if n < 3 {
+        return Vec::new();
+    }
+    if n == 3 {
+        return vec![[0, 1, 2]];
+    }
+    let cross_2d = |a: [f32; 2], b: [f32; 2], c: [f32; 2]| -> f32 {
+        // Orientación en plano XZ vista desde +Y: (b-a) × (c-a) tiene componente Y = -(bx-ax)*(cz-az) + (bz-az)*(cx-ax)
+        (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1])
+    };
+    let point_in_tri = |p: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]| -> bool {
+        let c1 = cross_2d(a, b, p);
+        let c2 = cross_2d(b, c, p);
+        let c3 = cross_2d(c, a, p);
+        c1 >= -1e-7 && c2 >= -1e-7 && c3 >= -1e-7
+    };
+
+    let mut rem: Vec<usize> = (0..n).collect();
+    let mut tris = Vec::with_capacity(n - 2);
+    let mut guard = 0usize;
+    while rem.len() > 3 && guard < n * n + 16 {
+        let m = rem.len();
+        let mut clipped = false;
+        for i in 0..m {
+            let i0 = rem[(i + m - 1) % m];
+            let i1 = rem[i];
+            let i2 = rem[(i + 1) % m];
+            let (a, b, c) = (pts[i0], pts[i1], pts[i2]);
+            if cross_2d(a, b, c) <= 1e-8 {
+                continue;
+            }
+            let mut has_inside = false;
+            for &j in &rem {
+                if j == i0 || j == i1 || j == i2 {
+                    continue;
+                }
+                if point_in_tri(pts[j], a, b, c) {
+                    has_inside = true;
+                    break;
+                }
+            }
+            if !has_inside {
+                tris.push([i0, i1, i2]);
+                rem.remove(i);
+                clipped = true;
+                break;
+            }
+        }
+        if !clipped {
+            break;
+        }
+        guard += 1;
+    }
+    if rem.len() == 3 {
+        tris.push([rem[0], rem[1], rem[2]]);
+    }
+    tris
+}
+
+fn rdp_open_2d(pts: &[[f32; 2]], eps: f32) -> Vec<[f32; 2]> {
+    if pts.len() <= 2 {
+        return pts.to_vec();
+    }
+    let a = pts[0];
+    let b = pts[pts.len() - 1];
+    let dx = b[0] - a[0];
+    let dy = b[1] - a[1];
+    let l2 = dx * dx + dy * dy;
+    let mut best_i = 0usize;
+    let mut best_d = -1.0_f32;
+    for (i, &p) in pts.iter().enumerate().take(pts.len() - 1).skip(1) {
+        let d = if l2 < 1e-12 {
+            ((p[0] - a[0]).powi(2) + (p[1] - a[1]).powi(2)).sqrt()
+        } else {
+            let t = (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0);
+            ((p[0] - (a[0] + t * dx)).powi(2) + (p[1] - (a[1] + t * dy)).powi(2)).sqrt()
+        };
+        if d > best_d {
+            best_d = d;
+            best_i = i;
+        }
+    }
+    if best_d > eps {
+        let mut left = rdp_open_2d(&pts[..=best_i], eps);
+        let right = rdp_open_2d(&pts[best_i..], eps);
+        left.pop();
+        left.extend_from_slice(&right);
+        left
+    } else {
+        vec![a, b]
+    }
+}
+
+/// Simplifica un polígono cerrado 2D con Ramer–Douglas–Peucker manteniendo al menos 4 vértices.
+pub fn rdp_simplify_closed(poly: &[[f32; 2]], eps: f32) -> Vec<[f32; 2]> {
+    if poly.len() <= 4 || eps <= 1e-6 {
+        return poly.to_vec();
+    }
+    let p0 = poly[0];
+    let far_i = poly
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| {
+            let da = (a[0] - p0[0]).powi(2) + (a[1] - p0[1]).powi(2);
+            let db = (b[0] - p0[0]).powi(2) + (b[1] - p0[1]).powi(2);
+            da.total_cmp(&db)
+        })
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    if far_i == 0 {
+        return poly.to_vec();
+    }
+    let c1 = rdp_open_2d(&poly[..=far_i], eps);
+    let mut second = poly[far_i..].to_vec();
+    second.push(poly[0]);
+    let c2 = rdp_open_2d(&second, eps);
+    let mut out = Vec::with_capacity(c1.len() + c2.len());
+    out.extend_from_slice(&c1[..c1.len().saturating_sub(1)]);
+    out.extend_from_slice(&c2[..c2.len().saturating_sub(1)]);
+    if out.len() < 4 {
+        poly.to_vec()
+    } else {
+        out
+    }
+}
+
 /// Construye una malla cerrada conectando una lista de anillos poligonales
 /// `(altura_y, poligono_2d)` con el mismo número de vértices (`>= 3`).
 pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
@@ -792,8 +941,9 @@ pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
             [x, z],
         ));
     }
-    for i in 1..(n - 1) {
-        mesh.push_triangle(bot_cap[0], bot_cap[i + 1], bot_cap[i]);
+    let bot_tris = triangulate_polygon_2d(poly_bot);
+    for [a, b, c] in bot_tris {
+        mesh.push_triangle(bot_cap[a], bot_cap[c], bot_cap[b]);
     }
 
     // Tapa superior (+Y)
@@ -806,8 +956,9 @@ pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
             [x, z],
         ));
     }
-    for i in 1..(n - 1) {
-        mesh.push_triangle(top_cap[0], top_cap[i], top_cap[i + 1]);
+    let top_tris = triangulate_polygon_2d(poly_top);
+    for [a, b, c] in top_tris {
+        mesh.push_triangle(top_cap[a], top_cap[b], top_cap[c]);
     }
 
     mesh.compute_smooth_normals();
@@ -1000,6 +1151,166 @@ pub fn dodecahedron(circumradius: f32) -> Mesh {
     mesh
 }
 
+/// Extruye un contorno 2D en XZ a lo largo de Y con bisel en ambas tapas.
+pub fn beveled_extruded_contour(
+    poly_2d: &[[f32; 2]],
+    height: f32,
+    bevel_scale: f32,
+    bevel_height: f32,
+) -> Mesh {
+    let hy = height * 0.5;
+    let bh = bevel_height.min(hy * 0.45).max(1e-4);
+    let bs = bevel_scale.clamp(0.5, 0.99);
+    let mut cx = 0.0_f32;
+    let mut cz = 0.0_f32;
+    for &[x, z] in poly_2d {
+        cx += x;
+        cz += z;
+    }
+    cx /= poly_2d.len().max(1) as f32;
+    cz /= poly_2d.len().max(1) as f32;
+    let inset_ring: Vec<[f32; 2]> = poly_2d
+        .iter()
+        .map(|&[x, z]| [cx + (x - cx) * bs, cz + (z - cz) * bs])
+        .collect();
+    let full_ring: Vec<[f32; 2]> = poly_2d.to_vec();
+    let mut m = loft_rings(&[
+        (-hy, inset_ring.clone()),
+        (-hy + bh, full_ring.clone()),
+        (hy - bh, full_ring),
+        (hy, inset_ring),
+    ]);
+    m.compute_flat_normals();
+    m
+}
+
+/// Perfil 2D CCW de rectángulo redondeado normalizado (`u ∈ [-0.5, 0.5]`, `v ∈ [-0.5, 0.5]`).
+pub fn rounded_rect_profile_2d(corner_radius: f32, corner_segs: usize) -> Vec<[f32; 2]> {
+    let r = corner_radius.clamp(0.0, 0.45);
+    let segs = corner_segs.max(1);
+    let inner = 0.5 - r;
+    if r <= 1e-4 {
+        return vec![[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+    }
+    let fpi2 = std::f32::consts::FRAC_PI_2;
+    let corners = [
+        (inner, inner, 0.0_f32),
+        (-inner, inner, fpi2),
+        (-inner, -inner, PI),
+        (inner, -inner, 3.0 * fpi2),
+    ];
+    let mut pts = Vec::with_capacity(4 * segs);
+    for (cx, cy, start_a) in corners {
+        for s in 0..segs {
+            let a = start_a + fpi2 * (s as f32 / segs as f32);
+            pts.push([cx + r * a.cos(), cy + r * a.sin()]);
+        }
+    }
+    pts
+}
+
+/// Barre un perfil 2D (`u` en el plano XY perpendicular a la trayectoria, `v` en eje Z)
+/// a lo largo de `path`, con ancho en el plano `widths[i]` y profundidad en Z `depths[i]`.
+/// Si `closed` es `true`, cierra el lazo; si es `false`, agrega tapas estancas.
+pub fn sweep_profile(
+    path: &[Vector3],
+    widths: &[f32],
+    depths: &[f32],
+    profile_unit: &[[f32; 2]],
+    closed: bool,
+) -> Mesh {
+    let n = path.len();
+    let p_len = profile_unit.len();
+    assert!(n >= 2 && widths.len() == n && depths.len() == n && p_len >= 3);
+
+    let mut m = Mesh::new();
+    let z_axis = Vector3::new(0.0, 0.0, 1.0);
+    let mut ring_starts = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let prev = if i == 0 {
+            if closed { path[n - 1] } else { path[0] }
+        } else {
+            path[i - 1]
+        };
+        let next = if i + 1 == n {
+            if closed { path[0] } else { path[n - 1] }
+        } else {
+            path[i + 1]
+        };
+        let tangent = (next - prev).normalize();
+        let normal_xy = tangent.cross(z_axis).normalize();
+
+        let start = m.positions.len();
+        ring_starts.push(start);
+        for &[u, v] in profile_unit {
+            let pos = path[i] + normal_xy * (u * widths[i]) + z_axis * (v * depths[i]);
+            let norm = (normal_xy * u + z_axis * v).normalize();
+            m.push_vertex(pos, norm, [u + 0.5, i as f32 / n as f32]);
+        }
+    }
+
+    let seg_count = if closed { n } else { n - 1 };
+    for i in 0..seg_count {
+        let i_next = (i + 1) % n;
+        let r0 = ring_starts[i];
+        let r1 = ring_starts[i_next];
+        for j in 0..p_len {
+            let j_next = (j + 1) % p_len;
+            let a0 = r0 + j;
+            let a1 = r1 + j;
+            let b0 = r0 + j_next;
+            let b1 = r1 + j_next;
+            m.push_triangle(a0, a1, b1);
+            m.push_triangle(a0, b1, b0);
+        }
+    }
+
+    if !closed {
+        let t_start = (path[1] - path[0]).normalize();
+        let c_start = m.push_vertex(path[0], -t_start, [0.5, 0.5]);
+        let r0 = ring_starts[0];
+        for j in 0..p_len {
+            let j_next = (j + 1) % p_len;
+            m.push_triangle(c_start, r0 + j, r0 + j_next);
+        }
+
+        let t_end = (path[n - 1] - path[n - 2]).normalize();
+        let c_end = m.push_vertex(path[n - 1], t_end, [0.5, 0.5]);
+        let rn = ring_starts[n - 1];
+        for j in 0..p_len {
+            let j_next = (j + 1) % p_len;
+            m.push_triangle(c_end, rn + j_next, rn + j);
+        }
+    }
+
+    m.compute_flat_normals();
+    m
+}
+
+/// Dispersa copias de `proto` sobre `points` con escala y rotación reproducibles por `seed`.
+pub fn scatter_instances_in_mesh(
+    base: &mut Mesh,
+    proto: &Mesh,
+    points: &[Vector3],
+    scale_min: f32,
+    scale_max: f32,
+    seed: u64,
+) {
+    let mut rng = crate::rng::SplitMix64::new(seed);
+    for &pt in points {
+        let s = rng.range_f32(scale_min, scale_max);
+        let ry = rng.range_f32(0.0, TAU);
+        let rx = rng.range_f32(-0.6, 0.6);
+        let mut inst = proto.clone();
+        inst.scale(Vector3::new(s, s, s));
+        inst.rotate_x(rx);
+        inst.rotate_y(ry);
+        inst.translate(pt);
+        base.merge(&inst);
+    }
+}
+
 /// Caché de reconstrucción por nivel de detalle (`0` = bajo, `1` = medio, `2` = alto).
 pub struct LodMeshCache {
     levels: [Option<Vec<Vertex>>; 3],
@@ -1168,5 +1479,78 @@ mod tests {
         assert_eq!(d.tri_count(), 36);
         assert!(d.is_watertight());
         assert!((d.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn beveled_extruded_contour_is_watertight_and_outward() {
+        let shield = [
+            [-0.7, -0.8],
+            [0.7, -0.8],
+            [0.7, 0.2],
+            [0.0, 0.9],
+            [-0.7, 0.2],
+        ];
+        let m = beveled_extruded_contour(&shield, 0.2, 0.92, 0.04);
+        assert!(m.is_watertight());
+        assert!((m.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn concave_polygon_ear_clipping_and_extrusion_are_watertight() {
+        // Polígono cóncavo en forma de L
+        let l_shape = [
+            [-1.0, -1.0],
+            [1.0, -1.0],
+            [1.0, 0.0],
+            [0.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 1.0],
+        ];
+        let m = beveled_extruded_contour(&l_shape, 0.3, 0.92, 0.04);
+        assert!(m.is_watertight());
+        assert!((m.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn scatter_instances_in_mesh_is_reproducible_by_seed() {
+        let proto = box_mesh(1.0, 1.0, 1.0);
+        let pts = [
+            Vector3::new(-1.0, 0.0, 0.0),
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(1.0, 0.0, 0.0),
+        ];
+        let mut a = Mesh::new();
+        let mut b = Mesh::new();
+        scatter_instances_in_mesh(&mut a, &proto, &pts, 0.02, 0.04, 123);
+        scatter_instances_in_mesh(&mut b, &proto, &pts, 0.02, 0.04, 123);
+        assert_eq!(a.tri_count(), 36);
+        assert_eq!(a.positions.len(), b.positions.len());
+        for (pa, pb) in a.positions.iter().zip(b.positions.iter()) {
+            assert!((*pa - *pb).length() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn sweep_profile_closed_and_open_are_watertight_with_outward_normals() {
+        let profile = rounded_rect_profile_2d(0.22, 2);
+        let mut loop_path = Vec::new();
+        for i in 0..24 {
+            let a = TAU * (i as f32 / 24.0);
+            loop_path.push(Vector3::new(0.4 * a.cos(), 0.5 * a.sin(), 0.0));
+        }
+        let widths = vec![0.04; 24];
+        let depths = vec![0.08; 24];
+        let hoop = sweep_profile(&loop_path, &widths, &depths, &profile, true);
+        assert!(hoop.is_watertight());
+        assert!(hoop.signed_volume() > 0.0);
+
+        let open_path = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(0.1, 0.3, 0.0),
+            Vector3::new(0.25, 0.6, 0.0),
+        ];
+        let open = sweep_profile(&open_path, &[0.04, 0.045, 0.05], &[0.10, 0.09, 0.08], &profile, false);
+        assert!(open.is_watertight());
+        assert!(open.signed_volume() > 0.0);
     }
 }

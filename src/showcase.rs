@@ -142,11 +142,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Sol de los Phoenix Suns",
         sistema: SystemId::Favoritos,
         tipo: "Estrella",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Balon de basquetbol 3D con costuras giratorias delante de una explosion solar emisiva extruida con estela de rayos.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::PhoenixSuns),
+        has_mesh: true,
         light_dir: None,
     },
     Showcase {
@@ -190,11 +190,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Raqueta de tenis",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Marco Wilson Ultra medido en turquesa, azul y marino con barniz, mango octogonal y cuerdas de asteroides 11x13 con la W roja.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
         light_dir: None,
     },
     Showcase {
@@ -258,6 +258,30 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         light_dir: None,
     },
     Showcase {
+        id: "spurs_crest",
+        nombre: "Cresta del Tottenham",
+        sistema: SystemId::Favoritos,
+        tipo: "Trofeo",
+        descripcion_es: "Gallo extruido con bisel desde silueta medida sobre balon azul marino con costuras y cordones blancos; giro +-35.",
+        inspiracion: None,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Spurs),
+        has_mesh: true,
+        light_dir: None,
+    },
+    Showcase {
+        id: "airpods",
+        nombre: "AirPods",
+        sistema: SystemId::Favoritos,
+        tipo: "Trofeo",
+        descripcion_es: "Estuche blanco brillante con tapa entreabierta, bisagra y LED frontal, con par de auriculares espejados; shader chunky.",
+        inspiracion: None,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
+        light_dir: None,
+    },
+    Showcase {
         id: "la_bombonera",
         nombre: "La Bombonera",
         sistema: SystemId::Favoritos,
@@ -289,9 +313,13 @@ pub fn favorites_ready_entries() -> Vec<&'static Showcase> {
 
 pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_builder::Mesh> {
     match id {
+        "phoenix_suns" => Some(crate::bodies::build_suns_mesh),
         "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
         "cubo_skweb" => Some(crate::bodies::build_skewb_mesh),
         "megaminx" => Some(crate::bodies::build_megaminx_mesh),
+        "spurs_crest" => Some(crate::bodies::build_spurs_mesh),
+        "airpods" => Some(crate::bodies::build_airpods_mesh),
+        "raqueta_tenis" => Some(crate::bodies::build_racket_mesh),
         "joycon_izquierdo" => Some(crate::bodies::build_joycon_left_mesh),
         "joycon_derecho" => Some(crate::bodies::build_joycon_right_mesh),
         "trifuerza" => Some(crate::bodies::build_triforce_mesh),
@@ -320,7 +348,11 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
         phase: 0.0,
         orbit_inclination: 0.0,
         rotation_period: 24.0,
-        axial_tilt: if entry.id == "meteoro_ff7" { 0.0 } else { 0.22 },
+        axial_tilt: if matches!(entry.id, "meteoro_ff7" | "phoenix_suns" | "spurs_crest" | "raqueta_tenis") {
+            0.0
+        } else {
+            0.22
+        },
         shader,
         surface: crate::scene::SurfaceParams {
             seed: 0,
@@ -331,9 +363,10 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
     })
 }
 
-/// El sistema de favoritos está listo para vuelo cuando tiene su estrella
-/// ("Sol de los Phoenix Suns" / tipo "Estrella") y al menos 3 cuerpos `Ready`.
-pub fn is_favorites_system_ready(entries: &[Showcase]) -> bool {
+/// Bandera explícita para habilitar el vuelo del sistema de favoritos cuando esté integrado.
+pub const FAVORITES_FLIGHT_ENABLED: bool = false;
+
+pub fn has_required_favorites_bodies(entries: &[Showcase]) -> bool {
     let mut has_star = false;
     let mut ready_non_star = 0usize;
     for e in entries {
@@ -346,6 +379,12 @@ pub fn is_favorites_system_ready(entries: &[Showcase]) -> bool {
         }
     }
     has_star && ready_non_star >= 3
+}
+
+/// El sistema de favoritos está listo para vuelo cuando `FAVORITES_FLIGHT_ENABLED` es `true`,
+/// tiene su estrella y al menos 3 cuerpos `Ready`.
+pub fn is_favorites_system_ready(entries: &[Showcase]) -> bool {
+    FAVORITES_FLIGHT_ENABLED && has_required_favorites_bodies(entries)
 }
 
 #[cfg(test)]
@@ -439,7 +478,9 @@ mod tests {
                 light_dir: None,
             },
         ];
-        assert!(is_favorites_system_ready(&sample));
+        assert!(has_required_favorites_bodies(&sample));
+        const { assert!(!FAVORITES_FLIGHT_ENABLED); }
+        assert!(!is_favorites_system_ready(&sample));
     }
 
     #[test]

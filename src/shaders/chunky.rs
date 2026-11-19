@@ -22,7 +22,20 @@ pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     let view = surface_view(fragment, uniforms);
     let half_vec = (uniforms.light_dir + view).normalize();
     let spec_dot = n.dot(half_vec).max(0.0);
-    let spec = if spec_dot > 0.94 { 0.42 } else { 0.0 };
+    let spec = if fragment.material_id >= 0.5 {
+        // Barniz metálico con especular fuerte (e.g. marco de raqueta Wilson).
+        if spec_dot > 0.88 {
+            0.78
+        } else if spec_dot > 0.72 {
+            0.24
+        } else {
+            0.0
+        }
+    } else if spec_dot > 0.94 {
+        0.42
+    } else {
+        0.0
+    };
 
     let mu = surface_mu(fragment, uniforms);
     let rim = (1.0 - mu).powi(3) * 0.26;

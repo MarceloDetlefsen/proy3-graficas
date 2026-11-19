@@ -6,8 +6,9 @@ use std::f32::consts::FRAC_PI_2;
 use raylib::prelude::Vector3;
 
 use crate::mesh_builder::{
-    Mesh, box_mesh, cylinder, dodecahedron, dodecahedron_faces, extruded_prism, flat_polygon_mesh,
-    loft_rings, raised_sticker, rounded_box, sphere,
+    Mesh, beveled_extruded_contour, box_mesh, cone, cylinder, dodecahedron, dodecahedron_faces,
+    extruded_prism, flat_polygon_mesh, loft_rings, raised_sticker, rdp_simplify_closed,
+    rounded_box, rounded_rect_profile_2d, sphere, sweep_profile,
 };
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
@@ -606,6 +607,452 @@ pub fn build_joycon_right_mesh(detail: usize) -> Mesh {
     joycon(JoyConSide::Right, detail)
 }
 
+/// Construye el Sol de los Phoenix Suns: explosión solar con estela de rayos
+/// extruida desde los contornos medidos en `refs/suns_logo.png` y balón 3D al frente.
+pub fn build_suns_mesh(detail: usize) -> Mesh {
+    let [gr, gg, gb] = crate::logo_data::SUNS_GOLD_RGB;
+    let [or, og, ob] = crate::logo_data::SUNS_ORANGE_RGB;
+    let gold = Vector3::new(gr, gg, gb);
+    let orange = Vector3::new(or, og, ob);
+
+    let (eps, rings, sectors) = match detail {
+        0 => (0.16_f32, 6, 8),
+        1 => (0.06_f32, 10, 14),
+        _ => (0.0_f32, 14, 20),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Placas emisivas extruidas de la explosión solar y estela de rayos.
+    for contour in crate::logo_data::SUNS_CONTOURS {
+        let simplified = rdp_simplify_closed(contour, eps);
+        if simplified.len() < 3 {
+            continue;
+        }
+        let contour_xz: Vec<[f32; 2]> = simplified.iter().map(|&[x, y]| [x, -y]).collect();
+        let mut plate = beveled_extruded_contour(&contour_xz, 0.12, 0.92, 0.025);
+        plate.rotate_x(FRAC_PI_2);
+        plate.set_color(gold);
+        plate.set_material(0);
+        mesh.merge(&plate);
+    }
+
+    // 2. Balón de basquetbol 3D ligeramente adelantado frente a la placa solar.
+    let mut ball = sphere(1.0, rings, sectors);
+    ball.translate(Vector3::new(0.0, 0.0, 0.16));
+    ball.set_color(orange);
+    ball.set_material(1);
+    mesh.merge(&ball);
+
+    mesh
+}
+
+/// Construye la Cresta del Tottenham: contorno del gallo medido desde
+/// `refs/spurs_crest.jpg` extruido con bisel sobre una esfera 3D de balón.
+pub fn build_spurs_mesh(detail: usize) -> Mesh {
+    let [nr, ng, nb] = crate::logo_data::SPURS_NAVY_RGB;
+    let navy = Vector3::new(nr, ng, nb);
+
+    let (eps, rings, sectors) = match detail {
+        0 => (0.14_f32, 6, 8),
+        1 => (0.05_f32, 10, 14),
+        _ => (0.0_f32, 14, 20),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Contorno del gallo extruido con bisel (~0.18 de altura en grosor, bisel ~0.03).
+    let simplified = rdp_simplify_closed(crate::logo_data::SPURS_ROOSTER_CONTOUR, eps);
+    let contour_xz: Vec<[f32; 2]> = simplified.iter().map(|&[x, y]| [x, -y]).collect();
+    let mut min_y = f32::MAX;
+    let mut max_y = f32::MIN;
+    for &[_, y] in &simplified {
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+    let height = (max_y - min_y).max(1.0);
+    let thickness = height * 0.18;
+    let bevel_h = height * 0.03;
+
+    let mut rooster = beveled_extruded_contour(&contour_xz, thickness, 0.94, bevel_h);
+    rooster.rotate_x(FRAC_PI_2);
+    rooster.set_color(navy);
+    rooster.set_material(0);
+    mesh.merge(&rooster);
+
+    // 2. Balón 3D aparte (radio 1.0 en el origen, costuras/cordones en Shader::Spurs).
+    let mut ball = sphere(1.0, rings, sectors);
+    ball.set_color(navy);
+    ball.set_material(1);
+    mesh.merge(&ball);
+
+    mesh
+}
+
+/// Construye los AirPods: estuche de caja redondeada (proporción ~2.8:2.1:1) con
+/// tapa entreabierta ~70°, bisagra cilíndrica, LED frontal y par de auriculares espejados.
+pub fn build_airpods_mesh(detail: usize) -> Mesh {
+    let white = Vector3::new(0.961, 0.961, 0.969); // #F5F5F7
+    let light_gray = Vector3::new(0.84, 0.85, 0.87);
+    let silver = Vector3::new(0.72, 0.74, 0.78);
+    let mesh_dark = Vector3::new(0.14, 0.15, 0.17);
+    let led_green = Vector3::new(0.28, 0.88, 0.42);
+
+    let (seg_box, rings, sectors, seg) = match detail {
+        0 => (0, 4, 6, 5),
+        1 => (1, 6, 10, 8),
+        _ => (2, 10, 14, 12),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Estuche (1.12 x 0.84 x 0.40 -> proporción 2.8 : 2.1 : 1)
+    let mut base = if seg_box == 0 {
+        box_mesh(1.12, 0.56, 0.40)
+    } else {
+        rounded_box(1.12, 0.56, 0.40, 0.12, seg_box)
+    };
+    base.set_color(white);
+    base.translate(Vector3::new(0.0, -0.14, 0.0));
+    mesh.merge(&base);
+
+    // Tapa girada ~70° (1.22 rad) alrededor de la bisagra trasera
+    let mut lid = if seg_box == 0 {
+        box_mesh(1.12, 0.28, 0.40)
+    } else {
+        rounded_box(1.12, 0.28, 0.40, 0.12, seg_box)
+    };
+    lid.set_color(white);
+    lid.translate(Vector3::new(0.0, 0.14, 0.18));
+    lid.rotate_x(-1.22);
+    lid.translate(Vector3::new(0.0, 0.14, -0.18));
+    mesh.merge(&lid);
+
+    // Bisagra cilíndrica y LED frontal
+    let mut hinge = cylinder(0.045, 0.045, 0.60, seg);
+    hinge.rotate_z(FRAC_PI_2);
+    hinge.set_color(silver);
+    hinge.translate(Vector3::new(0.0, 0.14, -0.20));
+    mesh.merge(&hinge);
+
+    let mut led = sphere(0.024, 4, 6);
+    led.set_color(led_green);
+    led.translate(Vector3::new(0.0, 0.02, 0.205));
+    mesh.merge(&led);
+
+    // 2. Par de auriculares espejados flotando junto al estuche
+    for side in [-1.0_f32, 1.0] {
+        let mut pod = Mesh::new();
+        let mut head = sphere(0.15, rings, sectors);
+        head.scale(Vector3::new(1.15, 0.95, 1.15));
+        head.set_color(white);
+        head.translate(Vector3::new(0.0, 0.24, 0.0));
+        pod.merge(&head);
+
+        // Punta de silicona hacia adentro
+        let mut tip = cone(0.10, 0.15, seg);
+        tip.rotate_z(side * FRAC_PI_2);
+        tip.set_color(light_gray);
+        tip.translate(Vector3::new(-side * 0.17, 0.22, 0.03));
+        pod.merge(&tip);
+
+        // Vástago aplanado
+        let mut stem = cylinder(0.052, 0.046, 0.46, seg);
+        stem.scale(Vector3::new(0.85, 1.0, 1.12));
+        stem.set_color(white);
+        stem.translate(Vector3::new(side * 0.03, -0.02, 0.0));
+        pod.merge(&stem);
+
+        // Punta metálica inferior del vástago
+        let mut cap = cylinder(0.046, 0.042, 0.04, seg);
+        cap.set_color(silver);
+        cap.translate(Vector3::new(side * 0.03, -0.26, 0.0));
+        pod.merge(&cap);
+
+        // Rejilla oscura superior
+        let mut grille = box_mesh(0.06, 0.03, 0.09);
+        grille.set_color(mesh_dark);
+        grille.translate(Vector3::new(0.0, 0.37, 0.03));
+        pod.merge(&grille);
+
+        pod.translate(Vector3::new(side * 0.96, 0.08, 0.06));
+        mesh.merge(&pod);
+    }
+
+    mesh
+}
+
+fn rgb_vec(rgb: [f32; 3]) -> Vector3 {
+    Vector3::new(rgb[0], rgb[1], rgb[2])
+}
+
+fn racket_frame_color(p: Vector3) -> Vector3 {
+    use crate::racket_data::*;
+    let teal = rgb_vec(RACKET_TEAL_RGB);
+    let blue = rgb_vec(RACKET_BLUE_RGB);
+    let navy = rgb_vec(RACKET_NAVY_RGB);
+    let top_start = RACKET_HEAD_CENTER_Y + RACKET_HEAD_INNER_HEIGHT * 0.22;
+    let half_w = (RACKET_HEAD_OUTER_WIDTH * 0.34).max(0.15);
+    let tx = ((p.x / half_w) * 0.5 + 0.5).clamp(0.0, 1.0);
+    let side_grad = mix_color(teal, blue, tx);
+    if p.y >= top_start {
+        let ty = ((p.y - top_start) / 0.14).clamp(0.0, 1.0);
+        mix_color(side_grad, navy, ty)
+    } else {
+        side_grad
+    }
+}
+
+fn is_in_racket_w_mask(x: f32, y: f32) -> bool {
+    use crate::racket_data::*;
+    let u = (x / RACKET_HEAD_INNER_WIDTH) + 0.5;
+    let v = (RACKET_HEAD_CENTER_Y + 0.5 * RACKET_HEAD_INNER_HEIGHT - y) / RACKET_HEAD_INNER_HEIGHT;
+    if !(0.0..1.0).contains(&u) || !(0.0..1.0).contains(&v) {
+        return false;
+    }
+    let col = ((u * RACKET_W_MASK_COLS as f32) as usize).min(RACKET_W_MASK_COLS - 1);
+    let row = ((v * RACKET_W_MASK_ROWS as f32) as usize).min(RACKET_W_MASK_ROWS - 1);
+    (RACKET_W_MASK[row] >> col) & 1 != 0
+}
+
+/// Construye un asteroide octaédrico de 8 triángulos perturbado por semilla y estirado
+/// a lo largo del eje X (70% de `seg_len`) para representar un segmento de cuerda.
+fn string_asteroid_rock(seg_len: f32, radius_yz: f32, rng: &mut SplitMix64) -> Mesh {
+    let mut m = Mesh::new();
+    let half_l = seg_len * 0.35;
+    let dirs = [
+        [1.0_f32, 0.0, 0.0],
+        [-1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, -1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
+    ];
+    for d in dirs {
+        let jx = rng.range_f32(0.88, 1.12);
+        let jy = rng.range_f32(0.82, 1.18);
+        let jz = rng.range_f32(0.82, 1.18);
+        let p = Vector3::new(d[0] * half_l * jx, d[1] * radius_yz * jy, d[2] * radius_yz * jz);
+        m.push_vertex(p, Vector3::new(d[0], d[1], d[2]), [0.0, 0.0]);
+    }
+    let faces = [
+        [0, 2, 4],
+        [0, 4, 3],
+        [0, 3, 5],
+        [0, 5, 2],
+        [1, 4, 2],
+        [1, 3, 4],
+        [1, 5, 3],
+        [1, 2, 5],
+    ];
+    for [a, b, c] in faces {
+        m.push_triangle(a, b, c);
+    }
+    m.compute_flat_normals();
+    m
+}
+
+/// Construye la raqueta Wilson Ultra a partir de las medidas y paleta de `refs/raqueta.webp`:
+/// aro barrido con sección rectangular redondeada, garganta en Y, puente marino, mango
+/// octogonal con envoltura diagonal y cuerdas de asteroides con el logo 'W' rojo.
+pub fn build_racket_mesh(detail: usize) -> Mesh {
+    use crate::racket_data::*;
+    let navy = rgb_vec(RACKET_NAVY_RGB);
+    let grip_a = rgb_vec(RACKET_GRIP_A_RGB);
+    let grip_b = rgb_vec(RACKET_GRIP_B_RGB);
+    let string_col = rgb_vec(RACKET_STRING_RGB);
+    let red_w_col = rgb_vec(RACKET_LOGO_RED_RGB);
+
+    let (hoop_stride, corner_segs, corner_r, ast_stride) = match detail {
+        0 => (4usize, 1usize, 0.0_f32, 0usize), // sin asteroides
+        1 => (2usize, 2usize, 0.24_f32, 2usize), // mitad de asteroides
+        _ => (1usize, 2usize, 0.24_f32, 1usize), // todos los asteroides
+    };
+    let profile = rounded_rect_profile_2d(corner_r, corner_segs);
+
+    let mut mesh = Mesh::new();
+
+    // 1. Aro cerrado barrido a lo largo de la línea media medida (CCW desde +X).
+    let mut hoop_path = Vec::new();
+    let mut hoop_widths = Vec::new();
+    let mut hoop_depths = Vec::new();
+    for (idx, &[mx, my, w]) in RACKET_HOOP_MIDLINE.iter().enumerate() {
+        if idx % hoop_stride == 0 {
+            hoop_path.push(Vector3::new(mx, my, 0.0));
+            hoop_widths.push(w.max(RACKET_RIM_THICK_SIDE));
+            hoop_depths.push(RACKET_DEPTH_HEAD);
+        }
+    }
+    let mut hoop = sweep_profile(&hoop_path, &hoop_widths, &hoop_depths, &profile, true);
+    hoop.paint_vertices(|_, p, _| racket_frame_color(p));
+    hoop.set_material(1); // barniz metálico
+    mesh.merge(&hoop);
+
+    // 2. Puente azul marino oscuro bajo el lecho de cuerdas.
+    let bridge_half_span = RACKET_THROAT_OPEN_WIDTH * 0.62;
+    let bridge_path = vec![
+        Vector3::new(-bridge_half_span, RACKET_BRIDGE_Y, 0.0),
+        Vector3::new(0.0, RACKET_BRIDGE_Y - 0.01, 0.0),
+        Vector3::new(bridge_half_span, RACKET_BRIDGE_Y, 0.0),
+    ];
+    let mut bridge = sweep_profile(
+        &bridge_path,
+        &[RACKET_BRIDGE_HEIGHT; 3],
+        &[RACKET_DEPTH_HEAD * 0.96; 3],
+        &profile,
+        false,
+    );
+    bridge.set_color(navy);
+    bridge.set_material(1);
+    mesh.merge(&bridge);
+
+    // 3. Garganta abierta en Y (dos brazos afinándose hacia el mango).
+    let arm_top_x = RACKET_THROAT_OPEN_WIDTH * 0.56;
+    let arm_bot_x = RACKET_GRIP_WIDTH_TOP * 0.26;
+    for side in [-1.0_f32, 1.0] {
+        let arm_path = vec![
+            Vector3::new(side * arm_top_x, RACKET_BRIDGE_Y + 0.01, 0.0),
+            Vector3::new(side * (arm_top_x * 0.70), RACKET_BRIDGE_Y - RACKET_THROAT_LENGTH * 0.35, 0.0),
+            Vector3::new(side * (arm_top_x * 0.38), RACKET_BRIDGE_Y - RACKET_THROAT_LENGTH * 0.72, 0.0),
+            Vector3::new(side * arm_bot_x, RACKET_GRIP_TOP_Y + 0.005, 0.0),
+        ];
+        let arm_w = [
+            RACKET_RIM_THICK_SIDE * 1.15,
+            RACKET_RIM_THICK_SIDE * 1.08,
+            RACKET_RIM_THICK_SIDE * 1.02,
+            RACKET_GRIP_WIDTH_TOP * 0.45,
+        ];
+        let arm_d = [
+            RACKET_DEPTH_THROAT,
+            RACKET_DEPTH_THROAT * 0.98,
+            RACKET_DEPTH_THROAT * 0.94,
+            RACKET_DEPTH_GRIP,
+        ];
+        let mut arm = sweep_profile(&arm_path, &arm_w, &arm_d, &profile, false);
+        arm.paint_vertices(|_, p, _| racket_frame_color(p));
+        arm.set_material(1);
+        mesh.merge(&arm);
+    }
+
+    // 4. Mango octogonal con envoltura diagonal sutil y tapón.
+    let oct_ring = |rx: f32, rz: f32| -> Vec<[f32; 2]> {
+        (0..8)
+            .map(|k| {
+                let a = std::f32::consts::TAU * (k as f32 + 0.5) / 8.0;
+                [rx * a.cos(), rz * a.sin()]
+            })
+            .collect()
+    };
+    let y_bot = -1.0_f32;
+    let y_flare = y_bot + 0.055;
+    let y_top = RACKET_GRIP_TOP_Y + 0.02;
+    let grip_slices = 6usize;
+    let mut grip_rings = Vec::with_capacity(grip_slices + 2);
+    grip_rings.push((
+        y_bot,
+        oct_ring(RACKET_BUTTCAP_WIDTH * 0.5, RACKET_DEPTH_GRIP * 0.56),
+    ));
+    for s in 0..=grip_slices {
+        let t = s as f32 / grip_slices as f32;
+        let y = y_flare + t * (y_top - y_flare);
+        let w = RACKET_GRIP_WIDTH_BOT + t * (RACKET_GRIP_WIDTH_TOP - RACKET_GRIP_WIDTH_BOT);
+        grip_rings.push((y, oct_ring(w * 0.5, RACKET_DEPTH_GRIP * 0.5)));
+    }
+    let mut grip = loft_rings(&grip_rings);
+    grip.paint_vertices(|_, p, _| {
+        if p.y < y_flare - 0.005 {
+            navy
+        } else {
+            let ang = p.z.atan2(p.x);
+            if (p.y * 30.0 + ang).sin() > 0.0 {
+                grip_a
+            } else {
+                grip_b
+            }
+        }
+    });
+    grip.set_material(0);
+    mesh.merge(&grip);
+
+    // 5. Cuerdas como cadenas de asteroides alargados (11 principales × 13 cruzadas) + 'W' roja.
+    if ast_stride > 0 {
+        let mains = 11usize;
+        let crosses = 13usize;
+        let rx = RACKET_HEAD_INNER_WIDTH * 0.485;
+        let ry = RACKET_HEAD_INNER_HEIGHT * 0.485;
+        let cy = RACKET_HEAD_CENTER_Y;
+
+        let x_coords: Vec<f32> = (0..mains)
+            .map(|c| {
+                let tx = (c as f32 + 0.5) / mains as f32 * 2.0 - 1.0;
+                tx * rx * 0.92
+            })
+            .collect();
+        let y_coords: Vec<f32> = (0..crosses)
+            .map(|r| {
+                let ty = (r as f32 + 0.5) / crosses as f32 * 2.0 - 1.0;
+                cy + ty * ry * 0.92
+            })
+            .collect();
+
+        let inside_bed = |x: f32, y: f32| -> bool {
+            (x / rx).powi(2) + ((y - cy) / ry).powi(2) < 0.96
+        };
+
+        let mut rng = SplitMix64::new(2026);
+        let mut seg_idx = 0usize;
+
+        // Cuerdas principales (verticales).
+        for &x in &x_coords {
+            for r in 0..crosses.saturating_sub(1) {
+                let y0 = y_coords[r];
+                let y1 = y_coords[r + 1];
+                let ym = 0.5 * (y0 + y1);
+                if inside_bed(x, ym) {
+                    if seg_idx.is_multiple_of(ast_stride) {
+                        let mut rock = string_asteroid_rock((y1 - y0).abs(), 0.0095, &mut rng);
+                        rock.rotate_z(FRAC_PI_2);
+                        rock.translate(Vector3::new(x, ym, 0.0));
+                        rock.set_color(if is_in_racket_w_mask(x, ym) {
+                            red_w_col
+                        } else {
+                            string_col
+                        });
+                        rock.set_material(0);
+                        mesh.merge(&rock);
+                    }
+                    seg_idx += 1;
+                }
+            }
+        }
+
+        // Cuerdas cruzadas (horizontales).
+        for &y in &y_coords {
+            for c in 0..mains.saturating_sub(1) {
+                let x0 = x_coords[c];
+                let x1 = x_coords[c + 1];
+                let xm = 0.5 * (x0 + x1);
+                if inside_bed(xm, y) {
+                    if seg_idx.is_multiple_of(ast_stride) {
+                        let mut rock = string_asteroid_rock((x1 - x0).abs(), 0.0095, &mut rng);
+                        rock.translate(Vector3::new(xm, y, 0.0));
+                        rock.set_color(if is_in_racket_w_mask(xm, y) {
+                            red_w_col
+                        } else {
+                            string_col
+                        });
+                        rock.set_material(0);
+                        mesh.merge(&rock);
+                    }
+                    seg_idx += 1;
+                }
+            }
+        }
+    }
+
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -701,6 +1148,100 @@ mod tests {
             for m in [&m0, &m1, &m2] {
                 assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
             }
+        }
+    }
+
+    #[test]
+    fn suns_builds_three_decreasing_watertight_lods_under_4000_tris() {
+        let m2 = build_suns_mesh(2);
+        let m1 = build_suns_mesh(1);
+        let m0 = build_suns_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Suns L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(br > 3.0 && br < 3.5);
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn spurs_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_spurs_mesh(2);
+        let m1 = build_spurs_mesh(1);
+        let m0 = build_spurs_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Spurs L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn logo_data_contours_have_no_consecutive_duplicates_or_degeneracy() {
+        let check_poly = |poly: &[[f32; 2]], name: &str| {
+            assert!(poly.len() >= 3, "{name} degenerado: {}", poly.len());
+            for w in poly.windows(2) {
+                let d = ((w[1][0] - w[0][0]).powi(2) + (w[1][1] - w[0][1]).powi(2)).sqrt();
+                assert!(d > 1e-5, "{name} tiene duplicado consecutivo");
+            }
+            let first = poly[0];
+            let last = poly[poly.len() - 1];
+            let wrap_d = ((first[0] - last[0]).powi(2) + (first[1] - last[1]).powi(2)).sqrt();
+            assert!(wrap_d > 1e-5, "{name} tiene cierre duplicado");
+        };
+        check_poly(crate::logo_data::SPURS_ROOSTER_CONTOUR, "SPURS_ROOSTER_CONTOUR");
+        for (i, poly) in crate::logo_data::SUNS_CONTOURS.iter().enumerate() {
+            check_poly(poly, &format!("SUNS_RAY_{i}"));
+        }
+    }
+
+    #[test]
+    fn airpods_build_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_airpods_mesh(2);
+        let m1 = build_airpods_mesh(1);
+        let m0 = build_airpods_mesh(0);
+        assert!(m2.tri_count() <= 4000, "AirPods L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn racket_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        use crate::racket_data::*;
+        const {
+            assert!(RACKET_HEAD_OUTER_HEIGHT < RACKET_TOTAL_LENGTH);
+            assert!(RACKET_DEPTH_HEAD > RACKET_RIM_THICK_SIDE);
+        }
+
+        let m2 = build_racket_mesh(2);
+        let m2_repeat = build_racket_mesh(2);
+        let m1 = build_racket_mesh(1);
+        let m0 = build_racket_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Racket L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        // Misma semilla produce exactamente los mismos asteroides.
+        assert_eq!(m2.positions.len(), m2_repeat.positions.len());
+        for (pa, pb) in m2.positions.iter().zip(m2_repeat.positions.iter()) {
+            assert!((*pa - *pb).length() < 1e-6);
+        }
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
         }
     }
 }
