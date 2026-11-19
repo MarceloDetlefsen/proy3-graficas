@@ -9,6 +9,25 @@ use crate::fragment::Fragment;
 use crate::shaders::{diffuse_factor, surface_mu, surface_view};
 
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
+    if fragment.material_id >= 1.5 {
+        // Visor emisivo de Samus: centro verde menta brillante (#ECFEE6) y bisel verde oscuro (#507B38).
+        let [cr, cg, cb] = crate::samus_bombonera_data::SAMUS_VISOR_CENTER_RGB;
+        let [er, eg, eb] = crate::samus_bombonera_data::SAMUS_VISOR_EDGE_RGB;
+        let center_col = Vector3::new(cr, cg, cb);
+        let edge_col = Vector3::new(er, eg, eb);
+        let n_obj = fragment.normal.normalize();
+        let is_bevel = (1.0 - n_obj.z.abs()).clamp(0.0, 1.0);
+        let lower_rim = (( -0.18 - fragment.object_pos.y) * 2.5).clamp(0.0, 1.0);
+        let edge_t = (is_bevel * 1.15 + lower_rim * 0.35).clamp(0.0, 1.0);
+        let pulse = 0.94 + 0.06 * (uniforms.time * 2.2 * uniforms.shader_param).sin();
+        let out = (center_col * (1.0 - edge_t) + edge_col * edge_t) * pulse;
+        return Vector3::new(
+            out.x.clamp(0.0, 1.0),
+            out.y.clamp(0.0, 1.0),
+            out.z.clamp(0.0, 1.0),
+        );
+    }
+
     let n = fragment.normal.normalize();
     let ndl = diffuse_factor(n, uniforms);
     let band = if ndl > 0.68 {

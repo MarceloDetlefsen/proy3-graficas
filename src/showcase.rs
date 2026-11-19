@@ -226,11 +226,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Casco de Samus",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Casco terracota con domo, franjas oscuras, visor angular verde menta emisivo, orejeras con luz, rejillas y tubos de cuello.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
         light_dir: None,
     },
     Showcase {
@@ -286,11 +286,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "La Bombonera",
         sistema: SystemId::Favoritos,
         tipo: "Estadio",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Estadio en D con 3 lados de gradas empinadas azul #103F91 y franja amarilla #F2B705, edificio de palcos y cancha verde con lineas blancas.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
         light_dir: None,
     },
 ];
@@ -322,6 +322,8 @@ pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_bu
         "raqueta_tenis" => Some(crate::bodies::build_racket_mesh),
         "joycon_izquierdo" => Some(crate::bodies::build_joycon_left_mesh),
         "joycon_derecho" => Some(crate::bodies::build_joycon_right_mesh),
+        "casco_samus" => Some(crate::bodies::build_samus_helmet_mesh),
+        "la_bombonera" => Some(crate::bodies::build_bombonera_mesh),
         "trifuerza" => Some(crate::bodies::build_triforce_mesh),
         "meteoro_ff7" => Some(crate::bodies::build_meteor_mesh),
         _ => None,
@@ -348,7 +350,15 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
         phase: 0.0,
         orbit_inclination: 0.0,
         rotation_period: 24.0,
-        axial_tilt: if matches!(entry.id, "meteoro_ff7" | "phoenix_suns" | "spurs_crest" | "raqueta_tenis") {
+        axial_tilt: if matches!(
+            entry.id,
+            "meteoro_ff7"
+                | "phoenix_suns"
+                | "spurs_crest"
+                | "raqueta_tenis"
+                | "casco_samus"
+                | "la_bombonera"
+        ) {
             0.0
         } else {
             0.22
@@ -364,7 +374,7 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
 }
 
 /// Bandera explícita para habilitar el vuelo del sistema de favoritos cuando esté integrado.
-pub const FAVORITES_FLIGHT_ENABLED: bool = false;
+pub const FAVORITES_FLIGHT_ENABLED: bool = true;
 
 pub fn has_required_favorites_bodies(entries: &[Showcase]) -> bool {
     let mut has_star = false;
@@ -421,7 +431,7 @@ mod tests {
 
     #[test]
     fn favorites_readiness_requires_star_and_three_bodies() {
-        assert!(!is_favorites_system_ready(SHOWCASE_ENTRIES));
+        assert!(is_favorites_system_ready(SHOWCASE_ENTRIES));
         assert!(
             favorites_ready_entries()
                 .iter()
@@ -479,8 +489,9 @@ mod tests {
             },
         ];
         assert!(has_required_favorites_bodies(&sample));
-        const { assert!(!FAVORITES_FLIGHT_ENABLED); }
-        assert!(!is_favorites_system_ready(&sample));
+        const { assert!(FAVORITES_FLIGHT_ENABLED); }
+        assert!(is_favorites_system_ready(&sample));
+        assert!(!is_favorites_system_ready(&sample[..3]));
     }
 
     #[test]

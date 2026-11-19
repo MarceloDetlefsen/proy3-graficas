@@ -221,7 +221,7 @@ proy3-graficas/
 
 - Los 4 modelos `.obj` de superficie (`assets/surface/{tree,rock,building,monument}.obj`) no han sido agregados aún; el motor utiliza los marcadores procedurales de respaldo de `src/surface_props.rs`.
 - Los LOD de la nave (`assets/ship_lod0.obj`, `ship_lod1.obj`, `ship_lod2.obj`, con `3000`/`800`/`610` triángulos) ya se cargan desde archivo; el respaldo por decimación en `src/mesh_lod.rs::load_ship_lods` se mantiene únicamente si faltaran.
-- El menú principal y la galería de trofeos ya están implementados; el sistema de favoritos cuenta con 11 cuerpos `Ready` en la galería (`Sol de los Phoenix Suns`, `Cresta del Tottenham`, `AirPods`, `Raqueta de tenis`, `Cubo de Rubik`, `Cubo Skewb`, `Megaminx`, `Joy-Con izquierdo`, `Joy-Con derecho`, `Trifuerza` y `Meteoro de FF7`, construidos con `src/mesh_builder.rs`, `src/logo_data.rs` y `src/bodies.rs`) y 2 entradas en estado `Placeholder` ("en construcción": `Casco de Samus` y `La Bombonera`). El vuelo del sistema de favoritos permanece deshabilitado mediante `FAVORITES_FLIGHT_ENABLED = false` hasta completar su integración orbital (#81).
+- El menú principal, la galería de trofeos y el vuelo en ambos sistemas (`Sistema solar realista` y `Sistema de favoritos`) están activos (`FAVORITES_FLIGHT_ENABLED = true`). El sistema de favoritos cuenta con 13 cuerpos `Ready` (`Sol de los Phoenix Suns` al centro más 12 cuerpos en órbita sin solapamientos: `Cubo de Rubik`, `Cubo Skewb`, `Trifuerza`, `Joy-Con izquierdo`, `Joy-Con derecho`, `AirPods`, `Casco de Samus`, `Megaminx`, `Raqueta de tenis`, `La Bombonera`, `Cresta del Tottenham` y `Meteoro de FF7`).
 
 ## Dependencias principales
 

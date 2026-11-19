@@ -418,6 +418,8 @@ pub fn generate_docs_captures() {
         ("joycon_derecho", "galeria_joycon_der.png"),
         ("trifuerza", "galeria_trifuerza.png"),
         ("meteoro_ff7", "galeria_meteoro_ff7.png"),
+        ("casco_samus", "galeria_samus.png"),
+        ("la_bombonera", "galeria_bombonera.png"),
     ] {
         let showcase_idx = crate::showcase::SHOWCASE_ENTRIES
             .iter()
@@ -461,5 +463,68 @@ pub fn generate_docs_captures() {
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
     }
 
-    println!("Capturas oficiales generadas en docs/captures/ (29 archivos)");
+    // 13. Vista orbital del Sistema de Favoritos en vuelo.
+    {
+        let fav_bodies = crate::scene::favorites_system();
+        let cam_pos = Vector3::new(0.0, 42.0, 128.0);
+        let cam = Camera::new(cam_pos, Vector3::zero(), 48.0_f32.to_radians(), 0.1, 450.0);
+        let mut fav_u = Uniforms {
+            model_matrix: Mat4::identity(),
+            view_matrix: cam.view_matrix(),
+            projection_matrix: cam.projection_matrix(fb.width as f32 / fb.height as f32),
+            time,
+            light_dir: Vector3::new(0.0, 0.3, 1.0).normalize(),
+            camera_pos: cam.position,
+            debug_noise: false,
+            noise_frequency: 4.0,
+            rocky_debug_view: 3,
+            normal_mapping: true,
+            debug_normals: false,
+            viewport_width: fb.width as i32,
+            viewport_height: fb.height as i32,
+            noise: noise.clone(),
+            baked: Some(Arc::clone(&baked)),
+            shader_param: 1.0,
+        };
+        fb.clear();
+        bufs.screen_triangles.clear();
+        bufs.tri_materials.clear();
+        let sun_pos = crate::scene::body_position_at(&fav_bodies[0], time);
+        for body in &fav_bodies {
+            let entry = crate::showcase::SHOWCASE_ENTRIES
+                .iter()
+                .find(|e| e.sistema == crate::app::SystemId::Favoritos && e.nombre == body.name)
+                .unwrap();
+            let builder = crate::showcase::mesh_builder_for_showcase(entry.id).unwrap();
+            let mut cache = crate::mesh_builder::LodMeshCache::new(builder);
+            let verts = cache.get_or_build(2);
+            let bpos = crate::scene::body_position_at(body, time);
+            let ldir = crate::scene::body_light_dir(bpos, sun_pos, Vector3::new(0.0, 1.0, 0.0));
+            fav_u.model_matrix = crate::scene::body_model_matrix_unit(body, time);
+            let before = bufs.screen_triangles.len();
+            append_screen_triangles(verts, &fav_u, &mut bufs.clip_vertices, &mut bufs.screen_triangles);
+            let added = bufs.screen_triangles.len() - before;
+            bufs.tri_materials.resize(
+                before + added,
+                TriMaterial {
+                    shader: body.shader,
+                    light_dir: ldir,
+                    shader_param: 1.0,
+                },
+            );
+        }
+        rasterize_visibility_tiled(&bufs.screen_triangles, &mut bufs.tile_grid, &mut fb, true, threads);
+        crate::rasterizer::shade_visibility_tiled_materials_halo(
+            &bufs.screen_triangles,
+            &bufs.tri_materials,
+            &mut fb,
+            Shader::Chunky,
+            &fav_u,
+            threads,
+            crate::scene_config::solar_halo_for_system(crate::app::SystemId::Favoritos),
+        );
+        compose_and_save(&fb, None, &out_dir.join("sistema_favoritos.png"));
+    }
+
+    println!("Capturas oficiales generadas en docs/captures/ (32 archivos)");
 }

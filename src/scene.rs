@@ -220,12 +220,21 @@ pub fn solar_system() -> Vec<Body> {
 }
 
 pub fn favorites_system() -> Vec<Body> {
-    crate::showcase::favorites_ready_entries()
+    let mut entries = crate::showcase::favorites_ready_entries();
+    // Asegura que el Sol de los Phoenix Suns quede siempre en el índice 0 (centro del sistema).
+    entries.sort_by_key(|e| if e.tipo == "Estrella" { 0 } else { 1 });
+    entries
         .into_iter()
         .enumerate()
         .filter_map(|(i, entry)| {
             let shader = entry.shader?;
             let is_star = entry.tipo == "Estrella";
+            let spec = crate::scene_config::favorites_body_spec(entry.id);
+            let mass = if is_star {
+                2600.0
+            } else {
+                12.0 * spec.radius.powi(3)
+            };
             Some(Body {
                 name: entry.nombre,
                 kind: if is_star {
@@ -233,14 +242,14 @@ pub fn favorites_system() -> Vec<Body> {
                 } else {
                     BodyKind::Planet
                 },
-                radius: if is_star { 3.5 } else { 1.2 },
-                mass: if is_star { 1000.0 } else { 12.0 },
-                orbit_radius: if is_star { 0.0 } else { 12.0 + i as f32 * 8.0 },
-                orbit_period: if is_star { 0.0 } else { 28.0 + i as f32 * 14.0 },
-                phase: i as f32 * 1.1,
-                orbit_inclination: 0.04,
-                rotation_period: 25.0,
-                axial_tilt: 0.1,
+                radius: spec.radius,
+                mass,
+                orbit_radius: spec.orbit_radius,
+                orbit_period: spec.orbit_period,
+                phase: spec.phase,
+                orbit_inclination: spec.orbit_inclination,
+                rotation_period: spec.rotation_period,
+                axial_tilt: spec.axial_tilt,
                 shader,
                 surface: SurfaceParams {
                     seed: i as u32,
@@ -261,24 +270,21 @@ pub fn system_bodies(id: crate::app::SystemId) -> Vec<Body> {
 }
 
 pub fn effective_radius(body: &Body) -> f32 {
-    if matches!(body.shader, Shader::PhoenixSuns) {
-        return body.radius * 3.4;
-    }
-    if body.name == "Raqueta de tenis" {
-        return body.radius * 1.05;
+    if let Some(entry) = crate::showcase::SHOWCASE_ENTRIES
+        .iter()
+        .find(|e| e.sistema == crate::app::SystemId::Favoritos && e.nombre == body.name)
+    {
+        let mult = crate::scene_config::favorites_body_spec(entry.id).bounding_mult;
+        return body.radius * mult;
     }
     let amp_deform = body.radius * body.surface.deformation_amplitude.max(0.0);
     let deform = body.surface.max_deformation.max(amp_deform).max(0.0);
     body.radius + deform
 }
 
-/// Radio de esfera envolvente para frustum culling (en `Shader::Meteor` incluye cola y orbe).
+/// Radio de esfera envolvente para frustum culling.
 pub fn culling_radius(body: &Body) -> f32 {
-    match body.shader {
-        Shader::Meteor => body.radius * 5.2,
-        Shader::Spurs => body.radius * 4.2,
-        _ => effective_radius(body),
-    }
+    effective_radius(body)
 }
 
 pub fn body_position_at(body: &Body, time: f32) -> Vector3 {
@@ -429,8 +435,51 @@ mod tests {
 
         let favs = system_bodies(crate::app::SystemId::Favoritos);
         assert_eq!(favs.len(), crate::showcase::favorites_ready_entries().len());
-        assert!(!crate::showcase::is_favorites_system_ready(
+        assert!(crate::showcase::is_favorites_system_ready(
             crate::showcase::SHOWCASE_ENTRIES
         ));
+    }
+
+    #[test]
+    fn favorites_orbits_do_not_overlap() {
+        let mut favs = favorites_system();
+        assert_eq!(favs[0].kind, BodyKind::Star);
+        assert_eq!(favs[0].orbit_radius, 0.0);
+        favs.sort_by(|a, b| a.orbit_radius.total_cmp(&b.orbit_radius));
+        for pair in favs.windows(2) {
+            let inner = &pair[0];
+            let outer = &pair[1];
+            let inner_outer_edge = inner.orbit_radius + effective_radius(inner);
+            let outer_inner_edge = outer.orbit_radius - effective_radius(outer);
+            assert!(
+                outer_inner_edge > inner_outer_edge,
+                "Órbitas solapadas entre {} ({:.2}) y {} ({:.2})",
+                inner.name,
+                inner_outer_edge,
+                outer.name,
+                outer_inner_edge
+            );
+        }
+    }
+
+    #[test]
+    fn favorites_effective_radius_covers_full_mesh() {
+        let favs = favorites_system();
+        for body in &favs {
+            let entry = crate::showcase::SHOWCASE_ENTRIES
+                .iter()
+                .find(|e| e.sistema == crate::app::SystemId::Favoritos && e.nombre == body.name)
+                .unwrap();
+            let builder = crate::showcase::mesh_builder_for_showcase(entry.id).unwrap();
+            let mesh = builder(2);
+            let max_world_r = body.radius * mesh.bounding_radius();
+            assert!(
+                effective_radius(body) + 1e-3 >= max_world_r,
+                "{}: effective_radius={} < max_world_r={}",
+                body.name,
+                effective_radius(body),
+                max_world_r
+            );
+        }
     }
 }

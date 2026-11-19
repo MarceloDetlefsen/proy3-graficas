@@ -1053,6 +1053,588 @@ pub fn build_racket_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+fn samus_radial_at(angle: f32) -> f32 {
+    let prof = crate::samus_bombonera_data::SAMUS_DOME_RADIAL_PROFILE;
+    let n = prof.len();
+    let t = angle.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU * n as f32;
+    let i0 = (t.floor() as usize) % n;
+    let i1 = (i0 + 1) % n;
+    let f = t - t.floor();
+    prof[i0] * (1.0 - f) + prof[i1] * f
+}
+
+/// Construye una placa de visor estanca y simétrica con anillo intermedio curvado
+/// para abrazar la cúpula convexa sin que la esfera atraviese los triángulos.
+fn curved_visor_shell<F: Fn(f32, f32) -> f32>(contour_xy: &[[f32; 2]], dome_z_at: F) -> Mesh {
+    let mut m = Mesh::new();
+    let n = contour_xy.len();
+    let cx = 0.0_f32;
+    let cy = -0.02_f32;
+    let front_off = 0.068_f32;
+    let back_off = -0.050_f32;
+
+    let c_front = m.push_vertex(
+        Vector3::new(cx, cy, dome_z_at(cx, cy) + front_off),
+        Vector3::new(0.0, 0.0, 1.0),
+        [0.5, 0.5],
+    );
+    let c_back = m.push_vertex(
+        Vector3::new(cx, cy, dome_z_at(cx, cy) + back_off),
+        Vector3::new(0.0, 0.0, -1.0),
+        [0.5, 0.5],
+    );
+
+    let mut ring_m = Vec::with_capacity(n);
+    let mut ring_f = Vec::with_capacity(n);
+    let mut ring_b = Vec::with_capacity(n);
+    for &[x, y] in contour_xy {
+        let mx = cx + (x - cx) * 0.55;
+        let my = cy + (y - cy) * 0.55;
+        ring_m.push(m.push_vertex(
+            Vector3::new(mx, my, dome_z_at(mx, my) + front_off - 0.004),
+            Vector3::new(mx * 0.3, my * 0.2, 0.95).normalize(),
+            [0.5, 0.5],
+        ));
+        let z_s = dome_z_at(x, y);
+        ring_f.push(m.push_vertex(
+            Vector3::new(x, y, z_s + front_off - 0.012),
+            Vector3::new(x * 0.4, y * 0.2, 0.9).normalize(),
+            [0.5, 0.5],
+        ));
+        ring_b.push(m.push_vertex(
+            Vector3::new(x * 1.04, y * 1.04, z_s + back_off),
+            Vector3::new(x * 0.5, y * 0.3, -0.8).normalize(),
+            [0.5, 0.5],
+        ));
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        // Tapa frontal en dos anillos curvos (c_front -> ring_m -> ring_f)
+        m.push_triangle(c_front, ring_m[i], ring_m[j]);
+        m.push_triangle(ring_m[i], ring_f[i], ring_f[j]);
+        m.push_triangle(ring_m[i], ring_f[j], ring_m[j]);
+        // Tapa trasera mirando -Z
+        m.push_triangle(c_back, ring_b[j], ring_b[i]);
+        // Bisel lateral conectando frente y atrás
+        m.push_triangle(ring_f[i], ring_b[i], ring_b[j]);
+        m.push_triangle(ring_f[i], ring_b[j], ring_f[j]);
+    }
+    m.compute_flat_normals();
+    m
+}
+
+/// Construye el casco de Samus Aran a partir de las medidas de `refs/samus_helmet.jpg`:
+/// cúpula ovalada terracota, 3 surcos oscuros simétricos abrazando la corona, visor angular
+/// verde menta curvado sobre el rostro, barbilla con 3 rendijas, orejeras con pómulos y
+/// dos mangueras acanaladas.
+pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
+    use crate::samus_bombonera_data::*;
+    let armor = rgb_vec(SAMUS_ARMOR_RGB);
+    let groove_col = rgb_vec(SAMUS_GROOVE_RGB);
+    let visor_col = rgb_vec(SAMUS_VISOR_CENTER_RGB);
+    let hose_a = rgb_vec(SAMUS_HOSE_A_RGB);
+    let hose_b = rgb_vec(SAMUS_HOSE_B_RGB);
+    let grille_dark = Vector3::new(0.16, 0.14, 0.14);
+
+    let (rings, sectors, ear_rings, ear_sectors, hose_ribs, hose_prof_segs) = match detail {
+        0 => (10usize, 16usize, 5usize, 8usize, 6usize, 4usize),
+        1 => (14, 22, 7, 12, 8, 6),
+        _ => (18, 28, 9, 16, 10, 8),
+    };
+
+    let mut mesh = Mesh::new();
+    let rx = 0.78_f32;
+    let ry = 0.90_f32;
+    let rz = 0.84_f32;
+
+    let dome_z_at = |x: f32, y: f32| -> f32 {
+        let nx = x / rx;
+        let ny = (y - 0.04) / ry;
+        (1.0 - nx * nx - ny * ny).max(0.02).sqrt() * rz
+    };
+
+    // 1. Cúpula ovalada limpia con ligero estrechamiento mandibular (satinado sin mancha blanca).
+    let mut dome = sphere(1.0, rings, sectors);
+    for p in &mut dome.positions {
+        let jaw_taper = 1.0 - 0.18 * (-p.y).max(0.0);
+        p.x *= rx * jaw_taper;
+        p.y = p.y * ry + 0.04;
+        p.z *= rz;
+    }
+    dome.compute_smooth_normals();
+    dome.set_color(armor);
+    dome.set_material(0);
+    mesh.merge(&dome);
+
+    // 2. Tres surcos oscuros simétricos pegados a la superficie desde la coronilla hasta el visor.
+    let groove_prof = rounded_rect_profile_2d(0.15, 1);
+    let groove_paths: Vec<Vec<[f32; 2]>> = vec![
+        vec![
+            [0.0, 0.92],
+            [0.0, 0.80],
+            [0.0, 0.66],
+            [0.0, 0.52],
+            [0.0, 0.38],
+            [0.0, 0.25],
+        ],
+        vec![
+            [-0.18, 0.90],
+            [-0.21, 0.78],
+            [-0.22, 0.64],
+            [-0.21, 0.50],
+            [-0.20, 0.36],
+            [-0.31, 0.28],
+            [-0.42, 0.20],
+        ],
+        vec![
+            [0.18, 0.90],
+            [0.21, 0.78],
+            [0.22, 0.64],
+            [0.21, 0.50],
+            [0.20, 0.36],
+            [0.31, 0.28],
+            [0.42, 0.20],
+        ],
+    ];
+    for gpts in &groove_paths {
+        let mut path = Vec::with_capacity(gpts.len());
+        for &[gx, gy] in gpts {
+            path.push(Vector3::new(gx, gy, dome_z_at(gx, gy) + 0.008));
+        }
+        let widths = vec![0.028; path.len()];
+        let depths = vec![0.020; path.len()];
+        let mut ribbon = sweep_profile(&path, &widths, &depths, &groove_prof, false);
+        ribbon.set_color(groove_col);
+        ribbon.set_material(0);
+        mesh.merge(&ribbon);
+    }
+
+    // 3. Visor simétrico curvado sobre la cúpula (borde superior ancho con punta central).
+    let visor_contour_ccw = [
+        [-0.50, 0.25],
+        [-0.44, -0.04],
+        [-0.18, -0.26],
+        [-0.11, -0.46],
+        [0.11, -0.46],
+        [0.18, -0.26],
+        [0.44, -0.04],
+        [0.50, 0.25],
+        [0.16, 0.19],
+        [0.10, 0.25],
+        [-0.10, 0.25],
+        [-0.16, 0.19],
+    ];
+    let mut visor = curved_visor_shell(&visor_contour_ccw, dome_z_at);
+    visor.set_color(visor_col);
+    visor.set_material(2); // visor emisivo animado
+    mesh.merge(&visor);
+
+    // 4. Barbilla integrada bajo el visor con tres rendijas horizontales oscuras.
+    let chin_rings = vec![
+        (-0.92_f32, vec![[-0.12, 0.30], [0.12, 0.30], [0.09, 0.56], [-0.09, 0.56]]),
+        (-0.66, vec![[-0.19, 0.30], [0.19, 0.30], [0.15, 0.64], [-0.15, 0.64]]),
+        (-0.40, vec![[-0.22, 0.30], [0.22, 0.30], [0.18, 0.68], [-0.18, 0.68]]),
+    ];
+    let mut chin = loft_rings(&chin_rings);
+    chin.set_color(armor);
+    chin.set_material(0);
+    mesh.merge(&chin);
+
+    for k in 0..3 {
+        let mut slat = box_mesh(0.16 - k as f32 * 0.015, 0.036, 0.06);
+        slat.translate(Vector3::new(0.0, -0.52 - k as f32 * 0.10, 0.65 - k as f32 * 0.02));
+        slat.set_color(grille_dark);
+        slat.set_material(0);
+        mesh.merge(&slat);
+    }
+
+    // 5. Orejeras grandes simétricas + guardas de pómulo barridas hacia la barbilla.
+    let cheek_prof = rounded_rect_profile_2d(0.28, 1);
+    for side in [-1.0_f32, 1.0] {
+        let mut ear = sphere(1.0, ear_rings, ear_sectors);
+        ear.scale(Vector3::new(0.22, 0.28, 0.30));
+        ear.translate(Vector3::new(side * 0.72, -0.02, -0.02));
+        ear.set_color(armor);
+        ear.set_material(0);
+        mesh.merge(&ear);
+
+        let cheek_path = vec![
+            Vector3::new(side * 0.68, -0.18, 0.06),
+            Vector3::new(side * 0.60, -0.32, 0.26),
+            Vector3::new(side * 0.48, -0.44, 0.42),
+        ];
+        let mut cheek = sweep_profile(
+            &cheek_path,
+            &[0.14, 0.13, 0.11],
+            &[0.18, 0.16, 0.14],
+            &cheek_prof,
+            false,
+        );
+        cheek.set_color(armor);
+        cheek.set_material(0);
+        mesh.merge(&cheek);
+    }
+
+    // 6. Dos mangueras acanaladas (6/8/10 costillas ±15% alternando dos grises).
+    let hose_prof = rounded_rect_profile_2d(0.42, (hose_prof_segs / 4).max(1));
+    let mut path_pts = Vec::with_capacity(hose_ribs * 2 + 1);
+    let mut widths = Vec::with_capacity(hose_ribs * 2 + 1);
+    let total_steps = hose_ribs * 2;
+    for s in 0..=total_steps {
+        let t = s as f32 / total_steps as f32;
+        let hx = 0.14 + t * 0.38;
+        let hy = -0.74 + t * t * 0.32;
+        let hz = 0.56 - t * 0.22;
+        let rib_mod = if s % 2 == 1 { 1.15 } else { 0.85 };
+        path_pts.push(Vector3::new(hx, hy, hz));
+        widths.push(0.105 * rib_mod);
+    }
+    for side in [-1.0_f32, 1.0] {
+        let sided_path: Vec<Vector3> = path_pts
+            .iter()
+            .map(|&p| Vector3::new(side * p.x, p.y, p.z))
+            .collect();
+        let mut hose = sweep_profile(&sided_path, &widths, &widths, &hose_prof, false);
+        hose.paint_vertices(|_, p, _| {
+            let phase = ((p.x.abs() + p.y.abs()) * 14.0).floor() as i32;
+            if phase.rem_euclid(2) == 0 {
+                hose_a
+            } else {
+                hose_b
+            }
+        });
+        hose.set_material(0);
+        mesh.merge(&hose);
+    }
+
+    mesh
+}
+
+/// Construye un bloque rectangular estanco con la cara superior subdividida en `nx × nz`
+/// para poder pintar líneas de cancha por color de vértice.
+fn subdivided_pitch_slab(width: f32, height: f32, depth: f32, nx: usize, nz: usize) -> Mesh {
+    let mut m = Mesh::new();
+    let hx = width * 0.5;
+    let hy = height * 0.5;
+    let hz = depth * 0.5;
+    let mut top = Vec::with_capacity((nx + 1) * (nz + 1));
+    let mut bot = Vec::with_capacity((nx + 1) * (nz + 1));
+    for iz in 0..=nz {
+        let z = -hz + depth * (iz as f32 / nz as f32);
+        for ix in 0..=nx {
+            let x = -hx + width * (ix as f32 / nx as f32);
+            top.push(m.push_vertex(Vector3::new(x, hy, z), Vector3::new(0.0, 1.0, 0.0), [0.0, 0.0]));
+            bot.push(m.push_vertex(Vector3::new(x, -hy, z), Vector3::new(0.0, -1.0, 0.0), [0.0, 0.0]));
+        }
+    }
+    let stride = nx + 1;
+    for iz in 0..nz {
+        for ix in 0..nx {
+            let t00 = top[iz * stride + ix];
+            let t10 = top[iz * stride + ix + 1];
+            let t01 = top[(iz + 1) * stride + ix];
+            let t11 = top[(iz + 1) * stride + ix + 1];
+            m.push_triangle(t00, t01, t11);
+            m.push_triangle(t00, t11, t10);
+
+            let b00 = bot[iz * stride + ix];
+            let b10 = bot[iz * stride + ix + 1];
+            let b01 = bot[(iz + 1) * stride + ix];
+            let b11 = bot[(iz + 1) * stride + ix + 1];
+            m.push_triangle(b00, b11, b01);
+            m.push_triangle(b00, b10, b11);
+        }
+    }
+    // Paredes laterales estancas compartiendo los mismos vértices del borde.
+    for ix in 0..nx {
+        // Borde -Z (iz = 0)
+        let t0 = top[ix];
+        let t1 = top[ix + 1];
+        let b0 = bot[ix];
+        let b1 = bot[ix + 1];
+        m.push_triangle(t0, t1, b1);
+        m.push_triangle(t0, b1, b0);
+        // Borde +Z (iz = nz)
+        let off = nz * stride;
+        let t0p = top[off + ix];
+        let t1p = top[off + ix + 1];
+        let b0p = bot[off + ix];
+        let b1p = bot[off + ix + 1];
+        m.push_triangle(t0p, b1p, t1p);
+        m.push_triangle(t0p, b0p, b1p);
+    }
+    for iz in 0..nz {
+        // Borde -X (ix = 0)
+        let t0 = top[iz * stride];
+        let t1 = top[(iz + 1) * stride];
+        let b0 = bot[iz * stride];
+        let b1 = bot[(iz + 1) * stride];
+        m.push_triangle(t0, b1, t1);
+        m.push_triangle(t0, b0, b1);
+        // Borde +X (ix = nx)
+        let t0p = top[iz * stride + nx];
+        let t1p = top[(iz + 1) * stride + nx];
+        let b0p = bot[iz * stride + nx];
+        let b1p = bot[(iz + 1) * stride + nx];
+        m.push_triangle(t0p, t1p, b1p);
+        m.push_triangle(t0p, b1p, b0p);
+    }
+    m.compute_flat_normals();
+    m
+}
+
+/// Construye un prisma triangular/tetraédrico estanco de 4 triángulos (para píxeles de letras en gradas).
+fn watertight_seat_block(cx: f32, cy: f32, cz: f32, w: f32, h: f32, d: f32) -> Mesh {
+    let mut m = Mesh::new();
+    let hw = w * 0.5;
+    let hh = h * 0.5;
+    let hd = d * 0.5;
+    let p0 = m.push_vertex(Vector3::new(cx - hw, cy - hh, cz + hd), Vector3::zero(), [0.0, 0.0]);
+    let p1 = m.push_vertex(Vector3::new(cx + hw, cy - hh, cz + hd), Vector3::zero(), [0.0, 0.0]);
+    let p2 = m.push_vertex(Vector3::new(cx, cy + hh, cz + hd), Vector3::zero(), [0.0, 0.0]);
+    let p3 = m.push_vertex(Vector3::new(cx, cy, cz - hd), Vector3::zero(), [0.0, 0.0]);
+    m.push_triangle(p0, p1, p2);
+    m.push_triangle(p0, p3, p1);
+    m.push_triangle(p1, p3, p2);
+    m.push_triangle(p2, p3, p0);
+    m.compute_flat_normals();
+    m
+}
+
+/// Construye el estadio La Bombonera a partir de `refs/bombonera.webp`:
+/// campo 105:68 a 14 franjas con líneas y arcos, herradura en D de 3 niveles escalonados
+/// empinados (azul/amarillo/azul) con muro exterior y zócalo, letras "CABJ" y "BOCA" con
+/// la fuente 5×7 del HUD, edificio de palcos con 12×6 ventanas, torres y reflectores.
+pub fn build_bombonera_mesh(detail: usize) -> Mesh {
+    use crate::samus_bombonera_data::*;
+    let boca_blue = rgb_vec(BOCA_BLUE_RGB);
+    let boca_gold = rgb_vec(BOCA_GOLD_RGB);
+    let concrete = rgb_vec(BOCA_CONCRETE_RGB);
+    let zocalo_col = rgb_vec(BOCA_ZOCALO_RGB);
+    let grass_dark = rgb_vec(BOCA_GRASS_DARK_RGB);
+    let grass_light = rgb_vec(BOCA_GRASS_LIGHT_RGB);
+    let line_white = Vector3::new(0.95, 0.96, 0.94);
+    let window_dark = Vector3::new(0.18, 0.20, 0.24);
+    let aisle_dark = Vector3::new(0.12, 0.14, 0.18);
+
+    let (u_segs, pitch_nx, pitch_nz, steps_per_tier, show_letters, show_lamps) = match detail {
+        0 => (10usize, 4usize, 6usize, [1usize, 1, 1], false, false), // tazón liso
+        1 => (14, 8, 10, [2, 3, 3], false, true),
+        _ => (20, 10, 14, [5, 6, 7], true, true),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Campo 105:68 (largo = 1.60, ancho = 1.036) a 14 franjas con líneas blancas y arcos.
+    let pitch_l = 1.60_f32;
+    let pitch_w = 1.60_f32 * (68.0 / 105.0); // ≈ 1.036
+    let mut pitch = subdivided_pitch_slab(pitch_w, 0.06, pitch_l, pitch_nx, pitch_nz);
+    pitch.translate(Vector3::new(-0.08, -0.22, 0.0));
+    pitch.paint_vertices(|_, p, _| {
+        if p.y < -0.20 {
+            return aisle_dark;
+        }
+        let lx = p.x + 0.08;
+        let lz = p.z;
+        let on_outer = lx.abs() > pitch_w * 0.45 || lz.abs() > pitch_l * 0.46;
+        let on_half = lz.abs() < 0.038;
+        let on_circle = ((lx * lx + lz * lz).sqrt() - 0.14).abs() < 0.036;
+        let on_box = (lz.abs() > pitch_l * 0.34 && lz.abs() < pitch_l * 0.38 && lx.abs() < 0.24)
+            || (lz.abs() > pitch_l * 0.34 && (lx.abs() - 0.24).abs() < 0.036);
+        if on_outer || on_half || on_circle || on_box {
+            line_white
+        } else {
+            let stripe = ((lz + pitch_l * 0.5) / pitch_l * 14.0).floor() as i32;
+            if stripe.rem_euclid(2) == 0 {
+                grass_light
+            } else {
+                grass_dark
+            }
+        }
+    });
+    mesh.merge(&pitch);
+
+    // Arcos de gol en ambos extremos del campo.
+    for side in [-1.0_f32, 1.0] {
+        let mut goal = box_mesh(0.14, 0.055, 0.035);
+        goal.translate(Vector3::new(-0.08, -0.165, side * (pitch_l * 0.46)));
+        goal.set_color(line_white);
+        mesh.merge(&goal);
+    }
+
+    // 2. Zócalo de concreto gris claro sobresaliendo 0.05 alrededor del estadio.
+    let mut zocalo = box_mesh(pitch_w + 0.66, 0.04, pitch_l + 0.58);
+    zocalo.translate(Vector3::new(0.02, -0.27, 0.0));
+    zocalo.set_color(zocalo_col);
+    mesh.merge(&zocalo);
+
+    // 3. Herradura de gradas en D (3 lados: cierra completamente contra los palcos en x = +0.44).
+    let mut u_path = Vec::with_capacity(u_segs + 1);
+    for i in 0..=u_segs {
+        let t = i as f32 / u_segs as f32;
+        if t < 0.16 {
+            let s = t / 0.16;
+            u_path.push(Vector3::new(0.42 - s * 0.62, -0.78, 0.0));
+        } else if t > 0.84 {
+            let s = (t - 0.84) / 0.16;
+            u_path.push(Vector3::new(-0.20 + s * 0.62, 0.78, 0.0));
+        } else {
+            let s = (t - 0.16) / 0.68;
+            let a = -0.5 * std::f32::consts::PI - s * std::f32::consts::PI;
+            let ca = a.cos();
+            let sa = a.sin();
+            let x = ca.signum() * ca.abs().powf(0.45) * 0.56 - 0.20;
+            let y = sa.signum() * sa.abs().powf(0.45) * 0.78;
+            u_path.push(Vector3::new(x, y, 0.0));
+        }
+    }
+    // Invertir para que la normal N = T × Z apunte hacia afuera (gradas hacia la cancha).
+    u_path.reverse();
+
+    // Perfil escalonado de 3 bandejas empinadas (proporción medida BOCA_TIER_PROPORTIONS).
+    let mut profile_pts: Vec<[f32; 2]> = Vec::new();
+    // Base exterior y muro exterior hasta y = +0.26 (altura ≈ 0.50 sobre el campo).
+    profile_pts.push([0.24, -0.25]);
+    profile_pts.push([0.24, 0.26]);
+    profile_pts.push([0.19, 0.26]);
+
+    if detail == 0 {
+        // Nivel bajo: tazón liso.
+        profile_pts.push([-0.14, -0.18]);
+        profile_pts.push([-0.14, -0.25]);
+    } else {
+        // Bajar por las 3 bandejas desde arriba (tier 2 azul -> tier 1 amarillo -> tier 0 azul).
+        let mut cur_u = 0.19_f32;
+        let mut cur_v = 0.26_f32;
+        let step_h = 0.024_f32;
+        let step_u = 0.017_f32;
+        for (tier_idx, &steps) in steps_per_tier.iter().rev().enumerate() {
+            for _ in 0..steps {
+                cur_v -= step_h;
+                profile_pts.push([cur_u, cur_v]);
+                cur_u -= step_u;
+                profile_pts.push([cur_u, cur_v]);
+            }
+            if tier_idx < 2 {
+                // Pasillo estrecho oscuro separador entre niveles.
+                cur_u -= 0.012;
+                profile_pts.push([cur_u, cur_v]);
+            }
+        }
+        profile_pts.push([cur_u, -0.25]);
+    }
+
+    let widths = vec![1.0_f32; u_path.len()];
+    let depths = vec![1.0_f32; u_path.len()];
+    let mut stands = sweep_profile(&u_path, &widths, &depths, &profile_pts, false);
+    stands.rotate_x(-FRAC_PI_2);
+    stands.paint_vertices(|_, p, n| {
+        let is_outer = n.x * p.x + n.z * p.z > 0.35;
+        if is_outer {
+            if p.y > -0.06 && p.y < 0.06 {
+                boca_gold
+            } else {
+                boca_blue
+            }
+        } else {
+            // Proporciones medidas de las 3 bandejas: [0..1] desde y = -0.18 hasta +0.26.
+            let t = ((p.y + 0.18) / 0.44).clamp(0.0, 1.0);
+            let t_low = BOCA_TIER_PROPORTIONS[0];
+            let t_mid = t_low + BOCA_TIER_PROPORTIONS[1];
+            if (t - t_low).abs() < 0.025 || (t - t_mid).abs() < 0.025 {
+                aisle_dark
+            } else if t < t_low || t > t_mid {
+                boca_blue
+            } else {
+                boca_gold
+            }
+        }
+    });
+    mesh.merge(&stands);
+
+    // 4. Letras "CABJ" y "BOCA" en el nivel superior usando la fuente 5×7 del HUD.
+    if show_letters {
+        let words = [("CABJ", -0.44_f32), ("BOCA", 0.14_f32)];
+        for (word, z_start) in words {
+            for (ci, ch) in word.chars().enumerate() {
+                let Some(glyph) = crate::hud::glyph_5x7(ch) else {
+                    continue;
+                };
+                let cz_base = z_start + ci as f32 * 0.095;
+                for (row, &bits) in glyph.iter().enumerate() {
+                    for col in 0..5 {
+                        if (bits >> (4 - col)) & 1 != 0 && (row + col) % 2 == 0 {
+                            let y = 0.21 - row as f32 * 0.015;
+                            let x = -0.78 + row as f32 * 0.008;
+                            let z = cz_base + col as f32 * 0.015;
+                            let mut blk = watertight_seat_block(x, y, z, 0.016, 0.016, 0.016);
+                            blk.set_color(boca_gold);
+                            mesh.merge(&blk);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Edificio de palcos en el lado largo abierto (+X) con ventanas (12×6) en ambas caras y 2 torres.
+    let mut palcos = subdivided_pitch_slab(0.60, 0.18, pitch_l, 6, 12);
+    palcos.rotate_z(FRAC_PI_2);
+    palcos.translate(Vector3::new(0.54, 0.06, 0.0));
+    palcos.paint_vertices(|_, p, n| {
+        if n.x.abs() > 0.5 && p.y > -0.18 && p.y < 0.30 {
+            let r_idx = ((p.y + 0.18) * 14.0).floor() as i32;
+            let c_idx = ((p.z + pitch_l * 0.5) * 9.0).floor() as i32;
+            if r_idx.rem_euclid(2) == 1 && c_idx.rem_euclid(2) == 1 {
+                window_dark
+            } else {
+                concrete
+            }
+        } else {
+            concrete
+        }
+    });
+    mesh.merge(&palcos);
+
+    // Dos torres extremas con losas de balcones apiladas.
+    for side in [-1.0_f32, 1.0] {
+        let tz = side * (pitch_l * 0.48);
+        let mut tower = box_mesh(0.24, 0.72, 0.18);
+        tower.translate(Vector3::new(0.54, 0.12, tz));
+        tower.set_color(concrete);
+        mesh.merge(&tower);
+        for b in 0..3 {
+            let mut balc = box_mesh(0.28, 0.03, 0.21);
+            balc.translate(Vector3::new(0.52, -0.06 + b as f32 * 0.18, tz));
+            balc.set_color(zocalo_col);
+            mesh.merge(&balc);
+        }
+    }
+
+    // Dos torres de luces delgadas en las esquinas + pequeños racimos sobre las gradas.
+    if show_lamps {
+        for side in [-1.0_f32, 1.0] {
+            let mut mast = cylinder(0.018, 0.012, 0.52, 6);
+            mast.translate(Vector3::new(0.46, 0.48, side * 0.76));
+            mast.set_color(zocalo_col);
+            mesh.merge(&mast);
+
+            let mut cluster = box_mesh(0.07, 0.04, 0.09);
+            cluster.translate(Vector3::new(0.46, 0.75, side * 0.76));
+            cluster.set_color(line_white);
+            mesh.merge(&cluster);
+        }
+        for z_lamp in [-0.42_f32, 0.0, 0.42] {
+            let mut rim_lamp = box_mesh(0.04, 0.04, 0.06);
+            rim_lamp.translate(Vector3::new(-0.84, 0.28, z_lamp));
+            rim_lamp.set_color(line_white);
+            mesh.merge(&rim_lamp);
+        }
+    }
+
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1236,6 +1818,52 @@ mod tests {
         for (pa, pb) in m2.positions.iter().zip(m2_repeat.positions.iter()) {
             assert!((*pa - *pb).length() < 1e-6);
         }
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn samus_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_samus_helmet_mesh(2);
+        let m2_repeat = build_samus_helmet_mesh(2);
+        let m1 = build_samus_helmet_mesh(1);
+        let m0 = build_samus_helmet_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Samus L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        assert_eq!(m2.positions, m2_repeat.positions);
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn samus_measured_contours_have_no_duplicates_or_degeneracy() {
+        use crate::samus_bombonera_data::{SAMUS_DOME_RADIAL_PROFILE, SAMUS_VISOR_POLY};
+        assert_eq!(SAMUS_DOME_RADIAL_PROFILE.len(), 48);
+        assert!(SAMUS_VISOR_POLY.len() >= 6);
+        for i in 0..SAMUS_VISOR_POLY.len() {
+            let a = SAMUS_VISOR_POLY[i];
+            let b = SAMUS_VISOR_POLY[(i + 1) % SAMUS_VISOR_POLY.len()];
+            assert!((a[0] - b[0]).hypot(a[1] - b[1]) > 1e-4);
+        }
+    }
+
+    #[test]
+    fn bombonera_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_bombonera_mesh(2);
+        let m1 = build_bombonera_mesh(1);
+        let m0 = build_bombonera_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Bombonera L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.is_watertight());
             assert!(m.signed_volume() > 0.0);
