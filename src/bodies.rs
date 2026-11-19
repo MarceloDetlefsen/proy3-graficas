@@ -746,6 +746,99 @@ pub fn build_spurs_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+/// Construye los AirPods: estuche de caja redondeada (proporción ~2.8:2.1:1) con
+/// tapa entreabierta ~70°, bisagra cilíndrica, LED frontal y par de auriculares espejados.
+pub fn build_airpods_mesh(detail: usize) -> Mesh {
+    let white = Vector3::new(0.961, 0.961, 0.969); // #F5F5F7
+    let light_gray = Vector3::new(0.84, 0.85, 0.87);
+    let silver = Vector3::new(0.72, 0.74, 0.78);
+    let mesh_dark = Vector3::new(0.14, 0.15, 0.17);
+    let led_green = Vector3::new(0.28, 0.88, 0.42);
+
+    let (seg_box, rings, sectors, seg) = match detail {
+        0 => (0, 4, 6, 5),
+        1 => (1, 6, 10, 8),
+        _ => (2, 10, 14, 12),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Estuche (1.12 x 0.84 x 0.40 -> proporción 2.8 : 2.1 : 1)
+    let mut base = if seg_box == 0 {
+        box_mesh(1.12, 0.56, 0.40)
+    } else {
+        rounded_box(1.12, 0.56, 0.40, 0.12, seg_box)
+    };
+    base.set_color(white);
+    base.translate(Vector3::new(0.0, -0.14, 0.0));
+    mesh.merge(&base);
+
+    // Tapa girada ~70° (1.22 rad) alrededor de la bisagra trasera
+    let mut lid = if seg_box == 0 {
+        box_mesh(1.12, 0.28, 0.40)
+    } else {
+        rounded_box(1.12, 0.28, 0.40, 0.12, seg_box)
+    };
+    lid.set_color(white);
+    lid.translate(Vector3::new(0.0, 0.14, 0.18));
+    lid.rotate_x(-1.22);
+    lid.translate(Vector3::new(0.0, 0.14, -0.18));
+    mesh.merge(&lid);
+
+    // Bisagra cilíndrica y LED frontal
+    let mut hinge = cylinder(0.045, 0.045, 0.60, seg);
+    hinge.rotate_z(FRAC_PI_2);
+    hinge.set_color(silver);
+    hinge.translate(Vector3::new(0.0, 0.14, -0.20));
+    mesh.merge(&hinge);
+
+    let mut led = sphere(0.024, 4, 6);
+    led.set_color(led_green);
+    led.translate(Vector3::new(0.0, 0.02, 0.205));
+    mesh.merge(&led);
+
+    // 2. Par de auriculares espejados flotando junto al estuche
+    for side in [-1.0_f32, 1.0] {
+        let mut pod = Mesh::new();
+        let mut head = sphere(0.15, rings, sectors);
+        head.scale(Vector3::new(1.15, 0.95, 1.15));
+        head.set_color(white);
+        head.translate(Vector3::new(0.0, 0.24, 0.0));
+        pod.merge(&head);
+
+        // Punta de silicona hacia adentro
+        let mut tip = cone(0.10, 0.15, seg);
+        tip.rotate_z(side * FRAC_PI_2);
+        tip.set_color(light_gray);
+        tip.translate(Vector3::new(-side * 0.17, 0.22, 0.03));
+        pod.merge(&tip);
+
+        // Vástago aplanado
+        let mut stem = cylinder(0.052, 0.046, 0.46, seg);
+        stem.scale(Vector3::new(0.85, 1.0, 1.12));
+        stem.set_color(white);
+        stem.translate(Vector3::new(side * 0.03, -0.02, 0.0));
+        pod.merge(&stem);
+
+        // Punta metálica inferior del vástago
+        let mut cap = cylinder(0.046, 0.042, 0.04, seg);
+        cap.set_color(silver);
+        cap.translate(Vector3::new(side * 0.03, -0.26, 0.0));
+        pod.merge(&cap);
+
+        // Rejilla oscura superior
+        let mut grille = box_mesh(0.06, 0.03, 0.09);
+        grille.set_color(mesh_dark);
+        grille.translate(Vector3::new(0.0, 0.37, 0.03));
+        pod.merge(&grille);
+
+        pod.translate(Vector3::new(side * 0.96, 0.08, 0.06));
+        mesh.merge(&pod);
+    }
+
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -864,6 +957,20 @@ mod tests {
         let m1 = build_spurs_mesh(1);
         let m0 = build_spurs_mesh(0);
         assert!(m2.tri_count() <= 4000, "Spurs L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn airpods_build_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_airpods_mesh(2);
+        let m1 = build_airpods_mesh(1);
+        let m0 = build_airpods_mesh(0);
+        assert!(m2.tri_count() <= 4000, "AirPods L2={} > 4000", m2.tri_count());
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
