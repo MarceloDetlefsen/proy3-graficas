@@ -248,6 +248,173 @@ impl OverlayBuffer {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct ControlDoc {
+    pub key: &'static str,
+    pub action: &'static str,
+}
+
+/// Única tabla de verdad para el panel de ayuda (H) y la documentación.
+pub const CONTROLS: &[ControlDoc] = &[
+    ControlDoc { key: "W / S", action: "Empuje adelante / atrás" },
+    ControlDoc { key: "Shift", action: "Impulso (boost)" },
+    ControlDoc { key: "Espacio", action: "Frenado progresivo" },
+    ControlDoc { key: "Mouse/Flechas", action: "Cabeceo y guiñada (cámara en Libre)" },
+    ControlDoc { key: "Q / E", action: "Alabeo (roll)" },
+    ControlDoc { key: "F / Backspace", action: "Cámara Seguir/Libre / Recentrar" },
+    ControlDoc { key: "L / G", action: "Modo control (Auto/Local/Global) / Gravedad" },
+    ControlDoc { key: "Enter / - =", action: "Pausar simulación / Escala de tiempo" },
+    ControlDoc { key: "Tab", action: "Seleccionar cuerpo siguiente" },
+    ControlDoc { key: "9 / 0", action: "Ajustar radio del cuerpo seleccionado" },
+    ControlDoc { key: "4 / 5", action: "Ajustar parámetro en vivo del shader" },
+    ControlDoc { key: ", . / [ ]", action: "Amplitud / Frecuencia de deformación" },
+    ControlDoc { key: "I / O", action: "Cambiar semilla de distribución" },
+    ControlDoc { key: "Z / X / M", action: "Forzar LOD / Frustum culling / Wireframe" },
+    ControlDoc { key: "B / Y / /", action: "Normal map / Debug normales / Cull instancias" },
+    ControlDoc { key: "F3 / R / T", action: "Métricas / Resolución interna / Hilos" },
+    ControlDoc { key: "C / K / P", action: "Backface culling / Re-hornear / Captura PNG" },
+    ControlDoc { key: "H", action: "Mostrar u ocultar este panel de ayuda" },
+];
+
+pub struct HudSnapshot<'a> {
+    pub title: &'a str,
+    pub fps: f64,
+    pub total_ms: f64,
+    pub vertex_ms: f64,
+    pub raster_ms: f64,
+    pub shading_ms: f64,
+    pub present_ms: f64,
+    pub internal_width: u32,
+    pub internal_height: u32,
+    pub threads: usize,
+    pub tris_before_cull: usize,
+    pub tris_after_cull: usize,
+    pub frustum_culling: bool,
+    pub lod_summary: &'a str,
+    pub ship_lod_summary: &'a str,
+    pub mode_summary: &'a str,
+    pub gravity_enabled: bool,
+    pub gravity_mag: f32,
+    pub speed: f32,
+    pub altitude_summary: &'a str,
+    pub time_scale: f32,
+    pub paused: bool,
+    pub surface_seed: u64,
+    pub instances_drawn: usize,
+    pub instances_total: usize,
+    pub instance_culling: bool,
+    pub selected_summary: &'a str,
+    pub collision_body: Option<&'a str>,
+    pub show_perf: bool,
+    pub show_help: bool,
+}
+
+pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
+    overlay.clear();
+
+    // Barra superior de título.
+    let bar_w = (overlay.width as i32 - 20).max(100);
+    overlay.fill_rect(10, 8, bar_w, 24, Color::new(8, 12, 20, 195));
+    overlay.stroke_rect(10, 8, bar_w, 24, Color::new(70, 110, 150, 220));
+    overlay.draw_text(hud.title, 18, 13, 2, Color::WHITE);
+
+    // Panel principal de telemetría y contadores (esquina superior izquierda).
+    let mut lines: Vec<(String, Color)> = vec![
+        (
+            format!(
+                "FPS:{:5.1} ({:4.1}ms) | {}x{} {}h | Tiempo:{:.2}x{}",
+                hud.fps,
+                hud.total_ms,
+                hud.internal_width,
+                hud.internal_height,
+                hud.threads,
+                hud.time_scale,
+                if hud.paused { " PAUSA" } else { "" }
+            ),
+            Color::new(140, 245, 175, 255),
+        ),
+        (
+            format!(
+                "Modo: {} | Alt: {} | Vel:{:.2}",
+                hud.mode_summary, hud.altitude_summary, hud.speed
+            ),
+            Color::new(210, 230, 255, 255),
+        ),
+        (
+            format!(
+                "Grav(G):{} ({:.2}) | Semilla(I/O):{} | Inst:{}/{}({})",
+                if hud.gravity_enabled { "ON" } else { "OFF" },
+                hud.gravity_mag,
+                hud.surface_seed,
+                hud.instances_drawn,
+                hud.instances_total,
+                if hud.instance_culling { "ON" } else { "OFF" },
+            ),
+            Color::new(210, 230, 255, 255),
+        ),
+        (
+            format!(
+                "Cull(X):{} {}->{} tris | {} | {}",
+                if hud.frustum_culling { "ON" } else { "OFF" },
+                hud.tris_before_cull,
+                hud.tris_after_cull,
+                hud.ship_lod_summary,
+                hud.lod_summary,
+            ),
+            Color::new(255, 220, 140, 255),
+        ),
+        (
+            hud.selected_summary.to_string(),
+            Color::new(150, 225, 255, 255),
+        ),
+    ];
+
+    if hud.show_perf {
+        lines.push((
+            format!(
+                "Etapas ms -> V:{:.2} R:{:.2} S:{:.2} Pres:{:.2}",
+                hud.vertex_ms, hud.raster_ms, hud.shading_ms, hud.present_ms
+            ),
+            Color::new(255, 195, 110, 255),
+        ));
+    }
+    if let Some(body_name) = hud.collision_body {
+        lines.push((
+            format!("COLISION CON SUPERFICIE: {}", body_name),
+            Color::new(255, 100, 100, 255),
+        ));
+    }
+
+    let box_h = 12 + lines.len() as i32 * 16;
+    let box_w = (overlay.width as i32 - 20).min(640);
+    overlay.fill_rect(10, 38, box_w, box_h, Color::new(8, 12, 20, 185));
+    overlay.stroke_rect(10, 38, box_w, box_h, Color::new(55, 85, 115, 200));
+    for (i, (text, color)) in lines.iter().enumerate() {
+        overlay.draw_text(text, 18, 44 + i as i32 * 16, 1, *color);
+    }
+
+    // Panel de ayuda (H) generado desde CONTROLS.
+    if hud.show_help {
+        let help_y = 44 + box_h + 6;
+        let help_h = 26 + CONTROLS.len() as i32 * 13;
+        let help_w = (overlay.width as i32 - 20).min(560);
+        overlay.fill_rect(10, help_y, help_w, help_h, Color::new(10, 14, 24, 215));
+        overlay.stroke_rect(10, help_y, help_w, help_h, Color::new(110, 165, 220, 230));
+        overlay.draw_text(
+            "CONTROLES (H para cerrar)",
+            18,
+            help_y + 6,
+            1,
+            Color::new(255, 230, 140, 255),
+        );
+        for (i, ctrl) in CONTROLS.iter().enumerate() {
+            let row_y = help_y + 22 + i as i32 * 13;
+            overlay.draw_text(ctrl.key, 18, row_y, 1, Color::new(140, 245, 175, 255));
+            overlay.draw_text(ctrl.action, 120, row_y, 1, Color::WHITE);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,5 +449,20 @@ mod tests {
         ov.draw_text("Hola mundo ¡ñáéíóú!", -10, 595, 2, Color::WHITE);
         ov.draw_text(&"Z".repeat(200), 10, 10, 2, Color::GREEN);
         assert_eq!(ov.pixels.len(), 800 * 600 * 4);
+    }
+
+    #[test]
+    fn controls_table_fits_help_panel_in_800x600() {
+        let ov = OverlayBuffer::new(800, 600);
+        assert!(!CONTROLS.is_empty());
+        for (i, c) in CONTROLS.iter().enumerate() {
+            let y = 160 + i as i32 * 13;
+            assert!(ov.text_fits_window(c.key, 18, y, 1), "Key overflow: {}", c.key);
+            assert!(
+                ov.text_fits_window(c.action, 120, y, 1),
+                "Action overflow: {}",
+                c.action
+            );
+        }
     }
 }
