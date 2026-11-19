@@ -1064,8 +1064,8 @@ fn samus_radial_at(angle: f32) -> f32 {
 }
 
 /// Construye el casco de Samus Aran a partir de las medidas de `refs/samus_helmet.jpg`:
-/// cúpula con perfil radial medido y barniz, 3 surcos oscuros proyectados, visor verde
-/// emisivo medido, barbilla con 3 rendijas, orejeras simétricas y mangueras acanaladas.
+/// cúpula ovalada con barniz, 3 surcos oscuros proyectados, visor verde emisivo curvado
+/// sobre el rostro, barbilla con 3 rendijas, orejeras simétricas con pómulos y mangueras acanaladas.
 pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     use crate::samus_bombonera_data::*;
     let armor = rgb_vec(SAMUS_ARMOR_RGB);
@@ -1082,61 +1082,71 @@ pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     };
 
     let mut mesh = Mesh::new();
-    let dome_depth = SAMUS_HALF_WIDTH * 0.85;
+    let rx = 0.78_f32;
+    let ry = 0.90_f32;
+    let rz = 0.84_f32;
 
-    // 1. Cúpula ovalada ajustando cada vértice al perfil radial frontal medido.
+    // Función de superficie de la cúpula para proyectar surcos y curvar el visor sin huecos.
+    let dome_z_at = |x: f32, y: f32| -> f32 {
+        let nx = x / rx;
+        let ny = (y - 0.04) / ry;
+        (1.0 - nx * nx - ny * ny).max(0.02).sqrt() * rz
+    };
+
+    // 1. Cúpula ovalada limpia con ligero estrechamiento hacia la mandíbula.
     let mut dome = sphere(1.0, rings, sectors);
     for p in &mut dome.positions {
-        let xy_len = (p.x * p.x + p.y * p.y).sqrt();
-        if xy_len > 1e-4 {
-            let ang = p.y.atan2(p.x);
-            let r_prof = samus_radial_at(ang).clamp(0.72, 1.04);
-            let scale_xy = r_prof * (0.94_f32).min(1.0 - (-p.y - 0.55).max(0.0) * 0.42);
-            p.x *= scale_xy;
-            p.y *= scale_xy;
-        }
-        p.z *= dome_depth;
+        let jaw_taper = 1.0 - 0.16 * (-p.y).max(0.0);
+        p.x *= rx * jaw_taper;
+        p.y = p.y * ry + 0.04;
+        p.z *= rz;
     }
     dome.compute_smooth_normals();
     dome.set_color(armor);
     dome.set_material(1); // barniz metálico
     mesh.merge(&dome);
 
-    // 2. Tres surcos oscuros proyectados sobre la superficie de la cúpula.
+    // 2. Tres surcos oscuros (central + 2 laterales) abrazando la cúpula hasta el visor.
     let groove_prof = rounded_rect_profile_2d(0.15, 1);
-    for groove in SAMUS_GROOVES {
-        if groove.len() < 2 {
-            continue;
-        }
-        let mut path = Vec::with_capacity(groove.len());
-        for &[gx, gy] in *groove {
-            let r_prof = samus_radial_at(gy.atan2(gx)).max(0.8);
-            let r2 = (gx * gx + gy * gy) / (r_prof * r_prof);
-            let gz = (1.0 - r2).max(0.05).sqrt() * dome_depth + 0.008;
-            path.push(Vector3::new(gx, gy, gz));
+    let groove_paths: Vec<Vec<[f32; 2]>> = vec![
+        vec![[0.0, 0.92], [0.0, 0.72], [0.0, 0.48], [0.0, 0.25]],
+        vec![[-0.22, 0.88], [-0.26, 0.62], [-0.24, 0.34], [-0.46, 0.20]],
+        vec![[0.22, 0.88], [0.26, 0.62], [0.24, 0.34], [0.46, 0.20]],
+    ];
+    for gpts in &groove_paths {
+        let mut path = Vec::with_capacity(gpts.len());
+        for &[gx, gy] in gpts {
+            path.push(Vector3::new(gx, gy, dome_z_at(gx, gy) + 0.006));
         }
         let widths = vec![0.032; path.len()];
-        let depths = vec![0.024; path.len()];
+        let depths = vec![0.022; path.len()];
         let mut ribbon = sweep_profile(&path, &widths, &depths, &groove_prof, false);
         ribbon.set_color(groove_col);
         ribbon.set_material(0);
         mesh.merge(&ribbon);
     }
 
-    // 3. Visor frontal medido (placa extruida adelantada y enterrada hacia la cúpula).
-    let visor_xz: Vec<[f32; 2]> = SAMUS_VISOR_POLY.iter().map(|&[x, y]| [x, -y]).collect();
-    let mut visor = beveled_extruded_contour(&visor_xz, 0.34, 0.94, 0.025);
+    // 3. Visor frontal medido, curvado sobre la superficie de la cúpula sin que la cúpula lo atraviese.
+    let visor_xz: Vec<[f32; 2]> = SAMUS_VISOR_POLY
+        .iter()
+        .map(|&[x, y]| [x * 0.84, -y * 0.84])
+        .collect();
+    let mut visor = beveled_extruded_contour(&visor_xz, 0.24, 0.94, 0.022);
     visor.rotate_x(FRAC_PI_2);
-    visor.translate(Vector3::new(0.0, 0.0, dome_depth * 0.80));
+    for p in &mut visor.positions {
+        let surf_z = dome_z_at(p.x, p.y);
+        p.z += surf_z + 0.02;
+    }
+    visor.compute_flat_normals();
     visor.set_color(visor_col);
     visor.set_material(2); // visor emisivo animado
     mesh.merge(&visor);
 
     // 4. Barbilla estrechándose hacia abajo con 3 rendijas horizontales oscuras.
     let chin_rings = vec![
-        (-0.96_f32, vec![[-0.14, 0.38], [0.14, 0.38], [0.11, 0.72], [-0.11, 0.72]]),
-        (-0.68, vec![[-0.22, 0.36], [0.22, 0.36], [0.18, 0.78], [-0.18, 0.78]]),
-        (-0.36, vec![[-0.26, 0.34], [0.26, 0.34], [0.24, 0.80], [-0.24, 0.80]]),
+        (-0.94_f32, vec![[-0.13, 0.34], [0.13, 0.34], [0.10, 0.64], [-0.10, 0.64]]),
+        (-0.66, vec![[-0.21, 0.32], [0.21, 0.32], [0.17, 0.72], [-0.17, 0.72]]),
+        (-0.34, vec![[-0.25, 0.30], [0.25, 0.30], [0.22, 0.76], [-0.22, 0.76]]),
     ];
     let mut chin = loft_rings(&chin_rings);
     chin.set_color(armor);
@@ -1144,41 +1154,41 @@ pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     mesh.merge(&chin);
 
     for k in 0..3 {
-        let mut slat = box_mesh(0.22 - k as f32 * 0.02, 0.038, 0.06);
-        slat.translate(Vector3::new(0.0, -0.56 - k as f32 * 0.10, 0.77));
+        let mut slat = box_mesh(0.19 - k as f32 * 0.02, 0.038, 0.05);
+        slat.translate(Vector3::new(0.0, -0.54 - k as f32 * 0.10, 0.72));
         slat.set_color(grille_dark);
         slat.set_material(0);
         mesh.merge(&slat);
     }
 
-    // 5. Orejeras grandes simétricas a media altura.
+    // 5. Orejeras grandes simétricas a media altura y pómulos diagonales hacia la barbilla.
     for side in [-1.0_f32, 1.0] {
         let mut ear = sphere(1.0, ear_rings, ear_sectors);
-        ear.scale(Vector3::new(SAMUS_EAR_RADII[0], SAMUS_EAR_RADII[1], 0.28));
-        ear.translate(Vector3::new(side * SAMUS_EAR_CENTER[0], SAMUS_EAR_CENTER[1], -0.02));
+        ear.scale(Vector3::new(0.24, 0.30, 0.32));
+        ear.translate(Vector3::new(side * 0.74, -0.02, -0.02));
         ear.set_color(armor);
         ear.set_material(1);
         mesh.merge(&ear);
+
+        let mut cheek = rounded_box(0.22, 0.14, 0.48, 0.035, 1);
+        cheek.rotate_y(side * 0.30);
+        cheek.rotate_x(0.24);
+        cheek.translate(Vector3::new(side * 0.66, -0.28, 0.20));
+        cheek.set_color(armor);
+        cheek.set_material(1);
+        mesh.merge(&cheek);
     }
 
-    // 6. Dos mangueras acanaladas (8-10 costillas con radio ±15% alternando dos grises).
-    let hose_pts: Vec<[f32; 2]> = if SAMUS_HOSE_RIGHT_LINE.len() >= 2 {
-        SAMUS_HOSE_RIGHT_LINE.to_vec()
-    } else {
-        vec![[0.24, -0.78], [0.42, -0.68], [0.58, -0.52], [0.70, -0.32]]
-    };
+    // 6. Dos mangueras acanaladas (6/8/10 costillas ±15% alternando dos grises).
     let hose_prof = rounded_rect_profile_2d(0.42, (hose_prof_segs / 4).max(1));
     let mut path_pts = Vec::with_capacity(hose_ribs * 2 + 1);
     let mut widths = Vec::with_capacity(hose_ribs * 2 + 1);
     let total_steps = hose_ribs * 2;
     for s in 0..=total_steps {
         let t = s as f32 / total_steps as f32;
-        let seg_f = t * (hose_pts.len() - 1) as f32;
-        let i0 = (seg_f.floor() as usize).min(hose_pts.len() - 2);
-        let f = seg_f - i0 as f32;
-        let hx = hose_pts[i0][0] * (1.0 - f) + hose_pts[i0 + 1][0] * f;
-        let hy = hose_pts[i0][1] * (1.0 - f) + hose_pts[i0 + 1][1] * f;
-        let hz = 0.68 - t * 0.48;
+        let hx = 0.16 + t * 0.46;
+        let hy = -0.78 + t * t * 0.36;
+        let hz = 0.64 - t * 0.42;
         let rib_mod = if s % 2 == 1 { 1.15 } else { 0.85 };
         path_pts.push(Vector3::new(hx, hy, hz));
         widths.push(0.11 * rib_mod);
@@ -1362,17 +1372,28 @@ pub fn build_bombonera_mesh(detail: usize) -> Mesh {
     zocalo.set_color(zocalo_col);
     mesh.merge(&zocalo);
 
-    // 3. Herradura de gradas en D (3 lados: dos fondos + lado largo izquierdo -X).
+    // 3. Herradura de gradas en D (3 lados: cierra completamente contra los palcos en x = +0.44).
     let mut u_path = Vec::with_capacity(u_segs + 1);
     for i in 0..=u_segs {
         let t = i as f32 / u_segs as f32;
-        let a = -0.34 * std::f32::consts::PI + t * (1.68 * std::f32::consts::PI);
-        let ca = a.cos();
-        let sa = a.sin();
-        let x = ca.signum() * ca.abs().powf(0.45) * 0.58 - 0.08;
-        let y = sa.signum() * sa.abs().powf(0.45) * 0.86;
-        u_path.push(Vector3::new(x, y, 0.0));
+        if t < 0.16 {
+            let s = t / 0.16;
+            u_path.push(Vector3::new(0.42 - s * 0.62, -0.78, 0.0));
+        } else if t > 0.84 {
+            let s = (t - 0.84) / 0.16;
+            u_path.push(Vector3::new(-0.20 + s * 0.62, 0.78, 0.0));
+        } else {
+            let s = (t - 0.16) / 0.68;
+            let a = -0.5 * std::f32::consts::PI - s * std::f32::consts::PI;
+            let ca = a.cos();
+            let sa = a.sin();
+            let x = ca.signum() * ca.abs().powf(0.45) * 0.56 - 0.20;
+            let y = sa.signum() * sa.abs().powf(0.45) * 0.78;
+            u_path.push(Vector3::new(x, y, 0.0));
+        }
     }
+    // Invertir para que la normal N = T × Z apunte hacia afuera (gradas hacia la cancha).
+    u_path.reverse();
 
     // Perfil escalonado de 3 bandejas empinadas (proporción medida BOCA_TIER_PROPORTIONS).
     let mut profile_pts: Vec<[f32; 2]> = Vec::new();
@@ -1460,12 +1481,12 @@ pub fn build_bombonera_mesh(detail: usize) -> Mesh {
         }
     }
 
-    // 5. Edificio de palcos en el lado largo abierto (+X) con ventanas (12×6) y 2 torres.
+    // 5. Edificio de palcos en el lado largo abierto (+X) con ventanas (12×6) en ambas caras y 2 torres.
     let mut palcos = subdivided_pitch_slab(0.60, 0.18, pitch_l, 6, 12);
     palcos.rotate_z(FRAC_PI_2);
     palcos.translate(Vector3::new(0.54, 0.06, 0.0));
     palcos.paint_vertices(|_, p, n| {
-        if n.x < -0.5 && p.y > -0.18 && p.y < 0.30 {
+        if n.x.abs() > 0.5 && p.y > -0.18 && p.y < 0.30 {
             let r_idx = ((p.y + 0.18) * 14.0).floor() as i32;
             let c_idx = ((p.z + pitch_l * 0.5) * 9.0).floor() as i32;
             if r_idx.rem_euclid(2) == 1 && c_idx.rem_euclid(2) == 1 {
