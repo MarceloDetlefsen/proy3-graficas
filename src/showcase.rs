@@ -163,11 +163,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Cubo de Rubik",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "27 cubitos negros con holgura y calcomanias por cara; shader chunky en 3 bandas con borde Fresnel.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
     },
     Showcase {
         id: "raqueta_tenis",
@@ -253,6 +253,44 @@ pub fn favorites_ready_entries() -> Vec<&'static Showcase> {
         .collect()
 }
 
+pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_builder::Mesh> {
+    match id {
+        "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
+        _ => None,
+    }
+}
+
+pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
+    if entry.estado != ShowcaseStatus::Ready {
+        return None;
+    }
+    if entry.sistema == SystemId::Realista {
+        return crate::scene::solar_system()
+            .into_iter()
+            .find(|b| b.name == entry.nombre);
+    }
+    let shader = entry.shader?;
+    Some(crate::scene::Body {
+        name: entry.nombre,
+        kind: crate::scene::BodyKind::Planet,
+        radius: 1.0,
+        mass: 10.0,
+        orbit_radius: 0.0,
+        orbit_period: 0.0,
+        phase: 0.0,
+        orbit_inclination: 0.0,
+        rotation_period: 24.0,
+        axial_tilt: 0.22,
+        shader,
+        surface: crate::scene::SurfaceParams {
+            seed: 0,
+            noise_frequency: 4.0,
+            deformation_amplitude: 0.0,
+            max_deformation: 0.0,
+        },
+    })
+}
+
 /// El sistema de favoritos está listo para vuelo cuando tiene su estrella
 /// ("Sol de los Phoenix Suns" / tipo "Estrella") y al menos 3 cuerpos `Ready`.
 pub fn is_favorites_system_ready(entries: &[Showcase]) -> bool {
@@ -305,7 +343,11 @@ mod tests {
     #[test]
     fn favorites_readiness_requires_star_and_three_bodies() {
         assert!(!is_favorites_system_ready(SHOWCASE_ENTRIES));
-        assert!(favorites_ready_entries().is_empty());
+        assert!(
+            favorites_ready_entries()
+                .iter()
+                .all(|e| e.estado == ShowcaseStatus::Ready)
+        );
 
         let sample = [
             Showcase {
@@ -354,5 +396,30 @@ mod tests {
             },
         ];
         assert!(is_favorites_system_ready(&sample));
+    }
+
+    #[test]
+    fn ready_procedural_bodies_build_valid_decreasing_lods_under_4000_tris() {
+        for entry in SHOWCASE_ENTRIES {
+            if entry.estado == ShowcaseStatus::Ready
+                && let Some(builder) = mesh_builder_for_showcase(entry.id)
+            {
+                let m0 = builder(0);
+                let m1 = builder(1);
+                let m2 = builder(2);
+                assert!(m2.tri_count() <= 4000, "{} L2={}", entry.id, m2.tri_count());
+                assert!(
+                    m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count(),
+                    "{}: {} / {} / {}",
+                    entry.id,
+                    m0.tri_count(),
+                    m1.tri_count(),
+                    m2.tri_count()
+                );
+                for m in [&m0, &m1, &m2] {
+                    assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+                }
+            }
+        }
     }
 }

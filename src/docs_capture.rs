@@ -377,6 +377,7 @@ pub fn generate_docs_captures() {
         gal_viewer.lod_level = 4;
         let tris = gal_viewer.render_body(
             idx,
+            crate::showcase::SHOWCASE_ENTRIES[idx].id,
             body,
             1.0,
             time,

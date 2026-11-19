@@ -160,7 +160,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         }
     };
     let p = uniforms.shader_param;
-    if (p - 1.0).abs() > 1e-3 {
+    if !matches!(shader, Shader::Chunky) && (p - 1.0).abs() > 1e-3 {
         let luma = 0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z;
         color.x = (luma + (color.x - luma) * p).clamp(0.0, 1.0);
         color.y = (luma + (color.y - luma) * p).clamp(0.0, 1.0);

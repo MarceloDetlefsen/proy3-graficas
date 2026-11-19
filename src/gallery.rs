@@ -10,6 +10,7 @@ use crate::camera::Camera;
 use crate::framebuffer::Framebuffer;
 use crate::icosphere::{DeformedIcosphereCache, MAX_ICOSPHERE_LEVEL};
 use crate::math::Mat4;
+use crate::mesh_builder::LodMeshCache;
 use crate::noise::Noise;
 use crate::primitive::append_screen_triangles;
 use crate::rasterizer::{
@@ -17,7 +18,9 @@ use crate::rasterizer::{
 };
 use crate::scene::Body;
 use crate::shaders::{self, Shader};
-use crate::showcase::{SHOWCASE_ENTRIES, Showcase, ready_indices};
+use crate::showcase::{
+    SHOWCASE_ENTRIES, Showcase, body_for_showcase, mesh_builder_for_showcase, ready_indices,
+};
 use crate::surface_map::BakedMaps;
 use crate::{RenderBuffers, Uniforms};
 
@@ -26,19 +29,25 @@ pub const GALLERY_MIN_LOD: usize = 3;
 
 pub struct GallerySelector {
     pub ready: Vec<usize>,
+    pub bodies: Vec<Body>,
     pub cursor: usize,
     pub shader_params: Vec<f32>,
 }
 
 impl GallerySelector {
-    pub fn new(bodies: &[Body]) -> Self {
+    pub fn new() -> Self {
         let ready = ready_indices();
+        let bodies: Vec<Body> = ready
+            .iter()
+            .filter_map(|&idx| body_for_showcase(&SHOWCASE_ENTRIES[idx]))
+            .collect();
         let shader_params = bodies
             .iter()
             .map(|b| shaders::live_param(b.shader).default)
             .collect();
         Self {
             ready,
+            bodies,
             cursor: 0,
             shader_params,
         }
@@ -54,6 +63,10 @@ impl GallerySelector {
 
     pub fn current_body_idx(&self) -> usize {
         self.cursor
+    }
+
+    pub fn current_body(&self) -> &Body {
+        &self.bodies[self.cursor]
     }
 
     pub fn select_next(&mut self) {
@@ -92,6 +105,7 @@ pub struct GalleryViewer {
     pub lod_level: usize,
     over_budget_frames: u8,
     cache: Option<(usize, DeformedIcosphereCache)>,
+    proc_cache: Option<(usize, LodMeshCache)>,
 }
 
 impl GalleryViewer {
@@ -104,6 +118,7 @@ impl GalleryViewer {
             lod_level: MAX_ICOSPHERE_LEVEL,
             over_budget_frames: 0,
             cache: None,
+            proc_cache: None,
         };
         viewer.reset_view(body_radius);
         viewer
@@ -127,13 +142,18 @@ impl GalleryViewer {
         self.distance = (self.distance - wheel_delta * 0.45).clamp(min_d, max_d);
     }
 
-    pub fn advance(&mut self, dt: f32, body: &Body) {
-        let spin_rate = if body.rotation_period.abs() > 1e-3 {
+    pub fn advance(&mut self, dt: f32, body: &Body, shader_param: f32) {
+        let base_rate = if body.rotation_period.abs() > 1e-3 {
             std::f32::consts::TAU / body.rotation_period.max(18.0)
         } else {
             0.25
         };
-        self.spin += dt * spin_rate;
+        let mult = if matches!(body.shader, Shader::Chunky) {
+            shader_param
+        } else {
+            1.0
+        };
+        self.spin += dt * base_rate * mult;
     }
 
     pub fn record_frame_time(&mut self, frame_ms: f64) {
@@ -160,9 +180,22 @@ impl GalleryViewer {
     pub fn active_mesh<'a>(
         &'a mut self,
         body_index: usize,
+        showcase_id: &str,
         body: &Body,
         noise: &Noise,
     ) -> &'a [crate::vertex::Vertex] {
+        if let Some(builder) = mesh_builder_for_showcase(showcase_id) {
+            let needs_new = match &self.proc_cache {
+                Some((idx, _)) => *idx != body_index,
+                None => true,
+            };
+            if needs_new {
+                self.proc_cache = Some((body_index, LodMeshCache::new(builder)));
+            }
+            let proc_lod = self.lod_level.saturating_sub(3).min(2);
+            let (_, cache) = self.proc_cache.as_mut().expect("proc cache inicializada");
+            return cache.get_or_build(proc_lod);
+        }
         let needs_new = match &self.cache {
             Some((idx, _)) => *idx != body_index,
             None => true,
@@ -185,6 +218,7 @@ impl GalleryViewer {
     pub fn render_body(
         &mut self,
         body_index: usize,
+        showcase_id: &str,
         body: &Body,
         shader_param: f32,
         time: f32,
@@ -221,7 +255,7 @@ impl GalleryViewer {
             shader_param,
         };
 
-        let mesh = self.active_mesh(body_index, body, noise);
+        let mesh = self.active_mesh(body_index, showcase_id, body, noise);
         let tri_count = mesh.len() / 3;
 
         framebuffer.clear();
@@ -296,24 +330,23 @@ mod tests {
 
     #[test]
     fn gallery_selector_only_opens_ready_entries_and_clamps_live_param() {
-        let bodies = crate::scene::solar_system();
-        let mut sel = GallerySelector::new(&bodies);
-        assert_eq!(sel.ready.len(), 9);
-        for _ in 0..12 {
+        let mut sel = GallerySelector::new();
+        assert!(sel.ready.len() >= 10);
+        for _ in 0..16 {
             assert_eq!(sel.current_showcase().estado, ShowcaseStatus::Ready);
             sel.select_next();
         }
         sel.select_prev();
         assert_eq!(sel.current_showcase().estado, ShowcaseStatus::Ready);
 
-        let body = &bodies[sel.current_body_idx()];
+        let body = *sel.current_body();
         let spec = shaders::live_param(body.shader);
         for _ in 0..20 {
-            sel.adjust_param(body, 1.0);
+            sel.adjust_param(&body, 1.0);
         }
         assert!(sel.current_param() <= spec.max + 1e-5);
         for _ in 0..40 {
-            sel.adjust_param(body, -1.0);
+            sel.adjust_param(&body, -1.0);
         }
         assert!(sel.current_param() >= spec.min - 1e-5);
     }

@@ -414,6 +414,8 @@ mod tests {
 
         let favs = system_bodies(crate::app::SystemId::Favoritos);
         assert_eq!(favs.len(), crate::showcase::favorites_ready_entries().len());
-        assert!(favs.is_empty());
+        assert!(!crate::showcase::is_favorites_system_ready(
+            crate::showcase::SHOWCASE_ENTRIES
+        ));
     }
 }
