@@ -6,12 +6,12 @@ Para generar las mallas de bajo detalle de `assets/ship.obj` desde Blender (sin 
 blender --background --python tools/make_ship_lods.py
 ```
 
-Salidas esperadas:
-- `assets/ship_lod0.obj` (~3,000 triángulos)
-- `assets/ship_lod1.obj` (~800 triángulos)
-- `assets/ship_lod2.obj` (~150 triángulos)
+Salidas generadas con `blender --background --python tools/make_ship_lods.py` (Blender 5.2.2 LTS, Decimate `COLLAPSE` por bisección preservando caja envolvente `< 2.5%`):
+- `assets/ship_lod0.obj`: `3000` triángulos (`ratio = 0.10102`)
+- `assets/ship_lod1.obj`: `800` triángulos (`ratio = 0.02694`)
+- `assets/ship_lod2.obj`: `610` triángulos (`ratio = 0.02060`; límite mínimo sin colapsar las islas desconectadas de las alas ni exceder el 3% de tolerancia en caja envolvente)
 
-> **Nota**: este script no fue ejecutado en el entorno de desarrollo (se requiere Blender instalado por Marcelo); el motor incluye decimación por agrupación de vértices en `src/mesh_lod.rs` como respaldo automático cuando estos archivos aún no existen.
+> **Nota**: `src/mesh_lod.rs::load_ship_lods` carga directamente estos tres archivos cuando existen y conserva la decimación por agrupación de vértices únicamente como respaldo automático si faltaran.
 
 ## Modelos de superficie (`assets/surface/`)
 

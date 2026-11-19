@@ -146,10 +146,10 @@ Dibuja la barra de título, telemetría, contadores de culling/LOD, selección d
 | Navegación 6-DOF, gravedad, colisión y modo local | 15 | ✅ | `modo_local.png` | `src/physics.rs::PhysicsStepper`, `src/nav.rs::NavState` | `G`, `L`, `GRAVITY_G` |
 | Cuerpos celestes (máx. 5 puntuables) y shaders (máx. 4) | 20 | ✅ | `sistema_completo.png` + 9 capturas | `src/scene.rs::solar_system`, `src/shaders/*.rs` | `Tab`, `9 / 0`, `4 / 5` |
 | Distribución procedural en superficie y modelos 3D | 10 | ⚠️ (6) | `semilla_42.png`, `semilla_99.png` | `src/surface_scatter.rs::scatter_for_body`, `src/surface_props.rs::load_surface_props` | `I / O`, `/` |
-| Nave 3D con LODs | 5 | ⚠️ (4) | `nave.png` | `src/mesh_lod.rs::load_ship_lods`, `assets/ship.obj` | `Z` / distancia |
+| Nave 3D con LODs | 5 | ✅ | `nave.png` | `src/mesh_lod.rs::load_ship_lods`, `assets/ship_lod{0,1,2}.obj` | `Z` / distancia |
 | HUD propio (sin texto raylib), controles en vivo y docs | 10 | ✅ | `ayuda_hud.png` | `src/hud.rs::render_hud`, `src/docs_capture.rs` | `H`, `Tab`, `9/0`, `4/5` |
 
-- **Total bruto**: **100 / 105**
+- **Total bruto**: **101 / 105**
 - **Total (`min(100, total)`)**: **100 / 100** (detalle completo en [docs/auditoria-rubrica.md](docs/auditoria-rubrica.md)).
 - **Características evaluables**: pipeline por software sin rasterizado/texto de Raylib, icosfera deformada con LOD y normales, frustum culling con contadores, navegación 6-DOF con gravedad y modo local, 9 shaders procedurales distintos con capa estática + viva, distribución Fibonacci + ruido sobre superficie, y HUD propio con ajuste de parámetros en vivo.
 
@@ -218,7 +218,7 @@ proy3-graficas/
 ## Limitaciones conocidas
 
 - Los 4 modelos `.obj` de superficie (`assets/surface/{tree,rock,building,monument}.obj`) no han sido agregados aún; el motor utiliza los marcadores procedurales de respaldo de `src/surface_props.rs`.
-- No existen archivos `assets/ship_lod{0,1,2}.obj` dedicados; `src/mesh_lod.rs::load_ship_lods` los genera automáticamente por *vertex clustering* desde `assets/ship.obj`.
+- Los LOD de la nave (`assets/ship_lod0.obj`, `ship_lod1.obj`, `ship_lod2.obj`, con `3000`/`800`/`610` triángulos) ya se cargan desde archivo; el respaldo por decimación en `src/mesh_lod.rs::load_ship_lods` se mantiene únicamente si faltaran.
 - La galería de planetas y el segundo sistema solar pertenecen al siguiente milestone.
 
 ## Dependencias principales
