@@ -23,6 +23,7 @@ mod scene;
 mod scene_config;
 mod shaders;
 mod ship;
+mod showcase;
 mod sim;
 mod sky;
 mod surface_map;
@@ -635,7 +636,9 @@ fn main() {
     let prop_meshes = surface_props::load_surface_props();
     let mut flight_session: Option<FlightSession> = None;
     let mut gallery_viewer: Option<gallery::GalleryViewer> = None;
+    let mut gallery_selector: Option<gallery::GallerySelector> = None;
     let mut gallery_time = 0.0_f32;
+    let mut gallery_fps = 60.0_f64;
     let mut menu_backdrop = MenuBackdrop::new(Arc::clone(&baked));
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
@@ -693,6 +696,7 @@ fn main() {
                         _ => {
                             flight_session = None;
                             gallery_viewer = None;
+                            gallery_selector = None;
                             window.enable_cursor();
                         }
                     }
@@ -759,8 +763,29 @@ fn main() {
         }
         if matches!(app_ctrl.state, app::AppState::Gallery) {
             let bodies = &menu_backdrop.bodies;
-            let body = &bodies[0];
+            let selector = gallery_selector
+                .get_or_insert_with(|| gallery::GallerySelector::new(bodies));
+            let mut body_changed = false;
+            if window.is_key_pressed(KeyboardKey::KEY_A) {
+                selector.select_prev();
+                body_changed = true;
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_D) {
+                selector.select_next();
+                body_changed = true;
+            }
+            let body_idx = selector.current_body_idx();
+            let body = &bodies[body_idx];
             let viewer = gallery_viewer.get_or_insert_with(|| gallery::GalleryViewer::new(body.radius));
+            if body_changed {
+                viewer.reset_view(body.radius);
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_FOUR) {
+                selector.adjust_param(body, -1.0);
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_FIVE) {
+                selector.adjust_param(body, 1.0);
+            }
             gallery_time += dt;
             viewer.advance(dt, body);
 
@@ -789,10 +814,10 @@ fn main() {
             }
 
             let t_gal = std::time::Instant::now();
-            let _tris = viewer.render_body(
-                0,
+            let tris = viewer.render_body(
+                body_idx,
                 body,
-                1.0,
+                selector.current_param(),
                 gallery_time,
                 &noise,
                 &baked,
@@ -801,14 +826,29 @@ fn main() {
                 mode,
                 threads,
             );
+            let spec = shaders::live_param(body.shader);
+            let snap = hud::GalleryHudSnapshot {
+                entry: selector.current_showcase(),
+                active_showcase_idx: selector.current_showcase_idx(),
+                radius: body.radius,
+                tris,
+                lod_level: viewer.lod_level,
+                shader_name: shader_name(body.shader),
+                live_param_name: spec.name,
+                live_param_value: selector.current_param(),
+                fps: gallery_fps,
+            };
             overlay_buf.resize(
                 window.get_screen_width().max(1) as u32,
                 window.get_screen_height().max(1) as u32,
             );
-            overlay_buf.clear();
-            overlay_buf.draw_text("Galeria de trofeos | R: reiniciar vista | Esc: menu", 16, 14, 1, Color::WHITE);
+            hud::render_gallery_overlay(&mut overlay_buf, &snap);
             framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);
-            viewer.record_frame_time(t_gal.elapsed().as_secs_f64() * 1000.0);
+            let frame_ms = t_gal.elapsed().as_secs_f64() * 1000.0;
+            if frame_ms > 0.0 {
+                gallery_fps = gallery_fps * 0.85 + (1000.0 / frame_ms) * 0.15;
+            }
+            viewer.record_frame_time(frame_ms);
             continue;
         }
         let sys_id = match app_ctrl.state {

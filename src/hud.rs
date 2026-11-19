@@ -530,6 +530,120 @@ pub fn render_menu_overlay(
     }
 }
 
+pub struct GalleryHudSnapshot<'a> {
+    pub entry: &'a crate::showcase::Showcase,
+    pub active_showcase_idx: usize,
+    pub radius: f32,
+    pub tris: usize,
+    pub lod_level: usize,
+    pub shader_name: &'a str,
+    pub live_param_name: &'a str,
+    pub live_param_value: f32,
+    pub fps: f64,
+}
+
+fn wrap_words(text: &str, max_chars: usize) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    for word in text.split_whitespace() {
+        if current.is_empty() {
+            current.push_str(word);
+        } else if current.chars().count() + 1 + word.chars().count() <= max_chars {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(current);
+            current = word.to_string();
+        }
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
+pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapshot<'_>) {
+    overlay.clear();
+
+    let w = overlay.width as i32;
+    let h = overlay.height as i32;
+
+    // Barra superior
+    let bar_w = (w - 20).max(100);
+    overlay.fill_rect(10, 8, bar_w, 24, Color::new(8, 12, 20, 200));
+    overlay.stroke_rect(10, 8, bar_w, 24, Color::new(70, 110, 150, 225));
+    let header = format!(
+        "Galeria | A/D: cuerpo | Mouse/Flechas: girar | R: vista | 4/5: param | Esc: menu | {:.0} FPS",
+        g.fps
+    );
+    overlay.draw_text(&header, 16, 15, 1, Color::WHITE);
+
+    // Ficha de datos (esquina inferior izquierda)
+    let card_w = 340.min(w - 20);
+    let desc_lines = wrap_words(g.entry.descripcion_es, 50);
+    let card_h = 128 + (desc_lines.len() as i32) * 11;
+    let card_x = 10;
+    let card_y = (h - card_h - 10).max(40);
+    overlay.fill_rect(card_x, card_y, card_w, card_h, Color::new(8, 12, 22, 210));
+    overlay.stroke_rect(card_x, card_y, card_w, card_h, Color::new(90, 150, 210, 230));
+
+    overlay.draw_text(g.entry.nombre, card_x + 12, card_y + 10, 2, Color::new(255, 220, 130, 255));
+    let mut ry = card_y + 32;
+    let rows = [
+        format!("Tipo: {} | Sistema: {}", g.entry.tipo, g.entry.sistema.display_name()),
+        format!("Radio: {:.2} u | Malla: {} tris (L{})", g.radius, g.tris, g.lod_level),
+        format!("Shader: {}", g.shader_name),
+        format!("{}(4/5): {:.2}", g.live_param_name, g.live_param_value),
+        format!("Inspiracion: {}", g.entry.inspiracion.unwrap_or("-")),
+    ];
+    for row in &rows {
+        overlay.draw_text(row, card_x + 12, ry, 1, Color::new(210, 224, 240, 255));
+        ry += 13;
+    }
+    ry += 4;
+    overlay.draw_text("Descripcion:", card_x + 12, ry, 1, Color::new(140, 210, 255, 255));
+    ry += 12;
+    for line in desc_lines {
+        overlay.draw_text(&line, card_x + 12, ry, 1, Color::new(225, 232, 240, 255));
+        ry += 11;
+    }
+
+    // Lista de trofeos (derecha): los Placeholder aparecen atenuados con "en construccion"
+    let list_w = 246.min(w - card_w - 30).max(180);
+    let entries = crate::showcase::SHOWCASE_ENTRIES;
+    let list_h = (entries.len() as i32 * 11 + 26).min(h - 50);
+    let list_x = w - list_w - 10;
+    let list_y = 40;
+    overlay.fill_rect(list_x, list_y, list_w, list_h, Color::new(8, 12, 22, 200));
+    overlay.stroke_rect(list_x, list_y, list_w, list_h, Color::new(75, 120, 170, 220));
+    overlay.draw_text("Trofeos (Showcase)", list_x + 8, list_y + 6, 1, Color::new(150, 220, 255, 255));
+
+    for (i, item) in entries.iter().enumerate() {
+        let iy = list_y + 20 + i as i32 * 11;
+        if iy + 10 >= list_y + list_h {
+            break;
+        }
+        let is_active = i == g.active_showcase_idx;
+        let is_placeholder = item.estado == crate::showcase::ShowcaseStatus::Placeholder;
+        let color = if is_active {
+            Color::new(255, 230, 130, 255)
+        } else if is_placeholder {
+            Color::new(115, 122, 135, 255)
+        } else {
+            Color::new(210, 222, 235, 255)
+        };
+        let prefix = if is_active { ">" } else { " " };
+        let line = if is_placeholder {
+            format!("{} {} (en construccion)", prefix, item.nombre)
+        } else {
+            format!("{} {}", prefix, item.nombre)
+        };
+        let max_len = ((list_w - 12) / 6).max(8) as usize;
+        let truncated: String = line.chars().take(max_len).collect();
+        overlay.draw_text(&truncated, list_x + 6, iy, 1, color);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,6 +703,24 @@ mod tests {
             assert!(ov.text_fits_window(entry.label(), 200, 240, 2));
         }
         render_menu_overlay(&mut ov, 3, false, true);
+        assert_eq!(ov.pixels.len(), 800 * 600 * 4);
+    }
+
+    #[test]
+    fn gallery_overlay_fits_in_800x600() {
+        let mut ov = OverlayBuffer::new(800, 600);
+        let snap = GalleryHudSnapshot {
+            entry: &crate::showcase::SHOWCASE_ENTRIES[1],
+            active_showcase_idx: 1,
+            radius: 1.25,
+            tris: 5120,
+            lod_level: 4,
+            shader_name: "Rocky",
+            live_param_name: "Contraste relieve",
+            live_param_value: 1.0,
+            fps: 60.0,
+        };
+        render_gallery_overlay(&mut ov, &snap);
         assert_eq!(ov.pixels.len(), 800 * 600 * 4);
     }
 }

@@ -16,12 +16,73 @@ use crate::rasterizer::{
     TriMaterial, TriangleMode, rasterize_visibility_tiled, shade_visibility_tiled_materials,
 };
 use crate::scene::Body;
-use crate::shaders::Shader;
+use crate::shaders::{self, Shader};
+use crate::showcase::{SHOWCASE_ENTRIES, Showcase, ready_indices};
 use crate::surface_map::BakedMaps;
 use crate::{RenderBuffers, Uniforms};
 
 pub const GALLERY_FRAME_BUDGET_MS: f64 = 25.0;
 pub const GALLERY_MIN_LOD: usize = 3;
+
+pub struct GallerySelector {
+    pub ready: Vec<usize>,
+    pub cursor: usize,
+    pub shader_params: Vec<f32>,
+}
+
+impl GallerySelector {
+    pub fn new(bodies: &[Body]) -> Self {
+        let ready = ready_indices();
+        let shader_params = bodies
+            .iter()
+            .map(|b| shaders::live_param(b.shader).default)
+            .collect();
+        Self {
+            ready,
+            cursor: 0,
+            shader_params,
+        }
+    }
+
+    pub fn current_showcase_idx(&self) -> usize {
+        self.ready[self.cursor]
+    }
+
+    pub fn current_showcase(&self) -> &'static Showcase {
+        &SHOWCASE_ENTRIES[self.current_showcase_idx()]
+    }
+
+    pub fn current_body_idx(&self) -> usize {
+        self.cursor
+    }
+
+    pub fn select_next(&mut self) {
+        if !self.ready.is_empty() {
+            self.cursor = (self.cursor + 1) % self.ready.len();
+        }
+    }
+
+    pub fn select_prev(&mut self) {
+        if !self.ready.is_empty() {
+            self.cursor = if self.cursor == 0 {
+                self.ready.len() - 1
+            } else {
+                self.cursor - 1
+            };
+        }
+    }
+
+    pub fn adjust_param(&mut self, body: &Body, direction: f32) {
+        let spec = shaders::live_param(body.shader);
+        let idx = self.current_body_idx();
+        self.shader_params[idx] =
+            (self.shader_params[idx] + spec.step * direction).clamp(spec.min, spec.max);
+    }
+
+    pub fn current_param(&self) -> f32 {
+        self.shader_params[self.current_body_idx()]
+    }
+}
 
 pub struct GalleryViewer {
     pub yaw: f32,
@@ -215,6 +276,7 @@ impl GalleryViewer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::showcase::ShowcaseStatus;
 
     #[test]
     fn gallery_viewer_orbit_zoom_and_reset() {
@@ -230,6 +292,30 @@ mod tests {
         viewer.reset_view(1.25);
         assert_eq!(viewer.yaw, 0.0);
         assert!((viewer.distance - initial_dist).abs() < 1e-5);
+    }
+
+    #[test]
+    fn gallery_selector_only_opens_ready_entries_and_clamps_live_param() {
+        let bodies = crate::scene::solar_system();
+        let mut sel = GallerySelector::new(&bodies);
+        assert_eq!(sel.ready.len(), 9);
+        for _ in 0..12 {
+            assert_eq!(sel.current_showcase().estado, ShowcaseStatus::Ready);
+            sel.select_next();
+        }
+        sel.select_prev();
+        assert_eq!(sel.current_showcase().estado, ShowcaseStatus::Ready);
+
+        let body = &bodies[sel.current_body_idx()];
+        let spec = shaders::live_param(body.shader);
+        for _ in 0..20 {
+            sel.adjust_param(body, 1.0);
+        }
+        assert!(sel.current_param() <= spec.max + 1e-5);
+        for _ in 0..40 {
+            sel.adjust_param(body, -1.0);
+        }
+        assert!(sel.current_param() >= spec.min - 1e-5);
     }
 
     #[test]
