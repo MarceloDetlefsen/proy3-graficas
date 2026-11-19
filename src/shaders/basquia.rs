@@ -60,12 +60,33 @@ pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
         * 0.045;
     let outline = 1.0 - noise::smoothstep(stroke_w - 0.015 + jitter, stroke_w + 0.015 + jitter, edge_dist);
 
-    // Garabatos/tachones intermitentes en algunas celdas.
-    let active_scribble = ((t_q * 0.35 + scribble_seed * 13.0).sin() > 0.45) as i32 as f32;
-    let hatch = ((p.x * 38.0 + p.y * 29.0 + t_q * 1.1).sin().abs() < 0.14) as i32 as f32;
-    let scribble = active_scribble * hatch * ((scribble_seed > 0.55) as i32 as f32);
+    // Tachones expresionistas animados tipo corona y rayones en celdas seleccionadas (~6 FPS).
+    let active_scribble = ((t_q * 0.45 + scribble_seed * 17.0).sin() > -0.20) as i32 as f32;
+    let mut crown_tachon = 0.0_f32;
+    if scribble_seed > 0.36 && active_scribble > 0.5 && outline < 0.85 {
+        // Coordenadas locales repetidas con ligero desplazamiento stop-motion por cuadro.
+        let jx = (t_q * 1.7 + scribble_seed * 31.0).sin() * 0.06;
+        let jy = (t_q * 2.3 + scribble_seed * 19.0).cos() * 0.06;
+        let u = ((p.x + p.z * 0.65) * 4.2 + scribble_seed * 5.0 + jx).rem_euclid(1.0) * 2.0 - 1.0;
+        let v = (p.y * 4.2 + scribble_seed * 3.0 + jy).rem_euclid(1.0) * 2.0 - 1.0;
+
+        // Motivo corona de 3 picos: barra base + zig-zag superior.
+        let in_x = u.abs() < 0.58;
+        let base_bar = in_x && (v + 0.32).abs() < 0.075;
+        let crown_peaks = (u * std::f32::consts::PI * 2.6).cos().abs() * 0.42 - 0.12;
+        let crown_top = in_x && v > -0.32 && (v - crown_peaks).abs() < 0.085;
+        let left_wall = (u + 0.54).abs() < 0.075 && v > -0.34 && v < 0.25;
+        let right_wall = (u - 0.54).abs() < 0.075 && v > -0.34 && v < 0.25;
+
+        // Tachón diagonal cruzado en celdas alternas.
+        let cross = ((u - v).abs() < 0.070 || (u + v).abs() < 0.070) && u.abs() < 0.48 && v.abs() < 0.48;
+        let use_crown = scribble_seed > 0.58;
+        if (use_crown && (base_bar || crown_top || left_wall || right_wall)) || (!use_crown && cross) {
+            crown_tachon = 0.92;
+        }
+    }
 
     let diffuse = diffuse_factor(fragment.normal, uniforms);
     let lit = base_color * (0.45 + 0.55 * diffuse);
-    noise::mix_color(lit, BLACK, (outline + scribble * 0.85).clamp(0.0, 1.0))
+    noise::mix_color(lit, BLACK, (outline + crown_tachon).clamp(0.0, 1.0))
 }
