@@ -28,3 +28,7 @@
   - **Cubo Skewb** (`Shader::Chunky`): cubo negro de lado 1 con rombo central y 4 triángulos rectángulos isósceles por cara elevados (`12` / `48` / `372` tris).
   - **Megaminx** (`Shader::Chunky`): dodecaedro regular negro con 11 pegatinas por cara en 12 colores (`36` / `312` / `1668` tris).
   - **Joy-Con izquierdo / derecho** (`Shader::Chunky`): carcasa redondeada gris mate espejada, riel lateral `#00C3E3` / `#FF4554`, palanca, cruceta/ABXY, `-`/`+`, captura/Home y SL/SR (`240` / `392` / `696` y `264` / `424` / `744` tris).
+  - **Sol de los Phoenix Suns** (`Shader::PhoenixSuns`): esfera emisiva con proyección azimutal del logo alrededor de Z en ambos polos y halo dorado (`80` / `320` / `1280` tris).
+  - **Escudo del Tottenham Hotspur** (`Shader::Chunky`): placa biselada azul marino/blanco, barras de cinta, balón con parches y gallo de primitivas con giro oscilante.
+  - **AirPods** (`Shader::Chunky`): estuche redondeado (`~2.8:2.1:1`) con tapa a 70°, bisagra cilíndrica, LED frontal y auriculares espejados.
+  - **Raqueta de tenis** (`Shader::Chunky`): marco ovalado, garganta en Y, mango con bandas y cuerdas como asteroides dispersos en cuadrícula `14×16`.

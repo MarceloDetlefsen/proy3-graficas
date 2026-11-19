@@ -221,12 +221,16 @@ proy3-graficas/
 
 - Los 4 modelos `.obj` de superficie (`assets/surface/{tree,rock,building,monument}.obj`) no han sido agregados aún; el motor utiliza los marcadores procedurales de respaldo de `src/surface_props.rs`.
 - Los LOD de la nave (`assets/ship_lod0.obj`, `ship_lod1.obj`, `ship_lod2.obj`, con `3000`/`800`/`610` triángulos) ya se cargan desde archivo; el respaldo por decimación en `src/mesh_lod.rs::load_ship_lods` se mantiene únicamente si faltaran.
-- El menú principal y la galería de trofeos ya están implementados; el sistema de favoritos cuenta con 7 cuerpos `Ready` en la galería (`Cubo de Rubik`, `Cubo Skewb`, `Megaminx`, `Joy-Con izquierdo`, `Joy-Con derecho`, `Trifuerza` y `Meteoro de FF7`, construidos con `src/mesh_builder.rs` y `src/bodies.rs`) y 4 entradas en estado `Placeholder` ("en construcción"). El vuelo del sistema de favoritos permanecerá deshabilitado hasta contar con su estrella (`Sol de los Phoenix Suns`).
+- El menú principal y la galería de trofeos ya están implementados; el sistema de favoritos cuenta con 11 cuerpos `Ready` en la galería (`Sol de los Phoenix Suns`, `Escudo del Tottenham Hotspur`, `AirPods`, `Raqueta de tenis`, `Cubo de Rubik`, `Cubo Skewb`, `Megaminx`, `Joy-Con izquierdo`, `Joy-Con derecho`, `Trifuerza` y `Meteoro de FF7`, construidos con `src/mesh_builder.rs` y `src/bodies.rs`) y 2 entradas en estado `Placeholder` ("en construcción": `Casco de Samus` y `La Bombonera`). El vuelo del sistema de favoritos permanece deshabilitado mediante `FAVORITES_FLIGHT_ENABLED = false` hasta completar su integración orbital (#81).
 
 ## Dependencias principales
 
 - `raylib = "6.0.0"` (con `SUPPORT_IMAGE_GENERATION`): ventana, lectura de teclado/ratón, carga/actualización de textura y exportación de PNG.
 - Biblioteca estándar de Rust (`std::thread::scope`): paralelismo por bandas/tiles sin dependencias externas.
+
+## Uso de IA y recursos externos
+
+- Los logotipos, escudos, personajes, consolas y marcas comerciales representados en la galería y el sistema de favoritos (Phoenix Suns, Tottenham Hotspur, Apple AirPods, Nintendo Switch Joy-Con, Rubik, The Legend of Zelda, Final Fantasy VII, Wilson, Metroid y Boca Juniors) pertenecen a sus respectivos dueños y se utilizan únicamente con fines académicos y de demostración gráfica.
 
 ## Autor
 
