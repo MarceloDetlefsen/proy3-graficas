@@ -814,6 +814,192 @@ pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
     mesh
 }
 
+/// Encoge un polígono 3D convexo hacia su centroide por `factor` (`(0, 1]`).
+pub fn inset_polygon(poly: &[Vector3], factor: f32) -> Vec<Vector3> {
+    if poly.is_empty() {
+        return Vec::new();
+    }
+    let mut c = Vector3::zero();
+    for &p in poly {
+        c += p;
+    }
+    c *= 1.0 / poly.len() as f32;
+    poly.iter().map(|&p| c + (p - c) * factor).collect()
+}
+
+fn polygon_normal(poly: &[Vector3]) -> Vector3 {
+    if poly.len() < 3 {
+        return Vector3::new(0.0, 1.0, 0.0);
+    }
+    let cross = (poly[1] - poly[0]).cross(poly[2] - poly[0]);
+    if cross.length_sqr() > 1e-12 {
+        cross.normalize()
+    } else {
+        Vector3::new(0.0, 1.0, 0.0)
+    }
+}
+
+/// Construye un polígono plano convexo en 3D con normal hacia `(p1-p0)×(p2-p0)`.
+pub fn flat_polygon_mesh(poly: &[Vector3], color: Vector3) -> Mesh {
+    let n = poly.len();
+    assert!(n >= 3, "Un polígono requiere al menos 3 vértices");
+    let normal = polygon_normal(poly);
+    let mut mesh = Mesh::new();
+    let mut idxs = Vec::with_capacity(n);
+    for &p in poly {
+        let i = mesh.push_vertex(p, normal, [0.0, 0.0]);
+        mesh.colors[i] = color;
+        idxs.push(i);
+    }
+    for i in 1..(n - 1) {
+        mesh.push_triangle(idxs[0], idxs[i], idxs[i + 1]);
+    }
+    mesh
+}
+
+/// Construye una pegatina poligonal encogida por `inset` y elevada `elevation`
+/// sobre el plano de `poly`. Si `thickness > 0.0`, extruye caras laterales cerradas.
+pub fn raised_sticker(
+    poly: &[Vector3],
+    inset: f32,
+    elevation: f32,
+    thickness: f32,
+    color: Vector3,
+) -> Mesh {
+    let shrunk = inset_polygon(poly, inset);
+    let nrm = polygon_normal(&shrunk);
+    let top_pts: Vec<Vector3> = shrunk.iter().map(|&p| p + nrm * elevation).collect();
+    if thickness <= 1e-6 {
+        return flat_polygon_mesh(&top_pts, color);
+    }
+    let bot_pts: Vec<Vector3> = shrunk
+        .iter()
+        .map(|&p| p + nrm * (elevation - thickness))
+        .collect();
+    let n = top_pts.len();
+    let mut mesh = Mesh::new();
+
+    // Cara superior
+    let mut top_idx = Vec::with_capacity(n);
+    for &p in &top_pts {
+        let idx = mesh.push_vertex(p, nrm, [0.0, 0.0]);
+        mesh.colors[idx] = color;
+        top_idx.push(idx);
+    }
+    for i in 1..(n - 1) {
+        mesh.push_triangle(top_idx[0], top_idx[i], top_idx[i + 1]);
+    }
+
+    // Cara inferior
+    let neg_nrm = nrm * -1.0;
+    let mut bot_idx = Vec::with_capacity(n);
+    for &p in &bot_pts {
+        let idx = mesh.push_vertex(p, neg_nrm, [0.0, 0.0]);
+        mesh.colors[idx] = color;
+        bot_idx.push(idx);
+    }
+    for i in 1..(n - 1) {
+        mesh.push_triangle(bot_idx[0], bot_idx[i + 1], bot_idx[i]);
+    }
+
+    // Caras laterales
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let p0 = bot_pts[i];
+        let p1 = bot_pts[j];
+        let p2 = top_pts[j];
+        let p3 = top_pts[i];
+        let side_n = (p1 - p0).cross(p3 - p0);
+        let sn = if side_n.length_sqr() > 1e-12 {
+            side_n.normalize()
+        } else {
+            nrm
+        };
+        let v0 = mesh.push_vertex(p0, sn, [0.0, 0.0]);
+        let v1 = mesh.push_vertex(p1, sn, [1.0, 0.0]);
+        let v2 = mesh.push_vertex(p2, sn, [1.0, 1.0]);
+        let v3 = mesh.push_vertex(p3, sn, [0.0, 1.0]);
+        for v in [v0, v1, v2, v3] {
+            mesh.colors[v] = color;
+        }
+        mesh.push_quad(v0, v1, v2, v3);
+    }
+    mesh
+}
+
+/// Devuelve las 12 caras pentagonales (CCW vistas desde afuera) de un dodecaedro
+/// regular con circunradio exacto `circumradius`.
+pub fn dodecahedron_faces(circumradius: f32) -> Vec<[Vector3; 5]> {
+    let phi = (1.0 + 5.0_f32.sqrt()) * 0.5;
+    let inv_phi = 1.0 / phi;
+    let scale = circumradius / 3.0_f32.sqrt();
+
+    let mut verts = Vec::with_capacity(20);
+    for &sx in &[-1.0_f32, 1.0] {
+        for &sy in &[-1.0_f32, 1.0] {
+            for &sz in &[-1.0_f32, 1.0] {
+                verts.push(Vector3::new(sx, sy, sz) * scale);
+            }
+        }
+    }
+    for &s1 in &[-1.0_f32, 1.0] {
+        for &s2 in &[-1.0_f32, 1.0] {
+            verts.push(Vector3::new(0.0, s1 * phi, s2 * inv_phi) * scale);
+            verts.push(Vector3::new(s1 * inv_phi, 0.0, s2 * phi) * scale);
+            verts.push(Vector3::new(s1 * phi, s2 * inv_phi, 0.0) * scale);
+        }
+    }
+
+    let mut face_dirs = Vec::with_capacity(12);
+    for &s1 in &[-1.0_f32, 1.0] {
+        for &s2 in &[-1.0_f32, 1.0] {
+            face_dirs.push(Vector3::new(0.0, s1, s2 * phi).normalize());
+            face_dirs.push(Vector3::new(s1, s2 * phi, 0.0).normalize());
+            face_dirs.push(Vector3::new(s1 * phi, 0.0, s2).normalize());
+        }
+    }
+
+    face_dirs
+        .into_iter()
+        .map(|dir| {
+            let mut ranked: Vec<(f32, Vector3)> =
+                verts.iter().map(|&v| (v.dot(dir), v)).collect();
+            ranked.sort_by(|a, b| b.0.total_cmp(&a.0));
+            let mut five: [Vector3; 5] = [
+                ranked[0].1,
+                ranked[1].1,
+                ranked[2].1,
+                ranked[3].1,
+                ranked[4].1,
+            ];
+            let ref_up = if dir.y.abs() < 0.9 {
+                Vector3::new(0.0, 1.0, 0.0)
+            } else {
+                Vector3::new(1.0, 0.0, 0.0)
+            };
+            let u = ref_up.cross(dir).normalize();
+            let v_ax = dir.cross(u).normalize();
+            five.sort_by(|&a, &b| {
+                let ang_a = a.dot(v_ax).atan2(a.dot(u));
+                let ang_b = b.dot(v_ax).atan2(b.dot(u));
+                ang_a.total_cmp(&ang_b)
+            });
+            five
+        })
+        .collect()
+}
+
+/// Dodecaedro regular cerrado con circunradio `circumradius` (36 triángulos).
+pub fn dodecahedron(circumradius: f32) -> Mesh {
+    let faces = dodecahedron_faces(circumradius);
+    let mut mesh = Mesh::new();
+    for face in faces {
+        let poly = flat_polygon_mesh(&face, Vector3::new(1.0, 1.0, 1.0));
+        mesh.merge(&poly);
+    }
+    mesh
+}
+
 /// Caché de reconstrucción por nivel de detalle (`0` = bajo, `1` = medio, `2` = alto).
 pub struct LodMeshCache {
     levels: [Option<Vec<Vertex>>; 3],
@@ -946,5 +1132,41 @@ mod tests {
         let t2 = cache.tri_count(2);
         assert!(t0 < t1 && t1 < t2);
         assert_eq!(cache.get_or_build(1).len(), t1 * 3);
+    }
+
+    #[test]
+    fn inset_and_raised_stickers_have_exact_counts_and_outward_normals() {
+        let quad = [
+            Vector3::new(-0.5, -0.5, 0.5),
+            Vector3::new(0.5, -0.5, 0.5),
+            Vector3::new(0.5, 0.5, 0.5),
+            Vector3::new(-0.5, 0.5, 0.5),
+        ];
+        let shrunk = inset_polygon(&quad, 0.8);
+        assert!((shrunk[0].x + 0.4).abs() < 1e-5);
+
+        let flat = raised_sticker(&quad, 0.8, 0.02, 0.0, Vector3::new(1.0, 0.0, 0.0));
+        assert_eq!(flat.tri_count(), 2);
+        assert!((flat.normals[0].z - 1.0).abs() < 1e-5);
+
+        let ext = raised_sticker(&quad, 0.8, 0.02, 0.015, Vector3::new(1.0, 0.0, 0.0));
+        assert_eq!(ext.tri_count(), 12);
+        assert!(ext.is_watertight());
+        assert!((ext.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn regular_dodecahedron_has_12_pentagons_exact_radius_watertight_and_outward() {
+        let faces = dodecahedron_faces(1.0);
+        assert_eq!(faces.len(), 12);
+        for face in &faces {
+            for v in face {
+                assert!((v.length() - 1.0).abs() < 1e-5);
+            }
+        }
+        let d = dodecahedron(1.0);
+        assert_eq!(d.tri_count(), 36);
+        assert!(d.is_watertight());
+        assert!((d.outward_normal_ratio() - 1.0).abs() < 1e-5);
     }
 }
