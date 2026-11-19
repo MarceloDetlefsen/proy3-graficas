@@ -780,7 +780,7 @@ fn main() {
             let showcase_entry = selector.current_showcase();
             let viewer = gallery_viewer.get_or_insert_with(|| gallery::GalleryViewer::new(body.radius));
             if body_changed {
-                viewer.reset_view(body.radius);
+                viewer.reset_view_for(body.radius, showcase_entry.id);
             }
             if window.is_key_pressed(KeyboardKey::KEY_FOUR) {
                 selector.adjust_param(&body, -1.0);
@@ -813,7 +813,7 @@ fn main() {
                 viewer.apply_zoom(wheel, body.radius);
             }
             if window.is_key_pressed(KeyboardKey::KEY_R) {
-                viewer.reset_view(body.radius);
+                viewer.reset_view_for(body.radius, showcase_entry.id);
             }
 
             let t_gal = std::time::Instant::now();
@@ -821,6 +821,7 @@ fn main() {
                 body_idx,
                 showcase_entry.id,
                 &body,
+                showcase_entry.light_dir,
                 param,
                 gallery_time,
                 &noise,
@@ -1271,7 +1272,7 @@ fn main() {
             let body_mesh = session.body_caches[body_idx].get_or_build(level, &noise);
             let body_tris = body_mesh.len() / 3;
             tris_before_cull += body_tris;
-            if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
+            if frustum_culling && !frustum.intersects_sphere(body_pos, scene::culling_radius(body))
             {
                 continue;
             }

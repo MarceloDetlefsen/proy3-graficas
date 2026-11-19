@@ -266,6 +266,14 @@ pub fn effective_radius(body: &Body) -> f32 {
     body.radius + deform
 }
 
+/// Radio de esfera envolvente para frustum culling (en `Shader::Meteor` incluye cola y orbe).
+pub fn culling_radius(body: &Body) -> f32 {
+    match body.shader {
+        Shader::Meteor => body.radius * 5.2,
+        _ => effective_radius(body),
+    }
+}
+
 pub fn body_position_at(body: &Body, time: f32) -> Vector3 {
     if body.orbit_radius <= 0.0 || body.orbit_period.abs() <= 1e-6 {
         return body_static_position(body);

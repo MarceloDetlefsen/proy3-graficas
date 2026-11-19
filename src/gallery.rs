@@ -101,6 +101,7 @@ pub struct GalleryViewer {
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
+    pub target: Vector3,
     pub spin: f32,
     pub lod_level: usize,
     over_budget_frames: u8,
@@ -114,6 +115,7 @@ impl GalleryViewer {
             yaw: 0.0,
             pitch: 0.25,
             distance: 4.0,
+            target: Vector3::zero(),
             spin: 0.0,
             lod_level: MAX_ICOSPHERE_LEVEL,
             over_budget_frames: 0,
@@ -128,7 +130,21 @@ impl GalleryViewer {
         self.yaw = 0.0;
         self.pitch = 0.25;
         self.distance = (body_radius * 3.2).clamp(2.2, 18.0);
+        self.target = Vector3::zero();
         self.spin = 0.0;
+    }
+
+    pub fn reset_view_for(&mut self, body_radius: f32, showcase_id: &str) {
+        if showcase_id == "meteoro_ff7" {
+            // Encuadre de referencia: cabeza abajo a la izquierda, cola hacia arriba a la derecha.
+            self.yaw = 0.0;
+            self.pitch = 0.04;
+            self.distance = 6.6;
+            self.target = Vector3::new(1.55, 0.85, 0.0);
+            self.spin = 0.0;
+        } else {
+            self.reset_view(body_radius);
+        }
     }
 
     pub fn apply_orbit_delta(&mut self, dyaw: f32, dpitch: f32) {
@@ -143,6 +159,9 @@ impl GalleryViewer {
     }
 
     pub fn advance(&mut self, dt: f32, body: &Body, shader_param: f32) {
+        if matches!(body.shader, Shader::Meteor) {
+            return;
+        }
         let base_rate = if body.rotation_period.abs() > 1e-3 {
             std::f32::consts::TAU / body.rotation_period.max(18.0)
         } else {
@@ -169,12 +188,13 @@ impl GalleryViewer {
     }
 
     pub fn camera(&self) -> Camera {
-        let cam_pos = Vector3::new(
-            self.distance * self.pitch.cos() * self.yaw.sin(),
-            self.distance * self.pitch.sin(),
-            self.distance * self.pitch.cos() * self.yaw.cos(),
-        );
-        Camera::new(cam_pos, Vector3::zero(), 45.0_f32.to_radians(), 0.1, 120.0)
+        let cam_pos = self.target
+            + Vector3::new(
+                self.distance * self.pitch.cos() * self.yaw.sin(),
+                self.distance * self.pitch.sin(),
+                self.distance * self.pitch.cos() * self.yaw.cos(),
+            );
+        Camera::new(cam_pos, self.target, 45.0_f32.to_radians(), 0.1, 120.0)
     }
 
     pub fn active_mesh<'a>(
@@ -220,6 +240,7 @@ impl GalleryViewer {
         body_index: usize,
         showcase_id: &str,
         body: &Body,
+        custom_light: Option<Vector3>,
         shader_param: f32,
         time: f32,
         noise: &Noise,
@@ -231,7 +252,9 @@ impl GalleryViewer {
     ) -> usize {
         let cam = self.camera();
         let aspect = framebuffer.width as f32 / framebuffer.height.max(1) as f32;
-        let light_dir = Vector3::new(-0.65, 0.80, 1.0).normalize();
+        let light_dir = custom_light
+            .unwrap_or_else(|| Vector3::new(-0.65, 0.80, 1.0))
+            .normalize();
         let model_matrix = Mat4::rotation_z(body.axial_tilt)
             * Mat4::rotation_y(self.spin)
             * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius));

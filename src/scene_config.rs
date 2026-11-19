@@ -73,7 +73,7 @@ pub fn atmosphere_rim(shader: Shader) -> Option<AtmosphereRim> {
         Shader::Star
         | Shader::Chunky
         | Shader::Triforce
-        | Shader::Asteroid
+        | Shader::Meteor
         | Shader::Ship
         | Shader::Prop(_) => None,
     }

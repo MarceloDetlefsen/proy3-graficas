@@ -379,6 +379,7 @@ pub fn generate_docs_captures() {
             idx,
             crate::showcase::SHOWCASE_ENTRIES[idx].id,
             body,
+            crate::showcase::SHOWCASE_ENTRIES[idx].light_dir,
             1.0,
             time,
             &noise,
@@ -408,7 +409,7 @@ pub fn generate_docs_captures() {
     for &(id, fname) in &[
         ("cubo_rubik", "galeria_rubik.png"),
         ("trifuerza", "galeria_trifuerza.png"),
-        ("asteroide_ff7", "galeria_asteroide_ff7.png"),
+        ("meteoro_ff7", "galeria_meteoro_ff7.png"),
     ] {
         let showcase_idx = crate::showcase::SHOWCASE_ENTRIES
             .iter()
@@ -416,14 +417,17 @@ pub fn generate_docs_captures() {
             .expect("showcase id existe");
         let entry = &crate::showcase::SHOWCASE_ENTRIES[showcase_idx];
         let body = crate::showcase::body_for_showcase(entry).expect("cuerpo Ready");
-        gal_viewer.reset_view(body.radius);
-        gal_viewer.yaw = 0.55;
-        gal_viewer.pitch = 0.35;
+        gal_viewer.reset_view_for(body.radius, entry.id);
+        if entry.id != "meteoro_ff7" {
+            gal_viewer.yaw = 0.55;
+            gal_viewer.pitch = 0.35;
+        }
         gal_viewer.lod_level = 5;
         let tris = gal_viewer.render_body(
             showcase_idx,
             entry.id,
             &body,
+            entry.light_dir,
             1.0,
             time,
             &noise,

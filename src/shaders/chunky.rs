@@ -71,6 +71,7 @@ mod tests {
             world_pos: Vector3::zero(),
             normal,
             color: Vector3::new(0.8, 0.2, 0.1),
+            material_id: 0.0,
             depth: 0.5,
         };
         let dark = shade(&mk_frag(Vector3::new(1.0, 0.0, 0.0)), &u);

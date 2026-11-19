@@ -14,6 +14,7 @@ pub struct Mesh {
     pub positions: Vec<Vector3>,
     pub normals: Vec<Vector3>,
     pub colors: Vec<Vector3>,
+    pub material_ids: Vec<u8>,
     pub uvs: Vec<[f32; 2]>,
     pub indices: Vec<usize>,
 }
@@ -30,6 +31,7 @@ impl Mesh {
             positions: Vec::new(),
             normals: Vec::new(),
             colors: Vec::new(),
+            material_ids: Vec::new(),
             uvs: Vec::new(),
             indices: Vec::new(),
         }
@@ -44,6 +46,7 @@ impl Mesh {
         self.positions.push(pos);
         self.normals.push(normal.normalize());
         self.colors.push(Vector3::new(1.0, 1.0, 1.0));
+        self.material_ids.push(0);
         self.uvs.push(uv);
         idx
     }
@@ -115,6 +118,7 @@ impl Mesh {
         let mut new_pos = Vec::with_capacity(self.indices.len());
         let mut new_nrm = Vec::with_capacity(self.indices.len());
         let mut new_col = Vec::with_capacity(self.indices.len());
+        let mut new_mat = Vec::with_capacity(self.indices.len());
         let mut new_uv = Vec::with_capacity(self.indices.len());
         let mut new_idx = Vec::with_capacity(self.indices.len());
 
@@ -136,6 +140,7 @@ impl Mesh {
                 new_pos.push(self.positions[idx]);
                 new_nrm.push(n);
                 new_col.push(self.colors[idx]);
+                new_mat.push(self.material_ids[idx]);
                 new_uv.push(self.uvs[idx]);
             }
             new_idx.extend_from_slice(&[base, base + 1, base + 2]);
@@ -144,6 +149,7 @@ impl Mesh {
         self.positions = new_pos;
         self.normals = new_nrm;
         self.colors = new_col;
+        self.material_ids = new_mat;
         self.uvs = new_uv;
         self.indices = new_idx;
     }
@@ -252,6 +258,10 @@ impl Mesh {
         self.colors.fill(color);
     }
 
+    pub fn set_material(&mut self, mat_id: u8) {
+        self.material_ids.fill(mat_id);
+    }
+
     pub fn paint_vertices(&mut self, mut f: impl FnMut(usize, Vector3, Vector3) -> Vector3) {
         for i in 0..self.positions.len() {
             self.colors[i] = f(i, self.positions[i], self.normals[i]);
@@ -263,6 +273,7 @@ impl Mesh {
         self.positions.extend_from_slice(&other.positions);
         self.normals.extend_from_slice(&other.normals);
         self.colors.extend_from_slice(&other.colors);
+        self.material_ids.extend_from_slice(&other.material_ids);
         self.uvs.extend_from_slice(&other.uvs);
         self.indices.extend(other.indices.iter().map(|&idx| base + idx));
     }
@@ -273,6 +284,7 @@ impl Mesh {
             .map(|&idx| {
                 let mut v = Vertex::with_uv(self.positions[idx], self.normals[idx], self.uvs[idx]);
                 v.color = self.colors[idx];
+                v.material_id = self.material_ids[idx] as f32;
                 v
             })
             .collect()

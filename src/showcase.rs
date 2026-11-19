@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 //! Registro de trofeos (`Showcase`) para la galería y el sistema de favoritos.
 
+use raylib::prelude::Vector3;
+
 use crate::app::SystemId;
 use crate::shaders::Shader;
 
@@ -21,6 +23,7 @@ pub struct Showcase {
     pub estado: ShowcaseStatus,
     pub shader: Option<Shader>,
     pub has_mesh: bool,
+    pub light_dir: Option<Vector3>,
 }
 
 pub const SHOWCASE_ENTRIES: &[Showcase] = &[
@@ -35,6 +38,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Star),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "zebes",
@@ -46,6 +50,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Rocky),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "tau_ceti",
@@ -57,6 +62,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::GasGiant),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "ardens",
@@ -68,6 +74,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Ardens),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "abismo",
@@ -79,6 +86,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Abismo),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "basquia",
@@ -90,6 +98,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Basquia),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "vestigio",
@@ -101,6 +110,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Vestigio),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "mural",
@@ -112,6 +122,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Mural),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "fundido",
@@ -123,6 +134,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Fundido),
         has_mesh: true,
+        light_dir: None,
     },
     // --- Sistema de favoritos (10 cuerpos Placeholder) ---
     Showcase {
@@ -135,6 +147,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "joycon_izquierdo",
@@ -146,6 +159,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "joycon_derecho",
@@ -157,6 +171,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "cubo_rubik",
@@ -168,6 +183,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Chunky),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "raqueta_tenis",
@@ -179,6 +195,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "cubo_skweb",
@@ -190,17 +207,19 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
-        id: "asteroide_ff7",
-        nombre: "Asteroide de FF7",
+        id: "meteoro_ff7",
+        nombre: "Meteoro de FF7",
         sistema: SystemId::Favoritos,
-        tipo: "Asteroide",
-        descripcion_es: "Icosfera alargada con deformacion fuerte y crater; roca oscura con grietas Voronoi horneadas y pulso rojo incandescente.",
+        tipo: "Cometa",
+        descripcion_es: "Cabeza vitrea con trazos blancos en espiral horneados, cola de pinceladas con degradado por vertice y orbe.",
         inspiracion: None,
         estado: ShowcaseStatus::Ready,
-        shader: Some(Shader::Asteroid),
+        shader: Some(Shader::Meteor),
         has_mesh: true,
+        light_dir: Some(Vector3 { x: -0.716, y: -0.577, z: 0.391 }),
     },
     Showcase {
         id: "casco_samus",
@@ -212,6 +231,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "trifuerza",
@@ -223,6 +243,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Triforce),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "la_bombonera",
@@ -234,6 +255,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
 ];
 
@@ -257,7 +279,7 @@ pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_bu
     match id {
         "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
         "trifuerza" => Some(crate::bodies::build_triforce_mesh),
-        "asteroide_ff7" => Some(crate::bodies::build_asteroid_mesh),
+        "meteoro_ff7" => Some(crate::bodies::build_meteor_mesh),
         _ => None,
     }
 }
@@ -282,7 +304,7 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
         phase: 0.0,
         orbit_inclination: 0.0,
         rotation_period: 24.0,
-        axial_tilt: 0.22,
+        axial_tilt: if entry.id == "meteoro_ff7" { 0.0 } else { 0.22 },
         shader,
         surface: crate::scene::SurfaceParams {
             seed: 0,
@@ -362,6 +384,7 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Star),
                 has_mesh: true,
+                light_dir: None,
             },
             Showcase {
                 id: "b1",
@@ -373,6 +396,7 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Rocky),
                 has_mesh: true,
+                light_dir: None,
             },
             Showcase {
                 id: "b2",
@@ -384,6 +408,7 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Rocky),
                 has_mesh: true,
+                light_dir: None,
             },
             Showcase {
                 id: "b3",
@@ -395,6 +420,7 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Rocky),
                 has_mesh: true,
+                light_dir: None,
             },
         ];
         assert!(is_favorites_system_ready(&sample));

@@ -149,6 +149,7 @@ pub fn interpolate_screen_fragment(
         world_pos: v0.world_pos * pw0 + v1.world_pos * pw1 + v2.world_pos * pw2,
         normal: (v0.normal * pw0 + v1.normal * pw1 + v2.normal * pw2).normalize(),
         color: v0.color * pw0 + v1.color * pw1 + v2.color * pw2,
+        material_id: v0.material_id * pw0 + v1.material_id * pw1 + v2.material_id * pw2,
         depth: v0.z * screen_w.0 + v1.z * screen_w.1 + v2.z * screen_w.2,
     }
 }
@@ -679,6 +680,7 @@ mod tests {
             normal: Vector3::new(0.0, 0.0, 1.0),
             uv: [0.0, 0.0],
             color: Vector3::new(1.0, 1.0, 1.0),
+            material_id: 0.0,
         };
         let tri = ScreenTriangle {
             vertices: [
@@ -717,6 +719,7 @@ mod tests {
             normal: Vector3::new(0.0, 0.0, 1.0),
             uv: [0.0, 0.0],
             color,
+            material_id: 0.0,
         };
         let tri = ScreenTriangle {
             vertices: [
@@ -776,6 +779,7 @@ mod tests {
                 normal: Vector3::new(0.0, 0.0, 1.0),
                 uv: [0.0, 0.0],
                 color: Vector3::new(1.0, 1.0, 1.0),
+                material_id: 0.0,
             };
             ScreenTriangle {
                 vertices: [mk_v(0.0, 0.0), mk_v(0.0, 32.0), mk_v(32.0, 0.0)],
@@ -828,6 +832,7 @@ mod tests {
             normal: Vector3::new(0.0, 0.0, 1.0),
             uv: [0.0, 0.0],
             color: Vector3::new(1.0, 1.0, 1.0),
+            material_id: 0.0,
         };
         let triangles = [
             ScreenTriangle {
