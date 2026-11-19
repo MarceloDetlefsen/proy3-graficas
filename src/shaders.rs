@@ -70,6 +70,7 @@ pub fn vertex_to_clip(vertex: &Vertex, uniforms: &Uniforms) -> ClipVertex {
         world_pos: world.xyz(),
         normal: uniforms.model_matrix.transform_normal(vertex.normal),
         uv: vertex.uv,
+        color: vertex.color,
     }
 }
 

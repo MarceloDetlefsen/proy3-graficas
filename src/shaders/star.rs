@@ -143,6 +143,7 @@ mod tests {
             object_pos: normal,
             world_pos,
             normal,
+            color: Vector3::new(1.0, 1.0, 1.0),
             depth: 0.0,
         }
     }

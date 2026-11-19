@@ -148,6 +148,7 @@ pub fn interpolate_screen_fragment(
         object_pos: v0.object_pos * pw0 + v1.object_pos * pw1 + v2.object_pos * pw2,
         world_pos: v0.world_pos * pw0 + v1.world_pos * pw1 + v2.world_pos * pw2,
         normal: (v0.normal * pw0 + v1.normal * pw1 + v2.normal * pw2).normalize(),
+        color: v0.color * pw0 + v1.color * pw1 + v2.color * pw2,
         depth: v0.z * screen_w.0 + v1.z * screen_w.1 + v2.z * screen_w.2,
     }
 }
@@ -677,6 +678,7 @@ mod tests {
             world_pos: Vector3::zero(),
             normal: Vector3::new(0.0, 0.0, 1.0),
             uv: [0.0, 0.0],
+            color: Vector3::new(1.0, 1.0, 1.0),
         };
         let tri = ScreenTriangle {
             vertices: [
@@ -701,6 +703,35 @@ mod tests {
         let w2 = edge_2d(pa, pb, p) / area;
         assert!((w0 + w1 + w2 - 1.0).abs() < 1e-6);
         assert!(w0 > 0.0 && w1 > 0.0 && w2 > 0.0);
+    }
+
+    #[test]
+    fn perspective_correct_vertex_color_interpolation() {
+        let mk_c = |x: f32, y: f32, w: f32, color: Vector3| ScreenVertex {
+            x,
+            y,
+            z: 0.5,
+            inv_w: 1.0 / w,
+            object_pos: Vector3::zero(),
+            world_pos: Vector3::zero(),
+            normal: Vector3::new(0.0, 0.0, 1.0),
+            uv: [0.0, 0.0],
+            color,
+        };
+        let tri = ScreenTriangle {
+            vertices: [
+                mk_c(0.0, 0.0, 1.0, Vector3::new(1.0, 0.0, 0.0)),
+                mk_c(0.0, 10.0, 2.0, Vector3::new(0.0, 1.0, 0.0)),
+                mk_c(10.0, 0.0, 4.0, Vector3::new(0.0, 0.0, 1.0)),
+            ],
+        };
+        // Pesos en pantalla (0.5, 0.25, 0.25):
+        // inv_w ponderado: 0.5/1 + 0.25/2 + 0.25/4 = 0.5 + 0.125 + 0.0625 = 0.6875
+        // pw = (0.5/0.6875, 0.125/0.6875, 0.0625/0.6875) = (8/11, 2/11, 1/11)
+        let frag = interpolate_screen_fragment(&tri, 2.5, 2.5, (0.5, 0.25, 0.25));
+        assert!((frag.color.x - 8.0 / 11.0).abs() < 1e-5);
+        assert!((frag.color.y - 2.0 / 11.0).abs() < 1e-5);
+        assert!((frag.color.z - 1.0 / 11.0).abs() < 1e-5);
     }
 
     #[test]
@@ -744,6 +775,7 @@ mod tests {
                 world_pos: Vector3::new(0.0, 0.0, 1.0),
                 normal: Vector3::new(0.0, 0.0, 1.0),
                 uv: [0.0, 0.0],
+                color: Vector3::new(1.0, 1.0, 1.0),
             };
             ScreenTriangle {
                 vertices: [mk_v(0.0, 0.0), mk_v(0.0, 32.0), mk_v(32.0, 0.0)],
@@ -795,6 +827,7 @@ mod tests {
             world_pos: Vector3::new(x * 0.01, y * 0.01, 1.0),
             normal: Vector3::new(0.0, 0.0, 1.0),
             uv: [0.0, 0.0],
+            color: Vector3::new(1.0, 1.0, 1.0),
         };
         let triangles = [
             ScreenTriangle {

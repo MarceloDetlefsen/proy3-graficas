@@ -272,7 +272,7 @@ impl Mesh {
             .iter()
             .map(|&idx| {
                 let mut v = Vertex::with_uv(self.positions[idx], self.normals[idx], self.uvs[idx]);
-                v.tangent = self.colors[idx];
+                v.color = self.colors[idx];
                 v
             })
             .collect()

@@ -17,6 +17,7 @@ pub struct ClipVertex {
     pub world_pos: Vector3,
     pub normal: Vector3,
     pub uv: [f32; 2],
+    pub color: Vector3,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -57,6 +58,7 @@ fn lerp_clip_vertex(a: &ClipVertex, b: &ClipVertex, t: f32) -> ClipVertex {
             a.uv[0] + (b.uv[0] - a.uv[0]) * t,
             a.uv[1] + (b.uv[1] - a.uv[1]) * t,
         ],
+        color: lerp_vec3(a.color, b.color, t),
     }
 }
 
@@ -138,6 +140,7 @@ mod tests {
             world_pos: Vector3::new(attr, 0.0, 0.0),
             normal: Vector3::new(0.0, 0.0, 1.0),
             uv: [attr, 1.0 - attr],
+            color: Vector3::new(1.0, 1.0, 1.0),
         }
     }
 
