@@ -1401,13 +1401,14 @@ fn main() {
                 let raster_ms = t_rast.elapsed().as_secs_f64() * 1000.0;
 
                 let t_shade = std::time::Instant::now();
-                let (calls, visible) = shade_visibility_tiled_materials(
+                let (calls, visible) = rasterizer::shade_visibility_tiled_materials_halo(
                     &render_buffers.screen_triangles,
                     &render_buffers.tri_materials,
                     &mut framebuffer,
                     shader,
                     &uniforms,
                     threads,
+                    scene_config::solar_halo_for_system(session.system_id),
                 );
                 let shading_ms = t_shade.elapsed().as_secs_f64() * 1000.0;
                 (raster_ms, shading_ms, writes, calls, visible)

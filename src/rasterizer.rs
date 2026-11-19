@@ -373,6 +373,7 @@ fn shade_band(
     default_shader: Shader,
     uniforms: &Uniforms,
     inv_vp: Option<&crate::math::Mat4>,
+    halo: (f32, Vector3),
 ) -> usize {
     let band_height = tri_id_band.len() / width;
     let y0 = band_idx * TILE_SIZE;
@@ -405,11 +406,11 @@ fn shade_band(
                         let sun_dir = to_sun * (1.0 / sun_dist);
                         let cos_ang = dir.dot(sun_dir).clamp(-1.0, 1.0);
                         let sin_ang = (1.0 - cos_ang * cos_ang).max(0.0).sqrt();
-                        let sun_ang = (3.5 / sun_dist).min(0.6);
+                        let sun_ang = (halo.0 / sun_dist).min(0.6);
                         let halo_r = sun_ang * crate::scene_config::SOLAR_HALO_RADIUS_MULT;
                         if cos_ang > 0.0 && sin_ang < halo_r {
                             let t = 1.0 - (sin_ang / halo_r);
-                            sc += crate::scene_config::SOLAR_HALO_COLOR * (t * t * 0.55);
+                            sc += halo.1 * (t * t * 0.55);
                         }
                     }
                     let c_idx = idx * 4;
@@ -476,9 +477,32 @@ pub fn shade_visibility_tiled_materials(
         uniforms,
         threads,
         true,
+        (3.5, crate::scene_config::SOLAR_HALO_COLOR),
     )
 }
 
+pub fn shade_visibility_tiled_materials_halo(
+    triangles: &[ScreenTriangle],
+    materials: &[TriMaterial],
+    framebuffer: &mut Framebuffer,
+    default_shader: Shader,
+    uniforms: &Uniforms,
+    threads: usize,
+    halo: (f32, Vector3),
+) -> (usize, usize) {
+    shade_visibility_tiled_inner(
+        triangles,
+        materials,
+        framebuffer,
+        default_shader,
+        uniforms,
+        threads,
+        true,
+        halo,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn shade_visibility_tiled_inner(
     triangles: &[ScreenTriangle],
     materials: &[TriMaterial],
@@ -487,6 +511,7 @@ fn shade_visibility_tiled_inner(
     uniforms: &Uniforms,
     threads: usize,
     draw_sky: bool,
+    halo: (f32, Vector3),
 ) -> (usize, usize) {
     let width = framebuffer.width as usize;
     let band_elems = TILE_SIZE * width;
@@ -515,6 +540,7 @@ fn shade_visibility_tiled_inner(
                 default_shader,
                 uniforms,
                 inv_vp.as_ref(),
+                halo,
             );
         }
         return (calls, calls);
@@ -552,6 +578,7 @@ fn shade_visibility_tiled_inner(
                         default_shader,
                         uniforms,
                         inv_vp.as_ref(),
+                        halo,
                     );
                 }
                 total_calls.fetch_add(local_calls, Ordering::Relaxed);
@@ -570,7 +597,16 @@ pub fn shade_visibility_tiled(
     uniforms: &Uniforms,
     threads: usize,
 ) -> (usize, usize) {
-    shade_visibility_tiled_inner(triangles, &[], framebuffer, shader, uniforms, threads, false)
+    shade_visibility_tiled_inner(
+        triangles,
+        &[],
+        framebuffer,
+        shader,
+        uniforms,
+        threads,
+        false,
+        (3.5, crate::scene_config::SOLAR_HALO_COLOR),
+    )
 }
 
 #[allow(dead_code)]

@@ -16,6 +16,14 @@ pub const MIN_AMBIENT: f32 = 0.14;
 pub const SOLAR_ATTENUATION_K: f32 = 0.00055;
 pub const SOLAR_HALO_RADIUS_MULT: f32 = 2.4;
 pub const SOLAR_HALO_COLOR: Vector3 = Vector3 { x: 1.0, y: 0.58, z: 0.78 };
+pub const SOLAR_HALO_COLOR_FAVORITES: Vector3 = Vector3 { x: 1.0, y: 0.68, z: 0.16 };
+
+pub fn solar_halo_for_system(id: crate::app::SystemId) -> (f32, Vector3) {
+    match id {
+        crate::app::SystemId::Realista => (3.5, SOLAR_HALO_COLOR),
+        crate::app::SystemId::Favoritos => (2.6, SOLAR_HALO_COLOR_FAVORITES),
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct AtmosphereRim {
