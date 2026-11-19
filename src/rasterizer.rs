@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 pub struct TriMaterial {
     pub shader: Shader,
     pub light_dir: Vector3,
+    pub shader_param: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -416,16 +417,19 @@ fn shade_band(
             let w2 = edge_2d(pa, pb, p) * inv_area;
 
             let fragment = interpolate_screen_fragment(tri, p.0, p.1, (w0, w1, w2));
-            let (shader, light_dir) = materials
+            let (shader, light_dir, shader_param) = materials
                 .get(tri_usize)
-                .map_or((default_shader, uniforms.light_dir), |m| {
-                    (m.shader, m.light_dir)
+                .map_or((default_shader, uniforms.light_dir, uniforms.shader_param), |m| {
+                    (m.shader, m.light_dir, m.shader_param)
                 });
-            let fc = if (light_dir - uniforms.light_dir).length_sqr() < 1e-12 {
+            let fc = if (light_dir - uniforms.light_dir).length_sqr() < 1e-12
+                && (shader_param - uniforms.shader_param).abs() < 1e-5
+            {
                 fragment_shader(&fragment, shader, uniforms)
             } else {
                 let mut local_u = uniforms.clone();
                 local_u.light_dir = light_dir;
+                local_u.shader_param = shader_param;
                 fragment_shader(&fragment, shader, &local_u)
             };
             let c_idx = idx * 4;
@@ -750,6 +754,7 @@ mod tests {
             viewport_height: 64,
             noise: Noise::new(0),
             baked: None,
+            shader_param: 1.0,
         };
 
         let writes = rasterize_visibility(&triangles, &mut fb, true);
@@ -809,6 +814,7 @@ mod tests {
             viewport_height: 140,
             noise: Noise::new(0),
             baked: None,
+            shader_param: 1.0,
         };
 
         let mut fb_full = Framebuffer::new(160, 140, Color::BLACK);
@@ -877,6 +883,7 @@ mod tests {
                 viewport_height: 120,
                 noise: noise.clone(),
                 baked: None,
+                shader_param: 1.0,
             };
 
             assemble_screen_triangles(&vertex_array, &uniforms, &mut clip_scratch, &mut screen_tris);

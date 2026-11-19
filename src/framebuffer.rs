@@ -153,48 +153,6 @@ impl Framebuffer {
         }
     }
 
-    pub fn draw_in_window(
-        &mut self,
-        window: &mut RaylibHandle,
-        thread: &RaylibThread,
-        label: &str,
-        overlay: &[String],
-    ) {
-        if self.texture.is_none() {
-            let image = Image::gen_image_color(
-                self.width as i32,
-                self.height as i32,
-                self.background_color,
-            );
-            if let Ok(tex) = window.load_texture_from_image(thread, &image) {
-                tex.set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
-                self.texture = Some(tex);
-            }
-        }
-        let win_w = window.get_screen_width() as f32;
-        let win_h = window.get_screen_height() as f32;
-        let scale = (win_w / self.width as f32).min(win_h / self.height as f32);
-        let dst_w = self.width as f32 * scale;
-        let dst_h = self.height as f32 * scale;
-        let dst = Rectangle::new((win_w - dst_w) * 0.5, (win_h - dst_h) * 0.5, dst_w, dst_h);
-        let src = Rectangle::new(0.0, 0.0, self.width as f32, self.height as f32);
-
-        if let Some(texture) = self.texture.as_mut() {
-            let _ = texture.update_texture(&self.color_pixels);
-            let mut drawing = window.begin_drawing(thread);
-            drawing.clear_background(Color::BLACK);
-            drawing.draw_texture_pro(texture, src, dst, Vector2::zero(), 0.0, Color::WHITE);
-            drawing.draw_text(label, 16, 16, 20, Color::WHITE);
-            if !overlay.is_empty() {
-                let box_h = 16 + overlay.len() as i32 * 20;
-                drawing.draw_rectangle(12, 44, 460, box_h, Color::new(0, 0, 0, 175));
-                for (i, line) in overlay.iter().enumerate() {
-                    drawing.draw_text(line, 20, 52 + i as i32 * 20, 16, Color::GREEN);
-                }
-            }
-        }
-    }
-
     pub fn draw_with_overlay(
         &mut self,
         window: &mut RaylibHandle,

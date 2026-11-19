@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 //! Medición de rendimiento por etapa del frame y superposición F3.
 //!
 //! Registra los tiempos en milisegundos de cada etapa (vértices, rasterización,

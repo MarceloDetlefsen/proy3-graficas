@@ -93,6 +93,37 @@ pub fn diffuse_factor(normal: Vector3, uniforms: &Uniforms) -> f32 {
     normal.normalize().dot(uniforms.light_dir).max(0.0)
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct LiveParam {
+    pub name: &'static str,
+    pub min: f32,
+    pub max: f32,
+    pub step: f32,
+    pub default: f32,
+}
+
+pub fn live_param(shader: Shader) -> LiveParam {
+    let name = match shader {
+        Shader::Star => "Intensidad corona",
+        Shader::Rocky => "Contraste relieve",
+        Shader::GasGiant => "Contraste bandas",
+        Shader::Ardens => "Pulso lava",
+        Shader::Abismo => "Brillo causticas",
+        Shader::Basquia => "Brillo oilstick",
+        Shader::Vestigio => "Contraste VHS",
+        Shader::Mural => "Contraste pintura",
+        Shader::Fundido => "Brillo magma",
+        Shader::Ship | Shader::Prop(_) => "Brillo",
+    };
+    LiveParam {
+        name,
+        min: 0.25,
+        max: 2.0,
+        step: 0.15,
+        default: 1.0,
+    }
+}
+
 pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms) -> Vector3 {
     if uniforms.debug_noise {
         let sample_position = fragment.object_pos.normalize() * uniforms.noise_frequency;
@@ -100,7 +131,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         return Vector3::new(value, value, value);
     }
 
-    match shader {
+    let mut color = match shader {
         Shader::Star => star::shade(fragment, uniforms),
         Shader::Rocky => rocky::shade(fragment, uniforms),
         Shader::GasGiant => gas_giant::shade(fragment, uniforms),
@@ -122,7 +153,15 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
             let diff = diffuse_factor(fragment.normal, uniforms);
             base * (0.22 + 0.78 * diff)
         }
+    };
+    let p = uniforms.shader_param;
+    if (p - 1.0).abs() > 1e-3 {
+        let luma = 0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z;
+        color.x = (luma + (color.x - luma) * p).clamp(0.0, 1.0);
+        color.y = (luma + (color.y - luma) * p).clamp(0.0, 1.0);
+        color.z = (luma + (color.z - luma) * p).clamp(0.0, 1.0);
     }
+    color
 }
 
 pub fn shader_name(shader: Shader) -> &'static str {
