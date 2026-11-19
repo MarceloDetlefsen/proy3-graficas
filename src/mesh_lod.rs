@@ -164,12 +164,17 @@ pub fn load_ship_lods() -> ShipLods {
     ];
     let mut base_mesh: Option<(Vec<Vertex>, Vec<usize>)> = None;
 
+    let mut from_file = 0usize;
+    let mut from_fallback = 0usize;
+
     let mut load_level = |path: &str, target: usize| -> (Vec<Vertex>, Vec<usize>) {
         if Path::new(path).exists()
             && let Ok(obj) = load_obj(path)
         {
+            from_file += 1;
             return obj.to_indexed_mesh();
         }
+        from_fallback += 1;
         let (base_v, base_i) = base_mesh.get_or_insert_with(|| {
             let obj = load_obj("assets/ship.obj").expect("assets/ship.obj debe existir");
             obj.to_indexed_mesh()
@@ -181,7 +186,7 @@ pub fn load_ship_lods() -> ShipLods {
     let l1 = load_level(specs[1].0, specs[1].1);
     let l2 = load_level(specs[2].0, specs[2].1);
     println!(
-        "LODs de nave listos: lod0={} tris, lod1={} tris, lod2={} tris",
+        "LODs de nave listos (desde_archivo={from_file}, respaldo_decimacion={from_fallback}): lod0={} tris, lod1={} tris, lod2={} tris",
         l0.1.len() / 3,
         l1.1.len() / 3,
         l2.1.len() / 3,
@@ -223,6 +228,74 @@ mod tests {
             assert!(
                 dec_span >= orig_span * 0.75,
                 "Caja envolvente colapsada: {dec_span} vs {orig_span}"
+            );
+        }
+    }
+
+    #[test]
+    fn ship_lod_objs_match_bounds_and_report_orientation() {
+        let base_obj = load_obj("assets/ship.obj").expect("ship.obj debe cargar");
+        let (base_verts, _) = base_obj.to_indexed_mesh();
+        let (bmin, bmax) = mesh_bounds(&base_verts);
+        let b_extent = bmax - bmin;
+        let max_axis = b_extent.x.max(b_extent.y).max(b_extent.z).max(1e-4);
+
+        let lods = load_ship_lods();
+        for (lvl, (verts, indices)) in lods.levels.iter().enumerate() {
+            assert!(
+                !indices.is_empty() && indices.len().is_multiple_of(3),
+                "LOD {lvl} debe estar triangulado"
+            );
+            assert!(
+                verts.iter().all(|v| v.normal.length() > 0.5),
+                "LOD {lvl} debe tener normales válidas"
+            );
+            let (lmin, lmax) = mesh_bounds(verts);
+            let diff_min = (lmin - bmin).length();
+            let diff_max = (lmax - bmax).length();
+            let tol = max_axis * 0.03;
+            println!(
+                "Ship LOD {lvl}: {} tris, diff_min={:.4} ({:.2}%), diff_max={:.4} ({:.2}%)",
+                indices.len() / 3,
+                diff_min,
+                100.0 * diff_min / max_axis,
+                diff_max,
+                100.0 * diff_max / max_axis,
+            );
+            assert!(
+                diff_min <= tol && diff_max <= tol,
+                "LOD {lvl} excede tolerancia 3% ({tol:.4}): diff_min={diff_min:.4}, diff_max={diff_max:.4}"
+            );
+
+            // Verificación de orientación respecto al centroide (análogo a ship_obj_triangles_orientation_check).
+            let centroid = verts
+                .iter()
+                .fold(Vector3::zero(), |acc, v| acc + v.position)
+                * (1.0 / verts.len().max(1) as f32);
+            let mut inward = 0usize;
+            let mut total = 0usize;
+            for tri in indices.as_chunks::<3>().0 {
+                let a = verts[tri[0]].position;
+                let b = verts[tri[1]].position;
+                let c = verts[tri[2]].position;
+                let face_n = (b - a).cross(c - a);
+                let to_tri = (a + b + c) * (1.0 / 3.0) - centroid;
+                if face_n.length_sqr() > 1e-12 {
+                    total += 1;
+                    if face_n.dot(to_tri) < 0.0 {
+                        inward += 1;
+                    }
+                }
+            }
+            let outward_ratio = (total - inward) as f32 / total.max(1) as f32;
+            println!(
+                "Ship LOD {lvl} orientación: {inward}/{total} hacia centroide (outward={:.1}%)",
+                outward_ratio * 100.0
+            );
+            // Mayoría de caras apuntando hacia afuera (nave cóncava multiparte).
+            assert!(
+                outward_ratio > 0.55,
+                "LOD {lvl} tiene demasiados triángulos invertidos: {inward}/{total}"
             );
         }
     }
