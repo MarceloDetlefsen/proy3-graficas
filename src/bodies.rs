@@ -7,7 +7,8 @@ use raylib::prelude::Vector3;
 
 use crate::mesh_builder::{
     Mesh, beveled_extruded_contour, box_mesh, cone, cylinder, dodecahedron, dodecahedron_faces,
-    extruded_prism, flat_polygon_mesh, loft_rings, raised_sticker, rounded_box, sphere, torus,
+    extruded_prism, flat_polygon_mesh, loft_rings, raised_sticker, rounded_box,
+    scatter_instances_in_mesh, sphere, torus,
 };
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
@@ -839,6 +840,98 @@ pub fn build_airpods_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+/// Construye la raqueta de tenis con marco ovalado, garganta en Y, mango con
+/// bandas de agarre y las cuerdas como cinturón de asteroides en cuadrícula 14×16.
+pub fn build_racket_mesh(detail: usize) -> Mesh {
+    let frame_black = Vector3::new(0.09, 0.10, 0.13);
+    let teal_accent = Vector3::new(0.12, 0.47, 0.62); // refs/raqueta.webp
+    let grip_white = Vector3::new(0.93, 0.94, 0.96);
+    let grip_dark = Vector3::new(0.18, 0.20, 0.23);
+    let asteroid_red = Vector3::new(0.76, 0.22, 0.18);
+
+    let (maj_seg, min_seg, cyl_seg, step_stride) = match detail {
+        0 => (12, 4, 5, 4),
+        1 => (18, 5, 6, 2),
+        _ => (22, 6, 8, 1),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Marco ovalado (anillo) centrado en y = 0.52.
+    let oval_cy = 0.52_f32;
+    let oval_rx = 0.62_f32;
+    let oval_ry = 0.86_f32;
+    let mut frame = torus(1.0, 0.055, maj_seg, min_seg);
+    frame.rotate_x(FRAC_PI_2);
+    frame.scale(Vector3::new(oval_rx, oval_ry, 1.0));
+    frame.paint_vertices(|_, p, _| {
+        if p.y < -0.15 {
+            teal_accent
+        } else {
+            frame_black
+        }
+    });
+    frame.translate(Vector3::new(0.0, oval_cy, 0.0));
+    mesh.merge(&frame);
+
+    // 2. Garganta en Y.
+    for side in [-1.0_f32, 1.0] {
+        let mut arm = cylinder(0.042, 0.048, 0.56, cyl_seg);
+        arm.rotate_z(side * 0.50);
+        arm.set_color(teal_accent);
+        arm.translate(Vector3::new(side * 0.17, -0.42, 0.0));
+        mesh.merge(&arm);
+    }
+
+    // 3. Mango con bandas de agarre y tapón.
+    for i in 0..6 {
+        let mut band = cylinder(0.058, 0.058, 0.12, cyl_seg);
+        band.set_color(if i % 2 == 0 { grip_white } else { grip_dark });
+        band.translate(Vector3::new(0.0, -0.72 - i as f32 * 0.12, 0.0));
+        mesh.merge(&band);
+    }
+    let mut cap = cylinder(0.060, 0.082, 0.08, cyl_seg);
+    cap.set_color(frame_black);
+    cap.translate(Vector3::new(0.0, -1.42, 0.0));
+    mesh.merge(&cap);
+
+    // 4. Cuerdas como cinturón de asteroides en cuadrícula 14×16 dentro del óvalo.
+    let ico = crate::icosphere::icosphere_level(0); // 20 tris por asteroide
+    let noise = crate::noise::Noise::new(48);
+    let mut proto = Mesh::new();
+    for &unit in &ico.positions {
+        let h = crate::surface_map::planet_height(&noise, unit, 3.0);
+        let r = 0.8 + (h - 0.5) * 0.65;
+        proto.push_vertex(unit * r, unit, [0.0, 0.0]);
+    }
+    proto.indices = ico.indices;
+    proto.compute_flat_normals();
+    proto.set_color(asteroid_red);
+
+    let mut nodes = Vec::new();
+    let cols = 14usize;
+    let rows = 16usize;
+    let mut idx = 0usize;
+    for r in 0..rows {
+        let ty = (r as f32 + 0.5) / rows as f32 * 2.0 - 1.0;
+        let y = oval_cy + ty * (oval_ry * 0.90);
+        for c in 0..cols {
+            let tx = (c as f32 + 0.5) / cols as f32 * 2.0 - 1.0;
+            let x = tx * (oval_rx * 0.90);
+            let norm_d2 = (x / (oval_rx * 0.92)).powi(2) + ((y - oval_cy) / (oval_ry * 0.92)).powi(2);
+            if norm_d2 < 0.86 {
+                if idx.is_multiple_of(step_stride) {
+                    nodes.push(Vector3::new(x, y, 0.0));
+                }
+                idx += 1;
+            }
+        }
+    }
+    scatter_instances_in_mesh(&mut mesh, &proto, &nodes, 0.02, 0.04, 2026);
+
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -971,6 +1064,20 @@ mod tests {
         let m1 = build_airpods_mesh(1);
         let m0 = build_airpods_mesh(0);
         assert!(m2.tri_count() <= 4000, "AirPods L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn racket_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_racket_mesh(2);
+        let m1 = build_racket_mesh(1);
+        let m0 = build_racket_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Racket L2={} > 4000", m2.tri_count());
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
