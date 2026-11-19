@@ -415,6 +415,121 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     }
 }
 
+pub fn render_menu_overlay(
+    overlay: &mut OverlayBuffer,
+    selected: usize,
+    favorites_ready: bool,
+    show_controls: bool,
+) {
+    overlay.clear();
+
+    let w = overlay.width as i32;
+    let h = overlay.height as i32;
+    let box_w = 480.min(w - 40).max(260);
+    let box_h = 270;
+    let bx = (w - box_w) / 2;
+    let by = (h - box_h) / 2;
+
+    overlay.fill_rect(bx, by, box_w, box_h, Color::new(8, 12, 22, 210));
+    overlay.stroke_rect(bx, by, box_w, box_h, Color::new(90, 145, 205, 235));
+
+    let title = "SISTEMA SOLAR 3D";
+    let (tw, _) = OverlayBuffer::measure_text(title, 3);
+    overlay.draw_text(title, (w - tw) / 2, by + 18, 3, Color::new(255, 215, 130, 255));
+    let subtitle = "Renderizador por software en Rust";
+    let (sw, _) = OverlayBuffer::measure_text(subtitle, 1);
+    overlay.draw_text(subtitle, (w - sw) / 2, by + 46, 1, Color::new(160, 185, 215, 255));
+
+    for (i, entry) in crate::app::MENU_ENTRIES.iter().enumerate() {
+        let ey = by + 74 + i as i32 * 32;
+        let is_sel = i == selected;
+        let disabled = matches!(entry, crate::app::MenuEntry::FavoritesSystem) && !favorites_ready;
+
+        if is_sel {
+            overlay.fill_rect(
+                bx + 20,
+                ey - 4,
+                box_w - 40,
+                24,
+                if disabled {
+                    Color::new(45, 45, 58, 200)
+                } else {
+                    Color::new(32, 66, 110, 225)
+                },
+            );
+            overlay.stroke_rect(
+                bx + 20,
+                ey - 4,
+                box_w - 40,
+                24,
+                if disabled {
+                    Color::new(120, 120, 140, 220)
+                } else {
+                    Color::new(120, 200, 255, 255)
+                },
+            );
+        }
+
+        let label_color = if disabled {
+            Color::new(135, 140, 150, 255)
+        } else if is_sel {
+            Color::WHITE
+        } else {
+            Color::new(205, 215, 230, 255)
+        };
+        let prefix = if is_sel { "> " } else { "  " };
+        let line = format!("{}{}", prefix, entry.label());
+        overlay.draw_text(&line, bx + 30, ey, 2, label_color);
+
+        if disabled {
+            let tag = "en construccion";
+            let (tag_w, _) = OverlayBuffer::measure_text(tag, 1);
+            overlay.draw_text(
+                tag,
+                bx + box_w - 28 - tag_w,
+                ey + 4,
+                1,
+                Color::new(220, 175, 95, 255),
+            );
+        }
+    }
+
+    let hint = "W/S o Flechas: navegar | Enter: elegir | Esc: salir";
+    let (hw, _) = OverlayBuffer::measure_text(hint, 1);
+    overlay.draw_text(
+        hint,
+        (w - hw) / 2,
+        by + box_h - 18,
+        1,
+        Color::new(150, 170, 195, 255),
+    );
+
+    if show_controls {
+        let cw = (w - 40).min(640);
+        let ch = (CONTROLS.len() as i32 * 13 + 56).min(h - 40);
+        let cx = (w - cw) / 2;
+        let cy = (h - ch) / 2;
+        overlay.fill_rect(cx, cy, cw, ch, Color::new(6, 10, 18, 240));
+        overlay.stroke_rect(cx, cy, cw, ch, Color::new(110, 175, 235, 245));
+        overlay.draw_text("Controles", cx + 16, cy + 12, 2, Color::new(150, 220, 255, 255));
+        for (i, c) in CONTROLS.iter().enumerate() {
+            let row_y = cy + 36 + i as i32 * 13;
+            if row_y + 12 >= cy + ch - 18 {
+                break;
+            }
+            overlay.draw_text(c.key, cx + 16, row_y, 1, Color::new(255, 220, 120, 255));
+            overlay.draw_text(c.action, cx + 124, row_y, 1, Color::new(225, 232, 240, 255));
+        }
+        overlay.draw_text(
+            "Enter / Backspace: volver",
+            cx + 16,
+            cy + ch - 16,
+            1,
+            Color::new(160, 185, 215, 255),
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -464,5 +579,16 @@ mod tests {
                 c.action
             );
         }
+    }
+
+    #[test]
+    fn menu_overlay_fits_in_800x600() {
+        let mut ov = OverlayBuffer::new(800, 600);
+        render_menu_overlay(&mut ov, 0, false, false);
+        for entry in crate::app::MENU_ENTRIES {
+            assert!(ov.text_fits_window(entry.label(), 200, 240, 2));
+        }
+        render_menu_overlay(&mut ov, 3, false, true);
+        assert_eq!(ov.pixels.len(), 800 * 600 * 4);
     }
 }

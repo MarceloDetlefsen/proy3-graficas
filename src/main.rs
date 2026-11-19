@@ -264,6 +264,151 @@ fn render(
     }
 }
 
+struct MenuBackdrop {
+    bodies: Vec<scene::Body>,
+    body_caches: Vec<icosphere::DeformedIcosphereCache>,
+    body_lods: Vec<usize>,
+    baked: Arc<BakedMaps>,
+    time: f32,
+    yaw: f32,
+}
+
+impl MenuBackdrop {
+    fn new(baked: Arc<BakedMaps>) -> Self {
+        let bodies = system_bodies(app::SystemId::Realista);
+        let body_caches = bodies
+            .iter()
+            .map(|b| {
+                icosphere::DeformedIcosphereCache::new_for_shader(
+                    b.shader,
+                    b.surface.deformation_amplitude,
+                    b.surface.noise_frequency,
+                )
+            })
+            .collect();
+        let body_lods = vec![2_usize; bodies.len()];
+        Self {
+            bodies,
+            body_caches,
+            body_lods,
+            baked,
+            time: 0.0,
+            yaw: 0.4,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn render_frame(
+        &mut self,
+        dt: f32,
+        framebuffer: &mut Framebuffer,
+        render_buffers: &mut RenderBuffers,
+        noise: &Noise,
+        threads: usize,
+        internal_width: i32,
+        internal_height: i32,
+    ) {
+        self.time += dt;
+        self.yaw += 0.14 * dt;
+
+        let cam_distance = 44.0_f32;
+        let cam_pitch = 0.36_f32;
+        let cam_pos = Vector3::new(
+            cam_distance * cam_pitch.cos() * self.yaw.sin(),
+            cam_distance * cam_pitch.sin(),
+            cam_distance * cam_pitch.cos() * self.yaw.cos(),
+        );
+        let cam = Camera::new(cam_pos, Vector3::zero(), 45.0_f32.to_radians(), 0.1, 300.0);
+        let aspect = internal_width as f32 / internal_height as f32;
+        let light_dir = Vector3::new(-0.65, 0.80, 1.0).normalize();
+        let mut uniforms = Uniforms {
+            model_matrix: Mat4::identity(),
+            view_matrix: cam.view_matrix(),
+            projection_matrix: cam.projection_matrix(aspect),
+            time: self.time,
+            light_dir,
+            camera_pos: cam.position,
+            debug_noise: false,
+            noise_frequency: 4.0,
+            rocky_debug_view: 3,
+            normal_mapping: true,
+            debug_normals: false,
+            viewport_width: internal_width,
+            viewport_height: internal_height,
+            noise: noise.clone(),
+            baked: Some(Arc::clone(&self.baked)),
+            shader_param: 1.0,
+        };
+
+        framebuffer.clear();
+        render_buffers.screen_triangles.clear();
+        render_buffers.tri_materials.clear();
+        let vp = uniforms.projection_matrix * uniforms.view_matrix;
+        let frustum = culling::Frustum::from_vp(&vp);
+        let sun_pos = self
+            .bodies
+            .first()
+            .map(|b| body_position_at(b, self.time))
+            .unwrap_or_else(Vector3::zero);
+
+        for (body_idx, body) in self.bodies.iter().enumerate() {
+            let body_pos = body_position_at(body, self.time);
+            if !frustum.intersects_sphere(body_pos, scene::effective_radius(body)) {
+                continue;
+            }
+            let radius_px = lod::projected_radius_px(
+                &cam,
+                body_pos,
+                scene::effective_radius(body),
+                internal_height as f32,
+            );
+            let level = lod::select_detail_level_hysteresis(
+                self.body_lods[body_idx],
+                radius_px,
+                &lod::ICOSPHERE_THRESHOLDS_PX,
+                lod::DEFAULT_HYSTERESIS,
+            )
+            .min(3);
+            self.body_lods[body_idx] = level;
+            let body_mesh = self.body_caches[body_idx].get_or_build(level, noise);
+            let body_light = scene::body_light_dir(body_pos, sun_pos, light_dir);
+            uniforms.model_matrix = body_model_matrix_unit(body, self.time);
+            let before = render_buffers.screen_triangles.len();
+            append_screen_triangles(
+                body_mesh,
+                &uniforms,
+                &mut render_buffers.clip_vertices,
+                &mut render_buffers.screen_triangles,
+            );
+            let added = render_buffers.screen_triangles.len() - before;
+            render_buffers.tri_materials.resize(
+                before + added,
+                TriMaterial {
+                    shader: body.shader,
+                    light_dir: body_light,
+                    shader_param: 1.0,
+                },
+            );
+        }
+
+        rasterize_visibility_tiled(
+            &render_buffers.screen_triangles,
+            &mut render_buffers.tile_grid,
+            framebuffer,
+            true,
+            threads,
+        );
+        shade_visibility_tiled_materials(
+            &render_buffers.screen_triangles,
+            &render_buffers.tri_materials,
+            framebuffer,
+            Shader::Rocky,
+            &uniforms,
+            threads,
+        );
+    }
+}
+
 struct FlightSession {
     system_id: app::SystemId,
     bodies: Vec<scene::Body>,
@@ -488,7 +633,8 @@ fn main() {
     let icosphere_lods = icosphere::build_icosphere_lods();
     let prop_meshes = surface_props::load_surface_props();
     let mut flight_session: Option<FlightSession> = None;
-    let _ = (build_model_matrix, body_model_matrix_at, &baked);
+    let mut menu_backdrop = MenuBackdrop::new(Arc::clone(&baked));
+    let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
     let mut debug_noise = false;
@@ -557,6 +703,12 @@ fn main() {
             if window.is_key_pressed(KeyboardKey::KEY_DOWN) || window.is_key_pressed(KeyboardKey::KEY_S) {
                 app_ctrl.move_menu_down();
             }
+            if app_ctrl.show_menu_controls
+                && (window.is_key_pressed(KeyboardKey::KEY_BACKSPACE)
+                    || window.is_key_pressed(KeyboardKey::KEY_H))
+            {
+                app_ctrl.show_menu_controls = false;
+            }
             if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
                 match app_ctrl.activate_menu(false) {
                     app::TransitionOutcome::ExitApp => {
@@ -579,13 +731,25 @@ fn main() {
                     _ => {}
                 }
             }
-            framebuffer.clear();
+            menu_backdrop.render_frame(
+                dt,
+                &mut framebuffer,
+                &mut render_buffers,
+                &noise,
+                threads,
+                internal_width,
+                internal_height,
+            );
             overlay_buf.resize(
                 window.get_screen_width().max(1) as u32,
                 window.get_screen_height().max(1) as u32,
             );
-            overlay_buf.clear();
-            overlay_buf.draw_text("MENU PRINCIPAL (en construccion)", 24, 24, 2, Color::WHITE);
+            hud::render_menu_overlay(
+                &mut overlay_buf,
+                app_ctrl.selected_menu,
+                false,
+                app_ctrl.show_menu_controls,
+            );
             framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);
             continue;
         }
