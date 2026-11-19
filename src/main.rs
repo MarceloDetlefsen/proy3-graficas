@@ -3,6 +3,7 @@ mod clipping;
 mod culling;
 mod fragment;
 mod framebuffer;
+mod hud;
 mod icosphere;
 mod lod;
 mod math;
