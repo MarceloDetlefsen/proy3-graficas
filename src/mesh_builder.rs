@@ -261,6 +261,18 @@ impl Mesh {
         }
     }
 
+    /// Volumen con signo (`> 0` si las normales apuntan hacia afuera en cualquier malla cerrada).
+    pub fn signed_volume(&self) -> f32 {
+        let mut sum = 0.0_f32;
+        for tri in self.indices.as_chunks::<3>().0 {
+            let p0 = self.positions[tri[0]];
+            let p1 = self.positions[tri[1]];
+            let p2 = self.positions[tri[2]];
+            sum += p0.dot(p1.cross(p2));
+        }
+        sum / 6.0
+    }
+
     pub fn set_color(&mut self, color: Vector3) {
         self.colors.fill(color);
     }
@@ -730,6 +742,136 @@ pub fn extruded_prism(poly_2d: &[[f32; 2]], height: f32) -> Mesh {
     mesh
 }
 
+/// Triangula un polígono 2D simple (convexo o cóncavo) en el plano XZ por recorte de orejas.
+/// Asume orientación CCW vista desde `+Y` (`signed_area < 0` en coordenadas `(x, z)`).
+pub fn triangulate_polygon_2d(pts: &[[f32; 2]]) -> Vec<[usize; 3]> {
+    let n = pts.len();
+    if n < 3 {
+        return Vec::new();
+    }
+    if n == 3 {
+        return vec![[0, 1, 2]];
+    }
+    let cross_2d = |a: [f32; 2], b: [f32; 2], c: [f32; 2]| -> f32 {
+        // Orientación en plano XZ vista desde +Y: (b-a) × (c-a) tiene componente Y = -(bx-ax)*(cz-az) + (bz-az)*(cx-ax)
+        (b[1] - a[1]) * (c[0] - a[0]) - (b[0] - a[0]) * (c[1] - a[1])
+    };
+    let point_in_tri = |p: [f32; 2], a: [f32; 2], b: [f32; 2], c: [f32; 2]| -> bool {
+        let c1 = cross_2d(a, b, p);
+        let c2 = cross_2d(b, c, p);
+        let c3 = cross_2d(c, a, p);
+        c1 >= -1e-7 && c2 >= -1e-7 && c3 >= -1e-7
+    };
+
+    let mut rem: Vec<usize> = (0..n).collect();
+    let mut tris = Vec::with_capacity(n - 2);
+    let mut guard = 0usize;
+    while rem.len() > 3 && guard < n * n + 16 {
+        let m = rem.len();
+        let mut clipped = false;
+        for i in 0..m {
+            let i0 = rem[(i + m - 1) % m];
+            let i1 = rem[i];
+            let i2 = rem[(i + 1) % m];
+            let (a, b, c) = (pts[i0], pts[i1], pts[i2]);
+            if cross_2d(a, b, c) <= 1e-8 {
+                continue;
+            }
+            let mut has_inside = false;
+            for &j in &rem {
+                if j == i0 || j == i1 || j == i2 {
+                    continue;
+                }
+                if point_in_tri(pts[j], a, b, c) {
+                    has_inside = true;
+                    break;
+                }
+            }
+            if !has_inside {
+                tris.push([i0, i1, i2]);
+                rem.remove(i);
+                clipped = true;
+                break;
+            }
+        }
+        if !clipped {
+            break;
+        }
+        guard += 1;
+    }
+    if rem.len() == 3 {
+        tris.push([rem[0], rem[1], rem[2]]);
+    }
+    tris
+}
+
+fn rdp_open_2d(pts: &[[f32; 2]], eps: f32) -> Vec<[f32; 2]> {
+    if pts.len() <= 2 {
+        return pts.to_vec();
+    }
+    let a = pts[0];
+    let b = pts[pts.len() - 1];
+    let dx = b[0] - a[0];
+    let dy = b[1] - a[1];
+    let l2 = dx * dx + dy * dy;
+    let mut best_i = 0usize;
+    let mut best_d = -1.0_f32;
+    for (i, &p) in pts.iter().enumerate().take(pts.len() - 1).skip(1) {
+        let d = if l2 < 1e-12 {
+            ((p[0] - a[0]).powi(2) + (p[1] - a[1]).powi(2)).sqrt()
+        } else {
+            let t = (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0);
+            ((p[0] - (a[0] + t * dx)).powi(2) + (p[1] - (a[1] + t * dy)).powi(2)).sqrt()
+        };
+        if d > best_d {
+            best_d = d;
+            best_i = i;
+        }
+    }
+    if best_d > eps {
+        let mut left = rdp_open_2d(&pts[..=best_i], eps);
+        let right = rdp_open_2d(&pts[best_i..], eps);
+        left.pop();
+        left.extend_from_slice(&right);
+        left
+    } else {
+        vec![a, b]
+    }
+}
+
+/// Simplifica un polígono cerrado 2D con Ramer–Douglas–Peucker manteniendo al menos 4 vértices.
+pub fn rdp_simplify_closed(poly: &[[f32; 2]], eps: f32) -> Vec<[f32; 2]> {
+    if poly.len() <= 4 || eps <= 1e-6 {
+        return poly.to_vec();
+    }
+    let p0 = poly[0];
+    let far_i = poly
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| {
+            let da = (a[0] - p0[0]).powi(2) + (a[1] - p0[1]).powi(2);
+            let db = (b[0] - p0[0]).powi(2) + (b[1] - p0[1]).powi(2);
+            da.total_cmp(&db)
+        })
+        .map(|(i, _)| i)
+        .unwrap_or(0);
+    if far_i == 0 {
+        return poly.to_vec();
+    }
+    let c1 = rdp_open_2d(&poly[..=far_i], eps);
+    let mut second = poly[far_i..].to_vec();
+    second.push(poly[0]);
+    let c2 = rdp_open_2d(&second, eps);
+    let mut out = Vec::with_capacity(c1.len() + c2.len());
+    out.extend_from_slice(&c1[..c1.len().saturating_sub(1)]);
+    out.extend_from_slice(&c2[..c2.len().saturating_sub(1)]);
+    if out.len() < 4 {
+        poly.to_vec()
+    } else {
+        out
+    }
+}
+
 /// Construye una malla cerrada conectando una lista de anillos poligonales
 /// `(altura_y, poligono_2d)` con el mismo número de vértices (`>= 3`).
 pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
@@ -799,8 +941,9 @@ pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
             [x, z],
         ));
     }
-    for i in 1..(n - 1) {
-        mesh.push_triangle(bot_cap[0], bot_cap[i + 1], bot_cap[i]);
+    let bot_tris = triangulate_polygon_2d(poly_bot);
+    for [a, b, c] in bot_tris {
+        mesh.push_triangle(bot_cap[a], bot_cap[c], bot_cap[b]);
     }
 
     // Tapa superior (+Y)
@@ -813,8 +956,9 @@ pub fn loft_rings(rings: &[(f32, Vec<[f32; 2]>)]) -> Mesh {
             [x, z],
         ));
     }
-    for i in 1..(n - 1) {
-        mesh.push_triangle(top_cap[0], top_cap[i], top_cap[i + 1]);
+    let top_tris = triangulate_polygon_2d(poly_top);
+    for [a, b, c] in top_tris {
+        mesh.push_triangle(top_cap[a], top_cap[b], top_cap[c]);
     }
 
     mesh.compute_smooth_normals();
@@ -1243,6 +1387,22 @@ mod tests {
             [-0.7, 0.2],
         ];
         let m = beveled_extruded_contour(&shield, 0.2, 0.92, 0.04);
+        assert!(m.is_watertight());
+        assert!((m.outward_normal_ratio() - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn concave_polygon_ear_clipping_and_extrusion_are_watertight() {
+        // Polígono cóncavo en forma de L
+        let l_shape = [
+            [-1.0, -1.0],
+            [1.0, -1.0],
+            [1.0, 0.0],
+            [0.0, 0.0],
+            [0.0, 1.0],
+            [-1.0, 1.0],
+        ];
+        let m = beveled_extruded_contour(&l_shape, 0.3, 0.92, 0.04);
         assert!(m.is_watertight());
         assert!((m.outward_normal_ratio() - 1.0).abs() < 1e-5);
     }

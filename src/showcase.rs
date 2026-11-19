@@ -259,13 +259,13 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
     },
     Showcase {
         id: "spurs_crest",
-        nombre: "Escudo del Tottenham Hotspur",
+        nombre: "Cresta del Tottenham",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Placa de escudo biselada azul marino y blanco con barras de cinta, balon con parches y gallo estilizado; shader chunky.",
+        descripcion_es: "Gallo extruido con bisel desde silueta medida sobre balon azul marino con costuras y cordones blancos; giro +-35.",
         inspiracion: None,
         estado: ShowcaseStatus::Ready,
-        shader: Some(Shader::Chunky),
+        shader: Some(Shader::Spurs),
         has_mesh: true,
         light_dir: None,
     },
@@ -348,7 +348,7 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
         phase: 0.0,
         orbit_inclination: 0.0,
         rotation_period: 24.0,
-        axial_tilt: if matches!(entry.id, "meteoro_ff7" | "phoenix_suns") {
+        axial_tilt: if matches!(entry.id, "meteoro_ff7" | "phoenix_suns" | "spurs_crest") {
             0.0
         } else {
             0.22

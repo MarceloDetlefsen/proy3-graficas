@@ -270,6 +270,7 @@ pub fn effective_radius(body: &Body) -> f32 {
 pub fn culling_radius(body: &Body) -> f32 {
     match body.shader {
         Shader::Meteor => body.radius * 5.2,
+        Shader::Spurs => body.radius * 4.2,
         _ => effective_radius(body),
     }
 }

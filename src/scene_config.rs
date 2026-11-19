@@ -72,6 +72,7 @@ pub fn atmosphere_rim(shader: Shader) -> Option<AtmosphereRim> {
         }),
         Shader::Star
         | Shader::PhoenixSuns
+        | Shader::Spurs
         | Shader::Chunky
         | Shader::Triforce
         | Shader::Meteor

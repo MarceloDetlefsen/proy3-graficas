@@ -142,6 +142,12 @@ impl GalleryViewer {
             self.distance = 6.6;
             self.target = Vector3::new(1.55, 0.85, 0.0);
             self.spin = 0.0;
+        } else if showcase_id == "spurs_crest" {
+            self.yaw = 0.0;
+            self.pitch = 0.05;
+            self.distance = 7.4;
+            self.target = Vector3::new(0.0, 1.35, 0.0);
+            self.spin = 0.0;
         } else {
             self.reset_view(body_radius);
         }
@@ -167,7 +173,7 @@ impl GalleryViewer {
         } else {
             0.25
         };
-        let mult = if matches!(body.shader, Shader::Chunky | Shader::PhoenixSuns) {
+        let mult = if matches!(body.shader, Shader::Chunky | Shader::PhoenixSuns | Shader::Spurs) {
             shader_param
         } else {
             1.0
@@ -258,8 +264,8 @@ impl GalleryViewer {
         let model_matrix = if matches!(body.shader, Shader::PhoenixSuns) {
             Mat4::rotation_z(self.spin)
                 * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
-        } else if body.name == "Escudo del Tottenham Hotspur" {
-            let osc = (self.spin * 1.4).sin() * 0.45;
+        } else if matches!(body.shader, Shader::Spurs) {
+            let osc = (self.spin * 1.4).sin() * 0.6109; // ±35°
             Mat4::rotation_y(osc)
                 * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
         } else {
