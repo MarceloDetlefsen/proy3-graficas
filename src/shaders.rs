@@ -11,7 +11,7 @@ pub mod ardens;
 pub mod basquia;
 pub mod fundido;
 pub mod gas_giant;
-pub mod ocho;
+pub mod mural;
 pub mod rocky;
 pub mod ship;
 pub mod star;
@@ -27,7 +27,7 @@ pub enum Shader {
     Abismo,
     Basquia,
     Vestigio,
-    Ocho,
+    Mural,
     Fundido,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
@@ -108,7 +108,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Abismo => abismo::shade(fragment, uniforms),
         Shader::Basquia => basquia::shade(fragment, uniforms),
         Shader::Vestigio => vestigio::shade(fragment, uniforms),
-        Shader::Ocho => ocho::shade(fragment, uniforms),
+        Shader::Mural => mural::shade(fragment, uniforms),
         Shader::Fundido => fundido::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
@@ -134,7 +134,7 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Abismo => "Shader: Abismo",
         Shader::Basquia => "Shader: Basquia",
         Shader::Vestigio => "Shader: Vestigio",
-        Shader::Ocho => "Shader: Ocho",
+        Shader::Mural => "Shader: Mural",
         Shader::Fundido => "Shader: Fundido",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",

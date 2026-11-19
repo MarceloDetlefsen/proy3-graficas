@@ -172,7 +172,7 @@ pub fn solar_system() -> Vec<Body> {
             },
         },
         Body {
-            name: "Ocho",
+            name: "Mural",
             kind: BodyKind::Planet,
             radius: 1.2,
             mass: 13.0,
@@ -182,12 +182,12 @@ pub fn solar_system() -> Vec<Body> {
             orbit_inclination: 0.05,
             rotation_period: 80.0,
             axial_tilt: 0.12,
-            shader: Shader::Ocho,
+            shader: Shader::Mural,
             surface: SurfaceParams {
                 seed: 55,
-                noise_frequency: 3.0,
-                deformation_amplitude: 0.02,
-                max_deformation: 1.2 * 0.02,
+                noise_frequency: 7.0,
+                deformation_amplitude: 0.04,
+                max_deformation: 1.2 * 0.04,
             },
         },
         Body {
