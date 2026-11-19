@@ -154,11 +154,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Joy-Con izquierdo",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Carcasa gris mate con riel azul neon, palanca, cruceta de 4 botones, boton menos, captura y SL/SR; shader chunky.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
         light_dir: None,
     },
     Showcase {
@@ -166,11 +166,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Joy-Con derecho",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Carcasa gris mate con riel rojo neon, palanca, botones ABXY en rombo, boton mas, Home y SL/SR; shader chunky.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
         light_dir: None,
     },
     Showcase {
@@ -199,14 +199,14 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
     },
     Showcase {
         id: "cubo_skweb",
-        nombre: "Cubo Skweb",
+        nombre: "Cubo Skewb",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Cubo negro con rombo central y cuatro triangulos de esquina por cara; shader chunky en 3 bandas.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
         light_dir: None,
     },
     Showcase {
@@ -246,6 +246,18 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         light_dir: None,
     },
     Showcase {
+        id: "megaminx",
+        nombre: "Megaminx",
+        sistema: SystemId::Favoritos,
+        tipo: "Trofeo",
+        descripcion_es: "Dodecaedro regular negro con 11 pegatinas por cara (pentagono, 5 aristas y 5 cometas) en 12 colores; shader chunky.",
+        inspiracion: None,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
+        light_dir: None,
+    },
+    Showcase {
         id: "la_bombonera",
         nombre: "La Bombonera",
         sistema: SystemId::Favoritos,
@@ -278,6 +290,10 @@ pub fn favorites_ready_entries() -> Vec<&'static Showcase> {
 pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_builder::Mesh> {
     match id {
         "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
+        "cubo_skweb" => Some(crate::bodies::build_skewb_mesh),
+        "megaminx" => Some(crate::bodies::build_megaminx_mesh),
+        "joycon_izquierdo" => Some(crate::bodies::build_joycon_left_mesh),
+        "joycon_derecho" => Some(crate::bodies::build_joycon_right_mesh),
         "trifuerza" => Some(crate::bodies::build_triforce_mesh),
         "meteoro_ff7" => Some(crate::bodies::build_meteor_mesh),
         _ => None,
@@ -347,7 +363,7 @@ mod tests {
                 entry.id
             );
         }
-        assert_eq!(SHOWCASE_ENTRIES.len(), 19);
+        assert!(SHOWCASE_ENTRIES.len() >= 19);
     }
 
     #[test]

@@ -5,7 +5,10 @@ use std::f32::consts::FRAC_PI_2;
 
 use raylib::prelude::Vector3;
 
-use crate::mesh_builder::{Mesh, box_mesh, extruded_prism, loft_rings, rounded_box, sphere};
+use crate::mesh_builder::{
+    Mesh, box_mesh, cylinder, dodecahedron, dodecahedron_faces, extruded_prism, flat_polygon_mesh,
+    loft_rings, raised_sticker, rounded_box, sphere,
+};
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
 use crate::shaders::meteor::{BLUE_GREEN, DARK_GREEN, TEAL};
@@ -335,6 +338,274 @@ pub fn meteor_bounding_radius(mesh: &Mesh) -> f32 {
         .fold(1.0_f32, f32::max)
 }
 
+/// Construye el Cubo Skewb de lado 1 con núcleo negro, rombo central y 4 triángulos
+/// rectángulos isósceles por cara (encogidos para holgura negra y elevados 0.02).
+pub fn build_skewb_mesh(detail: usize) -> Mesh {
+    let face_specs: [(Vector3, Vector3, Vector3, Vector3); 6] = [
+        (Vector3::new(0.0, 0.0, 1.0), Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 1.0, 0.0), WHITE),
+        (Vector3::new(0.0, 0.0, -1.0), Vector3::new(-1.0, 0.0, 0.0), Vector3::new(0.0, 1.0, 0.0), YELLOW),
+        (Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0), ORANGE),
+        (Vector3::new(-1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0), Vector3::new(0.0, 1.0, 0.0), RED),
+        (Vector3::new(0.0, 1.0, 0.0), Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, -1.0), GREEN),
+        (Vector3::new(0.0, -1.0, 0.0), Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0), BLUE),
+    ];
+
+    if detail == 0 {
+        let mut core = box_mesh(1.0, 1.0, 1.0);
+        core.paint_vertices(|_, _, n| {
+            if n.z > 0.7 {
+                WHITE
+            } else if n.z < -0.7 {
+                YELLOW
+            } else if n.x > 0.7 {
+                ORANGE
+            } else if n.x < -0.7 {
+                RED
+            } else if n.y > 0.7 {
+                GREEN
+            } else {
+                BLUE
+            }
+        });
+        return core;
+    }
+
+    let mut mesh = if detail >= 2 {
+        rounded_box(1.0, 1.0, 1.0, 0.04, 1)
+    } else {
+        box_mesh(1.0, 1.0, 1.0)
+    };
+    mesh.set_color(BLACK);
+
+    let thickness = if detail >= 2 { 0.016 } else { 0.0 };
+    let h = 0.5_f32;
+    for (n, u, v, color) in face_specs {
+        let center = n * h;
+        let c0 = center - u * h - v * h;
+        let c1 = center + u * h - v * h;
+        let c2 = center + u * h + v * h;
+        let c3 = center - u * h + v * h;
+        let m0 = center - v * h;
+        let m1 = center + u * h;
+        let m2 = center + v * h;
+        let m3 = center - u * h;
+
+        let diamond = [m0, m1, m2, m3];
+        mesh.merge(&raised_sticker(&diamond, 0.84, 0.02, thickness, color));
+
+        for tri in [[c0, m0, m3], [c1, m1, m0], [c2, m2, m1], [c3, m3, m2]] {
+            mesh.merge(&raised_sticker(&tri, 0.78, 0.02, thickness, color));
+        }
+    }
+    mesh
+}
+
+fn megaminx_face_color(dir: Vector3) -> Vector3 {
+    // Paleta de 12 colores con los 5 visibles en refs/megaminx.webp en su posición relativa:
+    // blanco (frente-arriba), rojo (abajo-izq), azul (abajo-der), verde (arriba-izq), amarillo (arriba-der).
+    let palette: [(Vector3, Vector3); 12] = [
+        (Vector3::new(0.0, 0.53, 0.85), WHITE),                              // Frente-arriba: Blanco
+        (Vector3::new(-0.85, -0.53, 0.0), RED),                              // Izq-abajo: Rojo
+        (Vector3::new(0.85, -0.53, 0.0), BLUE),                              // Der-abajo: Azul
+        (Vector3::new(-0.53, 0.85, 0.0), GREEN),                             // Arriba-izq: Verde
+        (Vector3::new(0.53, 0.85, 0.0), YELLOW),                             // Arriba-der: Amarillo
+        (Vector3::new(0.0, -0.53, 0.85), Vector3::new(0.58, 0.24, 0.78)),    // Morado
+        (Vector3::new(0.0, 0.53, -0.85), Vector3::new(0.55, 0.58, 0.62)),    // Gris
+        (Vector3::new(0.0, -0.53, -0.85), Vector3::new(0.95, 0.45, 0.72)),   // Rosa
+        (Vector3::new(-0.85, 0.53, 0.0), Vector3::new(0.25, 0.82, 0.92)),    // Celeste
+        (Vector3::new(0.85, 0.53, 0.0), ORANGE),                             // Naranja
+        (Vector3::new(-0.53, -0.85, 0.0), Vector3::new(0.10, 0.42, 0.20)),   // Verde oscuro
+        (Vector3::new(0.53, -0.85, 0.0), Vector3::new(0.92, 0.84, 0.65)),    // Crema
+    ];
+    let n = dir.normalize();
+    let mut best_idx = 0;
+    let mut best_dot = -2.0_f32;
+    for (i, (ref_dir, _)) in palette.iter().enumerate() {
+        let d = n.dot(ref_dir.normalize());
+        if d > best_dot {
+            best_dot = d;
+            best_idx = i;
+        }
+    }
+    palette[best_idx].1
+}
+
+/// Construye el Megaminx sobre un dodecaedro regular de circunradio 1 con 11
+/// pegatinas por cara (pentágono central, 5 cuadriláteros de arista y 5 cometas de esquina).
+pub fn build_megaminx_mesh(detail: usize) -> Mesh {
+    let faces = dodecahedron_faces(1.0);
+    if detail == 0 {
+        let mut mesh = Mesh::new();
+        for face in faces {
+            let center = (face[0] + face[1] + face[2] + face[3] + face[4]) * 0.2;
+            let color = megaminx_face_color(center);
+            mesh.merge(&flat_polygon_mesh(&face, color));
+        }
+        return mesh;
+    }
+
+    let mut mesh = dodecahedron(0.985);
+    mesh.set_color(BLACK);
+    let thickness = if detail >= 2 { 0.015 } else { 0.0 };
+
+    for face in faces {
+        let c = (face[0] + face[1] + face[2] + face[3] + face[4]) * 0.2;
+        let color = megaminx_face_color(c);
+        let p: [Vector3; 5] = std::array::from_fn(|i| c + (face[i] - c) * 0.38);
+        let ea: [Vector3; 5] =
+            std::array::from_fn(|i| face[i] + (face[(i + 1) % 5] - face[i]) * 0.31);
+        let eb: [Vector3; 5] =
+            std::array::from_fn(|i| face[i] + (face[(i + 1) % 5] - face[i]) * 0.69);
+
+        // 1. Pentágono central
+        mesh.merge(&raised_sticker(&p, 0.84, 0.02, thickness, color));
+
+        for i in 0..5 {
+            // 2. Cuadrilátero de arista
+            let edge_quad = [p[i], ea[i], eb[i], p[(i + 1) % 5]];
+            mesh.merge(&raised_sticker(&edge_quad, 0.82, 0.02, thickness, color));
+
+            // 3. Cuadrilátero de esquina en forma de cometa
+            let prev = (i + 4) % 5;
+            let kite = [p[i], eb[prev], face[i], ea[i]];
+            mesh.merge(&raised_sticker(&kite, 0.80, 0.02, thickness, color));
+        }
+    }
+    mesh
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JoyConSide {
+    Left,
+    Right,
+}
+
+/// Construye un Joy-Con (`Left` o `Right`) espejado:
+/// caja redondeada (alto 2.0, ancho 0.7, grosor 0.35) gris oscuro mate,
+/// riel lateral de color (izquierdo `#00C3E3`, derecho `#FF4554`), palanca,
+/// cruceta/ABXY, botón `-`/`+`, captura/home y tira SL/SR.
+pub fn joycon(side: JoyConSide, detail: usize) -> Mesh {
+    let dark_gray = Vector3::new(0.16, 0.17, 0.20);
+    let button_dark = Vector3::new(0.07, 0.07, 0.08);
+    let button_ring = Vector3::new(0.11, 0.12, 0.14);
+    let rail_color = match side {
+        JoyConSide::Left => Vector3::new(0.0, 0.765, 0.890),  // #00C3E3
+        JoyConSide::Right => Vector3::new(1.000, 0.271, 0.329), // #FF4554
+    };
+    let rail_x = match side {
+        JoyConSide::Left => 0.33,
+        JoyConSide::Right => -0.33,
+    };
+    let plus_minus_x = match side {
+        JoyConSide::Left => 0.18,
+        JoyConSide::Right => -0.18,
+    };
+
+    let seg_cyl = match detail {
+        0 => 6,
+        1 => 8,
+        _ => 12,
+    };
+
+    // Carcasa principal
+    let mut mesh = match detail {
+        0 => box_mesh(0.70, 2.00, 0.35),
+        1 => rounded_box(0.70, 2.00, 0.35, 0.13, 1),
+        _ => rounded_box(0.70, 2.00, 0.35, 0.13, 2),
+    };
+    mesh.set_color(dark_gray);
+
+    // Riel lateral de color y botones SL / SR
+    let mut rail = box_mesh(0.10, 1.82, 0.26);
+    rail.set_color(rail_color);
+    rail.translate(Vector3::new(rail_x, 0.0, 0.0));
+    mesh.merge(&rail);
+
+    for sy in [0.42_f32, -0.42] {
+        let mut sl_sr = box_mesh(0.05, 0.24, 0.12);
+        sl_sr.set_color(button_dark);
+        sl_sr.translate(Vector3::new(rail_x + rail_x.signum() * 0.05, sy, 0.0));
+        mesh.merge(&sl_sr);
+    }
+
+    let front_z = 0.175_f32;
+    let stick_y = match side {
+        JoyConSide::Left => 0.44,
+        JoyConSide::Right => -0.16,
+    };
+    let pad_y = match side {
+        JoyConSide::Left => -0.16,
+        JoyConSide::Right => 0.44,
+    };
+
+    // Palanca: base cilíndrica + tapa cóncava con anillo
+    let mut base = cylinder(0.12, 0.14, 0.08, seg_cyl);
+    base.rotate_x(FRAC_PI_2);
+    base.set_color(button_dark);
+    base.translate(Vector3::new(0.0, stick_y, front_z + 0.04));
+    mesh.merge(&base);
+
+    let mut cap_ring = cylinder(0.15, 0.12, 0.04, seg_cyl);
+    cap_ring.rotate_x(FRAC_PI_2);
+    cap_ring.set_color(button_ring);
+    cap_ring.translate(Vector3::new(0.0, stick_y, front_z + 0.09));
+    mesh.merge(&cap_ring);
+
+    let mut cap_inner = cylinder(0.10, 0.10, 0.02, seg_cyl);
+    cap_inner.rotate_x(FRAC_PI_2);
+    cap_inner.set_color(button_dark);
+    cap_inner.translate(Vector3::new(0.0, stick_y, front_z + 0.105));
+    mesh.merge(&cap_inner);
+
+    // 4 botones (cruceta en izquierdo, ABXY en rombo en derecho)
+    for (dx, dy) in [(0.0_f32, 0.15_f32), (0.0, -0.15), (-0.15, 0.0), (0.15, 0.0)] {
+        let mut btn = cylinder(0.06, 0.06, 0.04, seg_cyl);
+        btn.rotate_x(FRAC_PI_2);
+        btn.set_color(button_dark);
+        btn.translate(Vector3::new(dx, pad_y + dy, front_z + 0.02));
+        mesh.merge(&btn);
+    }
+
+    // Botón menos (-) o más (+)
+    let mut minus_bar = box_mesh(0.11, 0.03, 0.03);
+    minus_bar.set_color(button_dark);
+    minus_bar.translate(Vector3::new(plus_minus_x, 0.76, front_z + 0.015));
+    mesh.merge(&minus_bar);
+    if side == JoyConSide::Right {
+        let mut plus_bar = box_mesh(0.03, 0.11, 0.03);
+        plus_bar.set_color(button_dark);
+        plus_bar.translate(Vector3::new(plus_minus_x, 0.76, front_z + 0.015));
+        mesh.merge(&plus_bar);
+    }
+
+    // Botón de captura (izquierdo, cuadrado) o Home (derecho, circular)
+    match side {
+        JoyConSide::Left => {
+            let mut cap = box_mesh(0.11, 0.11, 0.035);
+            cap.set_color(button_dark);
+            cap.translate(Vector3::new(0.04, -0.62, front_z + 0.015));
+            mesh.merge(&cap);
+        }
+        JoyConSide::Right => {
+            let mut home = cylinder(0.065, 0.065, 0.035, seg_cyl);
+            home.rotate_x(FRAC_PI_2);
+            home.set_color(button_dark);
+            home.translate(Vector3::new(-0.04, -0.62, front_z + 0.015));
+            mesh.merge(&home);
+        }
+    }
+
+    mesh
+}
+
+pub fn build_joycon_left_mesh(detail: usize) -> Mesh {
+    joycon(JoyConSide::Left, detail)
+}
+
+pub fn build_joycon_right_mesh(detail: usize) -> Mesh {
+    joycon(JoyConSide::Right, detail)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,6 +660,47 @@ mod tests {
         assert_eq!(a.indices, b.indices);
         for (pa, pb) in a.positions.iter().zip(b.positions.iter()) {
             assert!((*pa - *pb).length() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn skewb_builds_three_decreasing_lods_under_4000_tris() {
+        let m2 = build_skewb_mesh(2);
+        let m1 = build_skewb_mesh(1);
+        let m0 = build_skewb_mesh(0);
+
+        assert!(m2.tri_count() <= 4000);
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+        }
+    }
+
+    #[test]
+    fn megaminx_builds_three_decreasing_lods_under_4000_tris() {
+        let m2 = build_megaminx_mesh(2);
+        let m1 = build_megaminx_mesh(1);
+        let m0 = build_megaminx_mesh(0);
+
+        assert!(m2.tri_count() <= 4000, "Megaminx L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+        }
+    }
+
+    #[test]
+    fn joycon_left_and_right_build_three_decreasing_lods_under_4000_tris() {
+        for builder in [build_joycon_left_mesh, build_joycon_right_mesh] {
+            let m2 = builder(2);
+            let m1 = builder(1);
+            let m0 = builder(0);
+
+            assert!(m2.tri_count() <= 4000);
+            assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+            for m in [&m0, &m1, &m2] {
+                assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            }
         }
     }
 }
