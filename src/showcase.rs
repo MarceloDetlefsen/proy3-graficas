@@ -331,9 +331,10 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
     })
 }
 
-/// El sistema de favoritos está listo para vuelo cuando tiene su estrella
-/// ("Sol de los Phoenix Suns" / tipo "Estrella") y al menos 3 cuerpos `Ready`.
-pub fn is_favorites_system_ready(entries: &[Showcase]) -> bool {
+/// Bandera explícita para habilitar el vuelo del sistema de favoritos cuando esté integrado.
+pub const FAVORITES_FLIGHT_ENABLED: bool = false;
+
+pub fn has_required_favorites_bodies(entries: &[Showcase]) -> bool {
     let mut has_star = false;
     let mut ready_non_star = 0usize;
     for e in entries {
@@ -346,6 +347,12 @@ pub fn is_favorites_system_ready(entries: &[Showcase]) -> bool {
         }
     }
     has_star && ready_non_star >= 3
+}
+
+/// El sistema de favoritos está listo para vuelo cuando `FAVORITES_FLIGHT_ENABLED` es `true`,
+/// tiene su estrella y al menos 3 cuerpos `Ready`.
+pub fn is_favorites_system_ready(entries: &[Showcase]) -> bool {
+    FAVORITES_FLIGHT_ENABLED && has_required_favorites_bodies(entries)
 }
 
 #[cfg(test)]
@@ -439,7 +446,9 @@ mod tests {
                 light_dir: None,
             },
         ];
-        assert!(is_favorites_system_ready(&sample));
+        assert!(has_required_favorites_bodies(&sample));
+        const { assert!(!FAVORITES_FLIGHT_ENABLED); }
+        assert!(!is_favorites_system_ready(&sample));
     }
 
     #[test]
