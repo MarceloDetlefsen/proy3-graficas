@@ -6,10 +6,16 @@ use crate::fragment::Fragment;
 use crate::math::Vec4;
 use crate::vertex::Vertex;
 
+pub mod abismo;
+pub mod ardens;
+pub mod basquia;
+pub mod fundido;
 pub mod gas_giant;
+pub mod mural;
 pub mod rocky;
 pub mod ship;
 pub mod star;
+pub mod vestigio;
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
@@ -17,6 +23,12 @@ pub enum Shader {
     Star,
     Rocky,
     GasGiant,
+    Ardens,
+    Abismo,
+    Basquia,
+    Vestigio,
+    Mural,
+    Fundido,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -92,6 +104,12 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Star => star::shade(fragment, uniforms),
         Shader::Rocky => rocky::shade(fragment, uniforms),
         Shader::GasGiant => gas_giant::shade(fragment, uniforms),
+        Shader::Ardens => ardens::shade(fragment, uniforms),
+        Shader::Abismo => abismo::shade(fragment, uniforms),
+        Shader::Basquia => basquia::shade(fragment, uniforms),
+        Shader::Vestigio => vestigio::shade(fragment, uniforms),
+        Shader::Mural => mural::shade(fragment, uniforms),
+        Shader::Fundido => fundido::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -112,6 +130,12 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Star => "Shader: Star",
         Shader::Rocky => "Shader: Rocky",
         Shader::GasGiant => "Shader: Gas Giant",
+        Shader::Ardens => "Shader: Ardens",
+        Shader::Abismo => "Shader: Abismo",
+        Shader::Basquia => "Shader: Basquia",
+        Shader::Vestigio => "Shader: Vestigio",
+        Shader::Mural => "Shader: Mural",
+        Shader::Fundido => "Shader: Fundido",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }

@@ -398,7 +398,8 @@ fn main() {
     let mut body_caches: Vec<icosphere::DeformedIcosphereCache> = bodies
         .iter()
         .map(|b| {
-            icosphere::DeformedIcosphereCache::new(
+            icosphere::DeformedIcosphereCache::new_for_shader(
+                b.shader,
                 b.surface.deformation_amplitude,
                 b.surface.noise_frequency,
             )
@@ -722,7 +723,7 @@ fn main() {
             }
         });
 
-        cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 120.0);
+        cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 220.0);
 
         let aspect = internal_width as f32 / internal_height as f32;
         let cam = if follow_mode {

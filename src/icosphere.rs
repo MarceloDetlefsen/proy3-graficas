@@ -6,7 +6,8 @@
 //! medios por arista proyectados a la esfera unitaria para niveles 0..=5.
 
 use crate::noise::Noise;
-use crate::surface_map::planet_height;
+use crate::shaders::Shader;
+use crate::surface_map::shader_height;
 use crate::vertex::Vertex;
 use raylib::prelude::Vector3;
 use std::collections::HashMap;
@@ -194,9 +195,10 @@ pub fn build_icosphere_lods() -> Vec<Vec<Vertex>> {
     levels
 }
 
-/// Desplaza cada vértice de la icosfera unitaria en dirección radial según `planet_height`.
-pub fn deform_icosphere(
+/// Desplaza cada vértice de la icosfera unitaria en dirección radial según la altura del shader.
+pub fn deform_icosphere_for_shader(
     unit_mesh: &IcoMesh,
+    shader: Shader,
     noise: &Noise,
     amplitude: f32,
     frequency: f32,
@@ -209,7 +211,7 @@ pub fn deform_icosphere(
         .iter()
         .map(|&p| {
             let dir = p.normalize();
-            let h = planet_height(noise, dir, frequency);
+            let h = shader_height(shader, noise, dir, frequency);
             dir * (1.0 + amplitude * h)
         })
         .collect();
@@ -219,20 +221,35 @@ pub fn deform_icosphere(
     }
 }
 
+pub fn deform_icosphere(
+    unit_mesh: &IcoMesh,
+    noise: &Noise,
+    amplitude: f32,
+    frequency: f32,
+) -> IcoMesh {
+    deform_icosphere_for_shader(unit_mesh, Shader::Rocky, noise, amplitude, frequency)
+}
+
 /// Caché perezoso por nivel de subdivisión para mallas deformadas.
 #[derive(Clone, Debug)]
 pub struct DeformedIcosphereCache {
     unit_meshes: [Option<IcoMesh>; MAX_ICOSPHERE_LEVEL + 1],
     deformed_arrays: [Option<Vec<Vertex>>; MAX_ICOSPHERE_LEVEL + 1],
+    shader: Shader,
     amplitude: f32,
     frequency: f32,
 }
 
 impl DeformedIcosphereCache {
     pub fn new(amplitude: f32, frequency: f32) -> Self {
+        Self::new_for_shader(Shader::Rocky, amplitude, frequency)
+    }
+
+    pub fn new_for_shader(shader: Shader, amplitude: f32, frequency: f32) -> Self {
         Self {
             unit_meshes: std::array::from_fn(|_| None),
             deformed_arrays: std::array::from_fn(|_| None),
+            shader,
             amplitude,
             frequency,
         }
@@ -255,10 +272,11 @@ impl DeformedIcosphereCache {
     pub fn get_or_build(&mut self, level: usize, noise: &Noise) -> &[Vertex] {
         let lvl = level.min(MAX_ICOSPHERE_LEVEL);
         if self.deformed_arrays[lvl].is_none() {
+            let shader = self.shader;
             let amp = self.amplitude;
             let freq = self.frequency;
             let unit = self.ensure_unit_mesh(lvl);
-            let deformed = deform_icosphere(unit, noise, amp, freq);
+            let deformed = deform_icosphere_for_shader(unit, shader, noise, amp, freq);
             self.deformed_arrays[lvl] = Some(deformed.to_vertex_array());
         }
         self.deformed_arrays[lvl].as_deref().unwrap()

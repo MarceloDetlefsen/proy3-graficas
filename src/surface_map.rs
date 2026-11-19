@@ -10,7 +10,7 @@ use raylib::prelude::Vector3;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use crate::noise::Noise;
-use crate::shaders::{gas_giant, rocky};
+use crate::shaders::{abismo, ardens, basquia, fundido, gas_giant, mural, rocky, vestigio, Shader};
 
 pub const DEFAULT_BAKE_WIDTH: usize = 512;
 pub const DEFAULT_BAKE_HEIGHT: usize = 256;
@@ -20,6 +20,12 @@ pub struct BakedMaps {
     pub rocky: EquirectMap<7>,
     pub rocky_normals: EquirectMap<3>,
     pub gas_giant: EquirectMap<5>,
+    pub ardens: EquirectMap<4>,
+    pub abismo: EquirectMap<4>,
+    pub basquia: EquirectMap<4>,
+    pub vestigio: EquirectMap<4>,
+    pub mural: EquirectMap<4>,
+    pub fundido: EquirectMap<4>,
 }
 
 impl BakedMaps {
@@ -38,11 +44,38 @@ impl BakedMaps {
             rocky::sample_static_with_height(noise, dir, h)
         });
         let rocky_normals = build_normal_map_from_heights(&rocky, 3.5);
+        let pw = (width / 2).max(128);
+        let ph = (height / 2).max(64);
+        let ardens = EquirectMap::from_fn(pw, ph, |dir| ardens::sample_static(noise, dir, 6.0));
+        let abismo = EquirectMap::from_fn(pw, ph, |dir| abismo::sample_static(noise, dir));
+        let basquia = EquirectMap::from_fn(pw, ph, |dir| basquia::sample_static(noise, dir, 4.0));
+        let vestigio = EquirectMap::from_fn(pw, ph, |dir| vestigio::sample_static(noise, dir, 5.0));
+        let mural = EquirectMap::from_fn(width, height, |dir| mural::sample_static(noise, dir, 7.0));
+        let fundido = EquirectMap::from_fn(pw, ph, |dir| fundido::sample_static(noise, dir, 3.0));
         Self {
             rocky,
             rocky_normals,
             gas_giant: EquirectMap::from_fn(width, height, |dir| gas_giant::sample_static(noise, dir)),
+            ardens,
+            abismo,
+            basquia,
+            vestigio,
+            mural,
+            fundido,
         }
+    }
+}
+
+/// Altura normalizada `[0, 1]` despachada por tipo de shader de planeta.
+pub fn shader_height(shader: Shader, noise: &Noise, dir: Vector3, frequency: f32) -> f32 {
+    match shader {
+        Shader::Ardens => ardens::height_at(noise, dir, frequency),
+        Shader::Abismo => abismo::height_at(noise, dir, frequency),
+        Shader::Basquia => basquia::height_at(noise, dir, frequency),
+        Shader::Vestigio => vestigio::height_at(noise, dir, frequency),
+        Shader::Mural => mural::height_at(noise, dir, frequency),
+        Shader::Fundido => fundido::height_at(noise, dir, frequency),
+        _ => planet_height(noise, dir, frequency),
     }
 }
 
