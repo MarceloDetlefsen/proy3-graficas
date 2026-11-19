@@ -219,6 +219,13 @@ pub fn solar_system() -> Vec<Body> {
     bodies
 }
 
+pub fn system_bodies(id: crate::app::SystemId) -> Vec<Body> {
+    match id {
+        crate::app::SystemId::Realista => solar_system(),
+        crate::app::SystemId::Favoritos => Vec::new(),
+    }
+}
+
 pub fn effective_radius(body: &Body) -> f32 {
     let amp_deform = body.radius * body.surface.deformation_amplitude.max(0.0);
     let deform = body.surface.max_deformation.max(amp_deform).max(0.0);
@@ -363,5 +370,15 @@ mod tests {
         let p0 = body_position_at(tau, 0.0);
         let p1 = body_position_at(tau, 10.0);
         assert!((p1 - p0).length() > 1.0);
+    }
+
+    #[test]
+    fn system_bodies_builds_realistic_and_favorites_cleanly() {
+        let realistic = system_bodies(crate::app::SystemId::Realista);
+        assert_eq!(realistic.len(), 9);
+        assert_eq!(realistic[0].name, "Sol");
+
+        let favs = system_bodies(crate::app::SystemId::Favoritos);
+        assert!(favs.is_empty());
     }
 }

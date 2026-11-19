@@ -46,7 +46,7 @@ use rasterizer::{
 use raylib::prelude::*;
 use scene::{
     body_model_matrix_at, body_model_matrix_unit, body_position_at, build_model_matrix,
-    solar_system,
+    system_bodies,
 };
 use shaders::{Shader, shader_name};
 use ship::Ship;
@@ -264,6 +264,93 @@ fn render(
     }
 }
 
+struct FlightSession {
+    system_id: app::SystemId,
+    bodies: Vec<scene::Body>,
+    body_shader_params: Vec<f32>,
+    body_caches: Vec<icosphere::DeformedIcosphereCache>,
+    body_lods: Vec<usize>,
+    planet_candidates: Vec<Vec<surface_scatter::SurfaceCandidate>>,
+    planet_instances: Vec<Vec<surface_scatter::SurfaceInstance>>,
+    baked: Arc<BakedMaps>,
+    sim_clock: SimClock,
+    time_scale_idx: usize,
+    ship: Ship,
+    ship_lod: usize,
+    follow_cam: FollowCamera,
+    follow_mode: bool,
+    physics_stepper: physics::PhysicsStepper,
+    nav_state: nav::NavState,
+    gravity_enabled: bool,
+    gravity_mag: f32,
+    selected_body: usize,
+    forced_lod: Option<usize>,
+    surface_seed: u64,
+    noise_frequency: f32,
+}
+
+impl FlightSession {
+    fn new(system_id: app::SystemId, noise: &Noise) -> Self {
+        let bodies = system_bodies(system_id);
+        let body_shader_params = bodies
+            .iter()
+            .map(|b| shaders::live_param(b.shader).default)
+            .collect();
+        let body_caches = bodies
+            .iter()
+            .map(|b| {
+                icosphere::DeformedIcosphereCache::new_for_shader(
+                    b.shader,
+                    b.surface.deformation_amplitude,
+                    b.surface.noise_frequency,
+                )
+            })
+            .collect();
+        let body_lods = vec![3_usize; bodies.len()];
+        let surface_seed: u64 = 42;
+        let planet_candidates: Vec<_> = bodies
+            .iter()
+            .map(|body| surface_scatter::scatter_for_body(body, surface_seed))
+            .collect();
+        let planet_instances: Vec<_> = bodies
+            .iter()
+            .zip(planet_candidates.iter())
+            .map(|(b, c)| surface_scatter::build_body_instances(b, c, noise))
+            .collect();
+        let baked = Arc::new(BakedMaps::bake(
+            noise,
+            DEFAULT_BAKE_WIDTH,
+            DEFAULT_BAKE_HEIGHT,
+        ));
+        let ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
+        let follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
+        Self {
+            system_id,
+            bodies,
+            body_shader_params,
+            body_caches,
+            body_lods,
+            planet_candidates,
+            planet_instances,
+            baked,
+            sim_clock: SimClock::new(),
+            time_scale_idx: 2,
+            ship,
+            ship_lod: 0,
+            follow_cam,
+            follow_mode: true,
+            physics_stepper: physics::PhysicsStepper::new(),
+            nav_state: nav::NavState::new(),
+            gravity_enabled: true,
+            gravity_mag: 0.0,
+            selected_body: 0,
+            forced_lod: None,
+            surface_seed,
+            noise_frequency: 4.0,
+        }
+    }
+}
+
 fn main() {
     if std::env::args().any(|a| a == "--docs") {
         docs_capture::generate_docs_captures();
@@ -302,7 +389,7 @@ fn main() {
 
     let noise = Noise::new(0);
     let bake_start = std::time::Instant::now();
-    let mut baked = Arc::new(BakedMaps::bake(
+    let baked = Arc::new(BakedMaps::bake(
         &noise,
         DEFAULT_BAKE_WIDTH,
         DEFAULT_BAKE_HEIGHT,
@@ -379,9 +466,7 @@ fn main() {
     let mut cam_yaw = 0.0_f32;
     let mut cam_pitch = 0.45_f32;
     let mut cam_distance = 34.0_f32;
-    let mut sim_clock = SimClock::new();
     let time_scales = [0.25_f32, 0.5, 1.0, 2.0, 5.0];
-    let mut time_scale_idx = 2_usize;
     let ship_lods = load_ship_lods();
     let (ship_v0, _ship_i0) = &ship_lods.levels[0];
     let (ship_min, ship_max) = mesh_bounds(ship_v0);
@@ -395,62 +480,18 @@ fn main() {
         let (verts, idxs) = &ship_lods.levels[lvl];
         idxs.iter().map(|&i| verts[i].clone()).collect()
     });
-    let mut ship_lod = 0_usize;
-    let mut ship = Ship::new(Vector3::new(0.0, 1.5, 16.0));
-    let mut physics_stepper = physics::PhysicsStepper::new();
-    let mut nav_state = nav::NavState::new();
-    let mut gravity_enabled = true;
-    let mut gravity_mag = 0.0_f32;
     let mut overlay_buf = hud::OverlayBuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32);
-    let mut selected_body: usize = 0;
     let mut show_help = false;
     let mut app_ctrl = app::AppController::new();
     let mut should_exit = false;
-    let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
-    let mut follow_mode = true;
     window.enable_cursor();
-    let mut bodies = solar_system();
-    let mut body_shader_params: Vec<f32> = bodies
-        .iter()
-        .map(|b| shaders::live_param(b.shader).default)
-        .collect();
     let icosphere_lods = icosphere::build_icosphere_lods();
-    let mut body_caches: Vec<icosphere::DeformedIcosphereCache> = bodies
-        .iter()
-        .map(|b| {
-            icosphere::DeformedIcosphereCache::new_for_shader(
-                b.shader,
-                b.surface.deformation_amplitude,
-                b.surface.noise_frequency,
-            )
-        })
-        .collect();
-    let mut body_lods = vec![3_usize; bodies.len()];
-    let mut forced_lod: Option<usize> = None;
-    let mut surface_seed: u64 = 42;
-    let build_candidates = |seed: u64, bodies: &[scene::Body]| {
-        bodies
-            .iter()
-            .map(|body| surface_scatter::scatter_for_body(body, seed))
-            .collect::<Vec<_>>()
-    };
-    let mut planet_candidates = build_candidates(surface_seed, &bodies);
-    let build_all_instances = |bodies: &[scene::Body],
-                               cands: &[Vec<surface_scatter::SurfaceCandidate>],
-                               noise: &Noise| {
-        bodies
-            .iter()
-            .zip(cands.iter())
-            .map(|(b, c)| surface_scatter::build_body_instances(b, c, noise))
-            .collect::<Vec<_>>()
-    };
-    let mut planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
     let prop_meshes = surface_props::load_surface_props();
-    let _ = (build_model_matrix, body_model_matrix_at);
+    let mut flight_session: Option<FlightSession> = None;
+    let _ = (build_model_matrix, body_model_matrix_at, &baked);
     let _ = shader_name;
     let mut shader = Shader::Rocky;
     let mut debug_noise = false;
-    let mut noise_frequency = 4.0_f32;
     let mut rocky_debug_view = 3_i32;
     let mut normal_mapping = true;
     let mut debug_normals = false;
@@ -490,8 +531,20 @@ fn main() {
                 }
                 app::TransitionOutcome::ChangeState(new_state) => {
                     match new_state {
-                        app::AppState::Flight(_) if follow_mode => window.disable_cursor(),
-                        _ => window.enable_cursor(),
+                        app::AppState::Flight(sys_id) => {
+                            let session = flight_session
+                                .insert(FlightSession::new(sys_id, &noise));
+                            perf_stats = PerfStats::new();
+                            if session.follow_mode {
+                                window.disable_cursor();
+                            } else {
+                                window.enable_cursor();
+                            }
+                        }
+                        _ => {
+                            flight_session = None;
+                            window.enable_cursor();
+                        }
                     }
                 }
                 _ => {}
@@ -510,12 +563,17 @@ fn main() {
                         should_exit = true;
                         continue;
                     }
-                    app::TransitionOutcome::ChangeState(app::AppState::Flight(_)) => {
-                        if follow_mode {
+                    app::TransitionOutcome::ChangeState(app::AppState::Flight(sys_id)) => {
+                        let session = flight_session.insert(FlightSession::new(sys_id, &noise));
+                        perf_stats = PerfStats::new();
+                        if session.follow_mode {
                             window.disable_cursor();
+                        } else {
+                            window.enable_cursor();
                         }
                     }
                     app::TransitionOutcome::ChangeState(_) => {
+                        flight_session = None;
                         window.enable_cursor();
                     }
                     _ => {}
@@ -531,65 +589,77 @@ fn main() {
             framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);
             continue;
         }
-        let _sim_dt = sim_clock.advance(dt);
+        let sys_id = match app_ctrl.state {
+            app::AppState::Flight(id) => id,
+            _ => app::SystemId::Realista,
+        };
+        let session = flight_session.get_or_insert_with(|| FlightSession::new(sys_id, &noise));
+        if session.system_id != sys_id {
+            *session = FlightSession::new(sys_id, &noise);
+        }
+        let _sim_dt = session.sim_clock.advance(dt);
         if window.is_key_pressed(KeyboardKey::KEY_F) {
-            follow_mode = !follow_mode;
-            if follow_mode {
+            session.follow_mode = !session.follow_mode;
+            if session.follow_mode {
                 window.disable_cursor();
-                follow_cam.snap(&ship);
+                session.follow_cam.snap(&session.ship);
             } else {
                 window.enable_cursor();
             }
         }
         if window.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
-            follow_cam.recenter();
+            session.follow_cam.recenter();
         }
         if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
-            sim_clock.toggle_pause();
+            session.sim_clock.toggle_pause();
         }
-        if window.is_key_pressed(KeyboardKey::KEY_TAB) {
-            selected_body = (selected_body + 1) % bodies.len();
+        if window.is_key_pressed(KeyboardKey::KEY_TAB) && !session.bodies.is_empty() {
+            session.selected_body = (session.selected_body + 1) % session.bodies.len();
         }
-        if window.is_key_pressed(KeyboardKey::KEY_NINE) {
-            let b = &mut bodies[selected_body];
+        if window.is_key_pressed(KeyboardKey::KEY_NINE) && !session.bodies.is_empty() {
+            let idx = session.selected_body;
+            let b = &mut session.bodies[idx];
             b.radius = (b.radius - 0.1).max(0.3);
             b.surface.max_deformation = b.radius * b.surface.deformation_amplitude;
-            planet_instances[selected_body] =
-                surface_scatter::build_body_instances(b, &planet_candidates[selected_body], &noise);
+            session.planet_instances[idx] =
+                surface_scatter::build_body_instances(b, &session.planet_candidates[idx], &noise);
         }
-        if window.is_key_pressed(KeyboardKey::KEY_ZERO) {
-            let b = &mut bodies[selected_body];
+        if window.is_key_pressed(KeyboardKey::KEY_ZERO) && !session.bodies.is_empty() {
+            let idx = session.selected_body;
+            let b = &mut session.bodies[idx];
             b.radius = (b.radius + 0.1).min(6.0);
             b.surface.max_deformation = b.radius * b.surface.deformation_amplitude;
-            planet_instances[selected_body] =
-                surface_scatter::build_body_instances(b, &planet_candidates[selected_body], &noise);
+            session.planet_instances[idx] =
+                surface_scatter::build_body_instances(b, &session.planet_candidates[idx], &noise);
         }
-        if window.is_key_pressed(KeyboardKey::KEY_FOUR) {
-            let spec = shaders::live_param(bodies[selected_body].shader);
-            body_shader_params[selected_body] =
-                (body_shader_params[selected_body] - spec.step).max(spec.min);
+        if window.is_key_pressed(KeyboardKey::KEY_FOUR) && !session.bodies.is_empty() {
+            let idx = session.selected_body;
+            let spec = shaders::live_param(session.bodies[idx].shader);
+            session.body_shader_params[idx] =
+                (session.body_shader_params[idx] - spec.step).max(spec.min);
         }
-        if window.is_key_pressed(KeyboardKey::KEY_FIVE) {
-            let spec = shaders::live_param(bodies[selected_body].shader);
-            body_shader_params[selected_body] =
-                (body_shader_params[selected_body] + spec.step).min(spec.max);
+        if window.is_key_pressed(KeyboardKey::KEY_FIVE) && !session.bodies.is_empty() {
+            let idx = session.selected_body;
+            let spec = shaders::live_param(session.bodies[idx].shader);
+            session.body_shader_params[idx] =
+                (session.body_shader_params[idx] + spec.step).min(spec.max);
         }
         if window.is_key_pressed(KeyboardKey::KEY_H) {
             show_help = !show_help;
         }
         if window.is_key_pressed(KeyboardKey::KEY_G) {
-            gravity_enabled = !gravity_enabled;
+            session.gravity_enabled = !session.gravity_enabled;
         }
         if window.is_key_pressed(KeyboardKey::KEY_L) {
-            nav_state.cycle_override();
+            session.nav_state.cycle_override();
         }
         if window.is_key_pressed(KeyboardKey::KEY_MINUS) {
-            time_scale_idx = time_scale_idx.saturating_sub(1);
-            sim_clock.set_scale(time_scales[time_scale_idx]);
+            session.time_scale_idx = session.time_scale_idx.saturating_sub(1);
+            session.sim_clock.set_scale(time_scales[session.time_scale_idx]);
         }
         if window.is_key_pressed(KeyboardKey::KEY_EQUAL) {
-            time_scale_idx = (time_scale_idx + 1).min(time_scales.len() - 1);
-            sim_clock.set_scale(time_scales[time_scale_idx]);
+            session.time_scale_idx = (session.time_scale_idx + 1).min(time_scales.len() - 1);
+            session.sim_clock.set_scale(time_scales[session.time_scale_idx]);
         }
         if window.is_key_pressed(KeyboardKey::KEY_F3) {
             perf_stats.enabled = !perf_stats.enabled;
@@ -603,7 +673,7 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_K) {
             let t_bake = std::time::Instant::now();
-            baked = Arc::new(BakedMaps::bake(
+            session.baked = Arc::new(BakedMaps::bake(
                 &noise,
                 DEFAULT_BAKE_WIDTH,
                 DEFAULT_BAKE_HEIGHT,
@@ -638,7 +708,7 @@ fn main() {
             frustum_culling = !frustum_culling;
         }
         if window.is_key_pressed(KeyboardKey::KEY_Z) {
-            forced_lod = match forced_lod {
+            session.forced_lod = match session.forced_lod {
                 None => Some(0),
                 Some(l) if l + 1 < icosphere_lods.len() => Some(l + 1),
                 Some(_) => None,
@@ -666,14 +736,32 @@ fn main() {
             debug_normals = !debug_normals;
         }
         if window.is_key_pressed(KeyboardKey::KEY_I) {
-            surface_seed = surface_seed.wrapping_sub(1);
-            planet_candidates = build_candidates(surface_seed, &bodies);
-            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+            session.surface_seed = session.surface_seed.wrapping_sub(1);
+            session.planet_candidates = session
+                .bodies
+                .iter()
+                .map(|body| surface_scatter::scatter_for_body(body, session.surface_seed))
+                .collect();
+            session.planet_instances = session
+                .bodies
+                .iter()
+                .zip(session.planet_candidates.iter())
+                .map(|(b, c)| surface_scatter::build_body_instances(b, c, &noise))
+                .collect();
         }
         if window.is_key_pressed(KeyboardKey::KEY_O) {
-            surface_seed = surface_seed.wrapping_add(1);
-            planet_candidates = build_candidates(surface_seed, &bodies);
-            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+            session.surface_seed = session.surface_seed.wrapping_add(1);
+            session.planet_candidates = session
+                .bodies
+                .iter()
+                .map(|body| surface_scatter::scatter_for_body(body, session.surface_seed))
+                .collect();
+            session.planet_instances = session
+                .bodies
+                .iter()
+                .zip(session.planet_candidates.iter())
+                .map(|(b, c)| surface_scatter::build_body_instances(b, c, &noise))
+                .collect();
         }
         if window.is_key_pressed(KeyboardKey::KEY_SLASH) {
             instance_culling = !instance_culling;
@@ -686,11 +774,11 @@ fn main() {
         }
         let mut rebuild_surface = false;
         if window.is_key_pressed(KeyboardKey::KEY_LEFT_BRACKET) {
-            noise_frequency = (noise_frequency - 0.5).max(0.5);
+            session.noise_frequency = (session.noise_frequency - 0.5).max(0.5);
             rebuild_surface = true;
         }
         if window.is_key_pressed(KeyboardKey::KEY_RIGHT_BRACKET) {
-            noise_frequency = (noise_frequency + 0.5).min(20.0);
+            session.noise_frequency = (session.noise_frequency + 0.5).min(20.0);
             rebuild_surface = true;
         }
         let mut amp_delta = 0.0_f32;
@@ -701,31 +789,36 @@ fn main() {
             amp_delta = 0.03;
         }
         if amp_delta != 0.0 || rebuild_surface {
-            for (i, body) in bodies.iter_mut().enumerate() {
+            for (i, body) in session.bodies.iter_mut().enumerate() {
                 if matches!(body.shader, Shader::Rocky) {
                     body.surface.deformation_amplitude =
                         (body.surface.deformation_amplitude + amp_delta).clamp(0.0, 0.40);
                     body.surface.max_deformation =
                         body.radius * body.surface.deformation_amplitude;
-                    body.surface.noise_frequency = noise_frequency;
-                    body_caches[i].invalidate(
+                    body.surface.noise_frequency = session.noise_frequency;
+                    session.body_caches[i].invalidate(
                         body.surface.deformation_amplitude,
                         body.surface.noise_frequency,
                     );
                 }
             }
             if rebuild_surface {
-                baked = Arc::new(BakedMaps::bake_with_frequency(
+                session.baked = Arc::new(BakedMaps::bake_with_frequency(
                     &noise,
                     DEFAULT_BAKE_WIDTH,
                     DEFAULT_BAKE_HEIGHT,
-                    noise_frequency,
+                    session.noise_frequency,
                 ));
             }
-            planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
+            session.planet_instances = session
+                .bodies
+                .iter()
+                .zip(session.planet_candidates.iter())
+                .map(|(b, c)| surface_scatter::build_body_instances(b, c, &noise))
+                .collect();
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
-        if !follow_mode {
+        if !session.follow_mode {
             if window.is_key_down(KeyboardKey::KEY_LEFT) {
                 cam_yaw -= orbit_speed * dt;
             }
@@ -754,7 +847,7 @@ fn main() {
         let mut yaw_in = 0.0_f32;
         let mut pitch_in = 0.0_f32;
         let mut roll_in = 0.0_f32;
-        if follow_mode {
+        if session.follow_mode {
             if window.is_key_down(KeyboardKey::KEY_LEFT) {
                 yaw_in += 1.0;
             }
@@ -784,34 +877,51 @@ fn main() {
             boost,
             braking,
         };
-        physics_stepper.step(dt, |sub_dt| {
-            nav_state.update_mode(ship.position, &bodies, sim_clock.time);
+        session.physics_stepper.step(dt, |sub_dt| {
+            session.nav_state.update_mode(
+                session.ship.position,
+                &session.bodies,
+                session.sim_clock.time,
+            );
             nav::apply_controls_in_frame(
-                &mut ship,
-                nav_state.mode,
-                &bodies,
-                sim_clock.time,
+                &mut session.ship,
+                session.nav_state.mode,
+                &session.bodies,
+                session.sim_clock.time,
                 controls,
                 sub_dt,
             );
-            let (_, turn_scale) =
-                nav::local_flight_scales(ship.position, nav_state.mode, &bodies, sim_clock.time);
-            ship.apply_angular_input(
+            let (_, turn_scale) = nav::local_flight_scales(
+                session.ship.position,
+                session.nav_state.mode,
+                &session.bodies,
+                session.sim_clock.time,
+            );
+            session.ship.apply_angular_input(
                 pitch_in * turn_scale,
                 yaw_in * turn_scale,
                 roll_in * turn_scale,
                 sub_dt,
             );
-            gravity_mag = physics::integrate_ship_with_gravity(
-                &mut ship,
-                &bodies,
-                sim_clock.time,
+            session.gravity_mag = physics::integrate_ship_with_gravity(
+                &mut session.ship,
+                &session.bodies,
+                session.sim_clock.time,
                 sub_dt,
-                gravity_enabled,
+                session.gravity_enabled,
             );
-            nav::align_up_to_surface(&mut ship, nav_state.mode, &bodies, sim_clock.time, sub_dt);
-            if let Some(idx) = physics::resolve_body_collisions(&mut ship, &bodies, sim_clock.time)
-            {
+            nav::align_up_to_surface(
+                &mut session.ship,
+                session.nav_state.mode,
+                &session.bodies,
+                session.sim_clock.time,
+                sub_dt,
+            );
+            if let Some(idx) = physics::resolve_body_collisions(
+                &mut session.ship,
+                &session.bodies,
+                session.sim_clock.time,
+            ) {
                 collision_body = Some(idx);
             }
         });
@@ -819,9 +929,9 @@ fn main() {
         cam_distance = (cam_distance - window.get_mouse_wheel_move() * 1.5).clamp(2.5, 220.0);
 
         let aspect = internal_width as f32 / internal_height as f32;
-        let cam = if follow_mode {
-            follow_cam.update(&ship, dt);
-            follow_cam.to_camera(45.0_f32.to_radians(), 0.1, 300.0)
+        let cam = if session.follow_mode {
+            session.follow_cam.update(&session.ship, dt);
+            session.follow_cam.to_camera(45.0_f32.to_radians(), 0.1, 300.0)
         } else {
             let cam_pos = Vector3::new(
                 cam_distance * cam_pitch.cos() * cam_yaw.sin(),
@@ -841,18 +951,18 @@ fn main() {
             model_matrix: Mat4::identity(),
             view_matrix: cam.view_matrix(),
             projection_matrix: cam.projection_matrix(aspect),
-            time: sim_clock.time,
+            time: session.sim_clock.time,
             light_dir,
             camera_pos: cam.position,
             debug_noise,
-            noise_frequency,
+            noise_frequency: session.noise_frequency,
             rocky_debug_view,
             normal_mapping,
             debug_normals,
             viewport_width: internal_width,
             viewport_height: internal_height,
             noise: noise.clone(),
-            baked: Some(Arc::clone(&baked)),
+            baked: Some(Arc::clone(&session.baked)),
             shader_param: 1.0,
         };
 
@@ -865,30 +975,34 @@ fn main() {
         render_buffers.tri_materials.clear();
         let vp = uniforms.projection_matrix * uniforms.view_matrix;
         let frustum = culling::Frustum::from_vp(&vp);
-        let sun_pos = body_position_at(&bodies[0], sim_clock.time);
+        let sun_pos = session
+            .bodies
+            .first()
+            .map(|b| body_position_at(b, session.sim_clock.time))
+            .unwrap_or_else(Vector3::zero);
         let mut tris_before_cull = 0usize;
         let mut tris_after_cull = 0usize;
         let mut instances_total = 0usize;
         let mut instances_drawn = 0usize;
-        for (body_idx, body) in bodies.iter().enumerate() {
-            let body_pos = body_position_at(body, sim_clock.time);
+        for (body_idx, body) in session.bodies.iter().enumerate() {
+            let body_pos = body_position_at(body, session.sim_clock.time);
             let radius_px = lod::projected_radius_px(
                 &cam,
                 body_pos,
                 scene::effective_radius(body),
                 internal_height as f32,
             );
-            let level = match forced_lod {
+            let level = match session.forced_lod {
                 Some(f) => f.min(icosphere_lods.len() - 1),
                 None => lod::select_detail_level_hysteresis(
-                    body_lods[body_idx],
+                    session.body_lods[body_idx],
                     radius_px,
                     &lod::ICOSPHERE_THRESHOLDS_PX,
                     lod::DEFAULT_HYSTERESIS,
                 ),
             };
-            body_lods[body_idx] = level;
-            let body_mesh = body_caches[body_idx].get_or_build(level, &noise);
+            session.body_lods[body_idx] = level;
+            let body_mesh = session.body_caches[body_idx].get_or_build(level, &noise);
             let body_tris = body_mesh.len() / 3;
             tris_before_cull += body_tris;
             if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
@@ -897,7 +1011,7 @@ fn main() {
             }
             tris_after_cull += body_tris;
             let body_light = scene::body_light_dir(body_pos, sun_pos, light_dir);
-            uniforms.model_matrix = body_model_matrix_unit(body, sim_clock.time);
+            uniforms.model_matrix = body_model_matrix_unit(body, session.sim_clock.time);
             let before = render_buffers.screen_triangles.len();
             append_screen_triangles(
                 body_mesh,
@@ -911,13 +1025,13 @@ fn main() {
                 TriMaterial {
                     shader: body.shader,
                     light_dir: body_light,
-                    shader_param: body_shader_params[body_idx],
+                    shader_param: session.body_shader_params[body_idx],
                 },
             );
 
             // Dibujar instancias sobre la superficie compuestas con la matriz del planeta.
-            let planet_rt = scene::body_rt_matrix_at(body, sim_clock.time);
-            for inst in &planet_instances[body_idx] {
+            let planet_rt = scene::body_rt_matrix_at(body, session.sim_clock.time);
+            for inst in &session.planet_instances[body_idx] {
                 instances_total += 1;
                 let world_mat = planet_rt * inst.local_matrix;
                 let inst_world = Vector3::new(
@@ -961,15 +1075,15 @@ fn main() {
         // Dibujar nave con LOD según distancia a la cámara
         let ship_radius_px = lod::projected_radius_px(
             &cam,
-            ship.position,
-            ship.radius,
+            session.ship.position,
+            session.ship.radius,
             internal_height as f32,
         );
-        ship_lod = match forced_lod {
+        session.ship_lod = match session.forced_lod {
             Some(f) => f.min(2),
             None => {
                 let ship_detail = lod::select_detail_level_hysteresis(
-                    2 - ship_lod.min(2),
+                    2 - session.ship_lod.min(2),
                     ship_radius_px,
                     &lod::SHIP_THRESHOLDS_PX,
                     lod::DEFAULT_HYSTERESIS,
@@ -977,13 +1091,15 @@ fn main() {
                 2 - ship_detail
             }
         };
-        let ship_mesh = &ship_vertex_arrays[ship_lod];
+        let ship_mesh = &ship_vertex_arrays[session.ship_lod];
         let ship_tris = ship_mesh.len() / 3;
         tris_before_cull += ship_tris;
-        if !frustum_culling || frustum.intersects_sphere(ship.position, ship.radius * 1.5) {
+        if !frustum_culling
+            || frustum.intersects_sphere(session.ship.position, session.ship.radius * 1.5)
+        {
             tris_after_cull += ship_tris;
-            let ship_light = scene::body_light_dir(ship.position, sun_pos, light_dir);
-            uniforms.model_matrix = ship.model_matrix(ship_center, ship_unit_scale);
+            let ship_light = scene::body_light_dir(session.ship.position, sun_pos, light_dir);
+            uniforms.model_matrix = session.ship.model_matrix(ship_center, ship_unit_scale);
             let before_ship = render_buffers.screen_triangles.len();
             append_screen_triangles(
                 ship_mesh,
@@ -1062,77 +1178,57 @@ fn main() {
             println!("Captura guardada en {}", capture_path.display());
         }
         let label = format!(
-            "Sistema Solar ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Ayuda(H)",
-            bodies.len(),
-            sim_clock.time,
-            sim_clock.scale,
-            if sim_clock.paused { " PAUSA" } else { "" },
-            if follow_mode { "Seguir" } else { "Libre" },
+            "{} ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Ayuda(H)",
+            session.system_id.display_name(),
+            session.bodies.len(),
+            session.sim_clock.time,
+            session.sim_clock.scale,
+            if session.sim_clock.paused { " PAUSA" } else { "" },
+            if session.follow_mode { "Seguir" } else { "Libre" },
         );
-        let mode_str = match nav_state.mode {
+        let mode_str = match session.nav_state.mode {
             nav::NavMode::Global => "Global".to_string(),
-            nav::NavMode::Local(idx) => format!("Local({})", bodies[idx].name),
+            nav::NavMode::Local(idx) => format!("Local({})", session.bodies[idx].name),
         };
-        let override_str = match nav_state.override_mode {
+        let override_str = match session.nav_state.override_mode {
             nav::NavOverride::Auto => "Auto",
             nav::NavOverride::ForceLocal => "ForzarLocal",
             nav::NavOverride::ForceGlobal => "ForzarGlobal",
         };
-        let alt_str = match nav_state.nearest {
-            Some(n) => format!("{:.2} u ({})", n.altitude.max(0.0), bodies[n.body_index].name),
+        let alt_str = match session.nav_state.nearest {
+            Some(n) => format!(
+                "{:.2} u ({})",
+                n.altitude.max(0.0),
+                session.bodies[n.body_index].name
+            ),
             None => "--".to_string(),
         };
-        let mut overlay = Vec::new();
-        overlay.push(format!(
-            "Vel: {:.2} u/s | Gravedad(G): {} ({:.2} u/s^2)",
-            ship.velocity.length(),
-            if gravity_enabled { "ON" } else { "OFF" },
-            gravity_mag,
-        ));
-        overlay.push(format!(
-            "Modo(L): {} [{}] | Altitud: {}",
-            mode_str, override_str, alt_str
-        ));
-        let lod_mode_str = match forced_lod {
+        let lod_mode_str = match session.forced_lod {
             None => "Auto".to_string(),
             Some(l) => format!("Forzar L{l}"),
         };
-        let body_lod_summary: Vec<String> = bodies
+        let body_lod_summary: Vec<String> = session
+            .bodies
             .iter()
             .enumerate()
             .map(|(i, b)| {
-                let lvl = body_lods[i];
+                let lvl = session.body_lods[i];
                 let tris = icosphere_lods[lvl].len() / 3;
                 format!("{}:L{}({})", &b.name[..b.name.len().min(3)], lvl, tris)
             })
             .collect();
-        overlay.push(format!(
-            "LOD(Z): {} | Nave: L{}({}) | Malla(M): {}",
-            lod_mode_str,
-            ship_lod,
-            ship_vertex_arrays[ship_lod].len() / 3,
-            if matches!(mode, TriangleMode::Wireframe) {
-                "Wireframe"
-            } else {
-                "Solido"
-            },
-        ));
-        overlay.push(format!(
-            "Cuerpos: {} | Frustum(X): {} ({}->{})",
-            body_lod_summary.join(" "),
-            if frustum_culling { "ON" } else { "OFF" },
-            tris_before_cull,
-            tris_after_cull,
-        ));
-        let sel_body = &bodies[selected_body];
-        let sel_spec = shaders::live_param(sel_body.shader);
-        let selected_summary = format!(
-            "Sel(Tab): {} | R(9/0):{:.2} | {}(4/5):{:.2}",
-            sel_body.name,
-            sel_body.radius,
-            sel_spec.name,
-            body_shader_params[selected_body]
-        );
+        let selected_summary = if let Some(sel_body) = session.bodies.get(session.selected_body) {
+            let sel_spec = shaders::live_param(sel_body.shader);
+            format!(
+                "Sel(Tab): {} | R(9/0):{:.2} | {}(4/5):{:.2}",
+                sel_body.name,
+                sel_body.radius,
+                sel_spec.name,
+                session.body_shader_params[session.selected_body]
+            )
+        } else {
+            "Sin cuerpos".to_string()
+        };
         let avg = perf_stats.average();
         let fps = if avg.total_ms > 0.0 {
             1000.0 / avg.total_ms
@@ -1150,8 +1246,8 @@ fn main() {
         );
         let ship_lod_str = format!(
             "Nave:L{}({})",
-            ship_lod,
-            ship_vertex_arrays[ship_lod].len() / 3
+            session.ship_lod,
+            ship_vertex_arrays[session.ship_lod].len() / 3
         );
         let hud_snap = hud::HudSnapshot {
             title: &label,
@@ -1170,18 +1266,18 @@ fn main() {
             lod_summary: &lod_full,
             ship_lod_summary: &ship_lod_str,
             mode_summary: &mode_full,
-            gravity_enabled,
-            gravity_mag,
-            speed: ship.velocity.length(),
+            gravity_enabled: session.gravity_enabled,
+            gravity_mag: session.gravity_mag,
+            speed: session.ship.velocity.length(),
             altitude_summary: &alt_str,
-            time_scale: sim_clock.scale,
-            paused: sim_clock.paused,
-            surface_seed,
+            time_scale: session.sim_clock.scale,
+            paused: session.sim_clock.paused,
+            surface_seed: session.surface_seed,
             instances_drawn,
             instances_total,
             instance_culling,
             selected_summary: &selected_summary,
-            collision_body: collision_body.map(|idx| bodies[idx].name),
+            collision_body: collision_body.map(|idx| session.bodies[idx].name),
             show_perf: perf_stats.enabled,
             show_help,
         };
