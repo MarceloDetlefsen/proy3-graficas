@@ -5,6 +5,7 @@ mod culling;
 mod docs_capture;
 mod fragment;
 mod framebuffer;
+mod gallery;
 mod hud;
 mod icosphere;
 mod lod;
@@ -633,6 +634,8 @@ fn main() {
     let icosphere_lods = icosphere::build_icosphere_lods();
     let prop_meshes = surface_props::load_surface_props();
     let mut flight_session: Option<FlightSession> = None;
+    let mut gallery_viewer: Option<gallery::GalleryViewer> = None;
+    let mut gallery_time = 0.0_f32;
     let mut menu_backdrop = MenuBackdrop::new(Arc::clone(&baked));
     let _ = (build_model_matrix, body_model_matrix_at);
     let _ = shader_name;
@@ -689,6 +692,7 @@ fn main() {
                         }
                         _ => {
                             flight_session = None;
+                            gallery_viewer = None;
                             window.enable_cursor();
                         }
                     }
@@ -751,6 +755,60 @@ fn main() {
                 app_ctrl.show_menu_controls,
             );
             framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);
+            continue;
+        }
+        if matches!(app_ctrl.state, app::AppState::Gallery) {
+            let bodies = &menu_backdrop.bodies;
+            let body = &bodies[0];
+            let viewer = gallery_viewer.get_or_insert_with(|| gallery::GalleryViewer::new(body.radius));
+            gallery_time += dt;
+            viewer.advance(dt, body);
+
+            if window.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
+                let md = window.get_mouse_delta();
+                viewer.apply_orbit_delta(-md.x * 0.008, md.y * 0.008);
+            }
+            if window.is_key_down(KeyboardKey::KEY_LEFT) {
+                viewer.apply_orbit_delta(-1.8 * dt, 0.0);
+            }
+            if window.is_key_down(KeyboardKey::KEY_RIGHT) {
+                viewer.apply_orbit_delta(1.8 * dt, 0.0);
+            }
+            if window.is_key_down(KeyboardKey::KEY_UP) {
+                viewer.apply_orbit_delta(0.0, 1.8 * dt);
+            }
+            if window.is_key_down(KeyboardKey::KEY_DOWN) {
+                viewer.apply_orbit_delta(0.0, -1.8 * dt);
+            }
+            let wheel = window.get_mouse_wheel_move();
+            if wheel.abs() > 1e-4 {
+                viewer.apply_zoom(wheel, body.radius);
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_R) {
+                viewer.reset_view(body.radius);
+            }
+
+            let t_gal = std::time::Instant::now();
+            let _tris = viewer.render_body(
+                0,
+                body,
+                1.0,
+                gallery_time,
+                &noise,
+                &baked,
+                &mut framebuffer,
+                &mut render_buffers,
+                mode,
+                threads,
+            );
+            overlay_buf.resize(
+                window.get_screen_width().max(1) as u32,
+                window.get_screen_height().max(1) as u32,
+            );
+            overlay_buf.clear();
+            overlay_buf.draw_text("Galeria de trofeos | R: reiniciar vista | Esc: menu", 16, 14, 1, Color::WHITE);
+            framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);
+            viewer.record_frame_time(t_gal.elapsed().as_secs_f64() * 1000.0);
             continue;
         }
         let sys_id = match app_ctrl.state {
