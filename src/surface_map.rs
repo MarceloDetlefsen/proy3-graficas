@@ -50,7 +50,7 @@ impl BakedMaps {
         let abismo = EquirectMap::from_fn(pw, ph, |dir| abismo::sample_static(noise, dir));
         let basquia = EquirectMap::from_fn(pw, ph, |dir| basquia::sample_static(noise, dir, 4.0));
         let vestigio = EquirectMap::from_fn(pw, ph, |dir| vestigio::sample_static(noise, dir, 5.0));
-        let mural = EquirectMap::from_fn(pw, ph, |dir| mural::sample_static(noise, dir, 7.0));
+        let mural = EquirectMap::from_fn(width, height, |dir| mural::sample_static(noise, dir, 7.0));
         let fundido = EquirectMap::from_fn(pw, ph, |dir| fundido::sample_static(noise, dir, 3.0));
         Self {
             rocky,
