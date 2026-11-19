@@ -606,6 +606,22 @@ pub fn build_joycon_right_mesh(detail: usize) -> Mesh {
     joycon(JoyConSide::Right, detail)
 }
 
+/// Construye la esfera del Sol de los Phoenix Suns en 3 niveles de detalle.
+pub fn build_suns_mesh(detail: usize) -> Mesh {
+    let ico_lvl = match detail {
+        0 => 1, // 80 tris
+        1 => 2, // 320 tris
+        _ => 3, // 1280 tris
+    };
+    let ico = crate::icosphere::icosphere_level(ico_lvl);
+    let mut mesh = Mesh::new();
+    for &unit in &ico.positions {
+        mesh.push_vertex(unit, unit, crate::icosphere::spherical_uv(unit));
+    }
+    mesh.indices = ico.indices;
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -701,6 +717,20 @@ mod tests {
             for m in [&m0, &m1, &m2] {
                 assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
             }
+        }
+    }
+
+    #[test]
+    fn suns_builds_three_decreasing_watertight_lods_under_4000_tris() {
+        let m2 = build_suns_mesh(2);
+        let m1 = build_suns_mesh(1);
+        let m0 = build_suns_mesh(0);
+        assert!(m2.tri_count() <= 4000);
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            assert!((m.bounding_radius() - 1.0).abs() < 1e-4);
         }
     }
 }

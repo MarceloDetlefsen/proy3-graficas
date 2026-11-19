@@ -142,11 +142,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Sol de los Phoenix Suns",
         sistema: SystemId::Favoritos,
         tipo: "Estrella",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Esfera emisiva con logo de Phoenix Suns por proyeccion azimutal en Z en ambos polos, rayos dorados y halo.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::PhoenixSuns),
+        has_mesh: true,
         light_dir: None,
     },
     Showcase {
@@ -289,6 +289,7 @@ pub fn favorites_ready_entries() -> Vec<&'static Showcase> {
 
 pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_builder::Mesh> {
     match id {
+        "phoenix_suns" => Some(crate::bodies::build_suns_mesh),
         "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
         "cubo_skweb" => Some(crate::bodies::build_skewb_mesh),
         "megaminx" => Some(crate::bodies::build_megaminx_mesh),
@@ -320,7 +321,11 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
         phase: 0.0,
         orbit_inclination: 0.0,
         rotation_period: 24.0,
-        axial_tilt: if entry.id == "meteoro_ff7" { 0.0 } else { 0.22 },
+        axial_tilt: if matches!(entry.id, "meteoro_ff7" | "phoenix_suns") {
+            0.0
+        } else {
+            0.22
+        },
         shader,
         surface: crate::scene::SurfaceParams {
             seed: 0,

@@ -167,7 +167,7 @@ impl GalleryViewer {
         } else {
             0.25
         };
-        let mult = if matches!(body.shader, Shader::Chunky) {
+        let mult = if matches!(body.shader, Shader::Chunky | Shader::PhoenixSuns) {
             shader_param
         } else {
             1.0
@@ -255,9 +255,14 @@ impl GalleryViewer {
         let light_dir = custom_light
             .unwrap_or_else(|| Vector3::new(-0.65, 0.80, 1.0))
             .normalize();
-        let model_matrix = Mat4::rotation_z(body.axial_tilt)
-            * Mat4::rotation_y(self.spin)
-            * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius));
+        let model_matrix = if matches!(body.shader, Shader::PhoenixSuns) {
+            Mat4::rotation_z(self.spin)
+                * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
+        } else {
+            Mat4::rotation_z(body.axial_tilt)
+                * Mat4::rotation_y(self.spin)
+                * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
+        };
 
         let uniforms = Uniforms {
             model_matrix,
