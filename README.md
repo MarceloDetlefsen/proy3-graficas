@@ -221,7 +221,7 @@ proy3-graficas/
 
 - Los 4 modelos `.obj` de superficie (`assets/surface/{tree,rock,building,monument}.obj`) no han sido agregados aún; el motor utiliza los marcadores procedurales de respaldo de `src/surface_props.rs`.
 - Los LOD de la nave (`assets/ship_lod0.obj`, `ship_lod1.obj`, `ship_lod2.obj`, con `3000`/`800`/`610` triángulos) ya se cargan desde archivo; el respaldo por decimación en `src/mesh_lod.rs::load_ship_lods` se mantiene únicamente si faltaran.
-- El menú principal y la galería de trofeos ya están implementados; el sistema de favoritos cuenta con 3 cuerpos `Ready` en la galería (`Cubo de Rubik`, `Trifuerza` y `Asteroide de FF7`, construidos con `src/mesh_builder.rs` y `src/bodies.rs`) y 7 entradas en estado `Placeholder` ("en construcción"). El vuelo del sistema de favoritos permanecerá deshabilitado hasta contar con su estrella (`Sol de los Phoenix Suns`).
+- El menú principal y la galería de trofeos ya están implementados; el sistema de favoritos cuenta con 3 cuerpos `Ready` en la galería (`Cubo de Rubik`, `Trifuerza` y `Meteoro de FF7`, construidos con `src/mesh_builder.rs` y `src/bodies.rs`) y 7 entradas en estado `Placeholder` ("en construcción"). El vuelo del sistema de favoritos permanecerá deshabilitado hasta contar con su estrella (`Sol de los Phoenix Suns`).
 
 ## Dependencias principales
 

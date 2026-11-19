@@ -24,4 +24,4 @@
 - **Cuerpos procedurales (`src/bodies.rs`, `src/showcase.rs`)**:
   - **Cubo de Rubik** (`Shader::Chunky`): 27 cubitos con holgura y calcomanías por cara en 3 niveles de detalle (`108` / `324` / `3564` tris).
   - **Trifuerza** (`Shader::Triforce`): tres prismas triangulares equiláteros con centro vacío y shader dorado con destello animado (`24` / `42` / `78` tris).
-  - **Asteroide de FF7** (`Shader::Asteroid`): icosfera alargada con `planet_height`, cráter y grietas Voronoi horneadas en `BakedMaps` con pulso rojo incandescente (`80` / `320` / `1280` tris).
+  - **Meteoro de FF7** (`Shader::Meteor`): cometa con cabeza de icosfera vítrea y trazos blancos en espiral horneados, cola de 24–38 pinceladas con degradado por vértice y un orbe separado (`680` / `1328` / `2880` tris).
