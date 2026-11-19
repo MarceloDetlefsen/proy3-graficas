@@ -167,8 +167,8 @@ pub fn solar_system() -> Vec<Body> {
             surface: SurfaceParams {
                 seed: 44,
                 noise_frequency: 5.0,
-                deformation_amplitude: 0.05,
-                max_deformation: 0.05,
+                deformation_amplitude: 0.07,
+                max_deformation: 0.07,
             },
         },
         Body {
