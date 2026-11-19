@@ -609,7 +609,7 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
     }
 
     // Lista de trofeos (derecha): los Placeholder aparecen atenuados con "en construccion"
-    let list_w = 246.min(w - card_w - 30).max(180);
+    let list_w = 276.min(w - card_w - 30).max(180);
     let entries = crate::showcase::SHOWCASE_ENTRIES;
     let list_h = (entries.len() as i32 * 11 + 26).min(h - 50);
     let list_x = w - list_w - 10;

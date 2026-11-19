@@ -340,5 +340,68 @@ pub fn generate_docs_captures() {
     hud::render_hud(&mut ov, &local_snap);
     compose_and_save(&fb, Some(&ov), &out_dir.join("modo_local.png"));
 
-    println!("Capturas oficiales generadas en docs/captures/ (21 archivos)");
+    // 10. Menú principal con fondo orbital animado.
+    let cam_menu = Camera::new(
+        Vector3::new(17.0, 15.5, 40.5),
+        Vector3::zero(),
+        45.0_f32.to_radians(),
+        0.1,
+        400.0,
+    );
+    render_scene_frame(
+        &bodies,
+        &mut caches,
+        &noise,
+        &baked,
+        &cam_menu,
+        time,
+        threads,
+        TriangleMode::FilledBarycentric,
+        true,
+        None,
+        true,
+        42,
+        false,
+        &mut fb,
+        &mut bufs,
+    );
+    let fav_ready = crate::showcase::is_favorites_system_ready(crate::showcase::SHOWCASE_ENTRIES);
+    hud::render_menu_overlay(&mut ov, 0, fav_ready, false);
+    compose_and_save(&fb, Some(&ov), &out_dir.join("menu_principal.png"));
+
+    // 11. Galería de trofeos (Zebes y Ardens).
+    let mut gal_viewer = crate::gallery::GalleryViewer::new(bodies[1].radius);
+    for &(idx, fname) in &[(1_usize, "galeria_zebes.png"), (3_usize, "galeria_ardens.png")] {
+        let body = &bodies[idx];
+        gal_viewer.reset_view(body.radius);
+        gal_viewer.lod_level = 4;
+        let tris = gal_viewer.render_body(
+            idx,
+            body,
+            1.0,
+            time,
+            &noise,
+            &baked,
+            &mut fb,
+            &mut bufs,
+            TriangleMode::FilledBarycentric,
+            threads,
+        );
+        let spec = crate::shaders::live_param(body.shader);
+        let gsnap = hud::GalleryHudSnapshot {
+            entry: &crate::showcase::SHOWCASE_ENTRIES[idx],
+            active_showcase_idx: idx,
+            radius: body.radius,
+            tris,
+            lod_level: gal_viewer.lod_level,
+            shader_name: crate::shaders::shader_name(body.shader),
+            live_param_name: spec.name,
+            live_param_value: spec.default,
+            fps: 60.0,
+        };
+        hud::render_gallery_overlay(&mut ov, &gsnap);
+        compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
+    }
+
+    println!("Capturas oficiales generadas en docs/captures/ (26 archivos)");
 }
