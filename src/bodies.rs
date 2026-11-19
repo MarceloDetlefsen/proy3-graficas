@@ -5,7 +5,9 @@ use std::f32::consts::FRAC_PI_2;
 
 use raylib::prelude::Vector3;
 
-use crate::mesh_builder::{Mesh, box_mesh, extruded_prism, loft_rings, rounded_box, sphere};
+use crate::mesh_builder::{
+    Mesh, box_mesh, extruded_prism, loft_rings, raised_sticker, rounded_box, sphere,
+};
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
 use crate::shaders::meteor::{BLUE_GREEN, DARK_GREEN, TEAL};
@@ -335,6 +337,68 @@ pub fn meteor_bounding_radius(mesh: &Mesh) -> f32 {
         .fold(1.0_f32, f32::max)
 }
 
+/// Construye el Cubo Skewb de lado 1 con núcleo negro, rombo central y 4 triángulos
+/// rectángulos isósceles por cara (encogidos para holgura negra y elevados 0.02).
+pub fn build_skewb_mesh(detail: usize) -> Mesh {
+    let face_specs: [(Vector3, Vector3, Vector3, Vector3); 6] = [
+        (Vector3::new(0.0, 0.0, 1.0), Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 1.0, 0.0), WHITE),
+        (Vector3::new(0.0, 0.0, -1.0), Vector3::new(-1.0, 0.0, 0.0), Vector3::new(0.0, 1.0, 0.0), YELLOW),
+        (Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, -1.0), Vector3::new(0.0, 1.0, 0.0), ORANGE),
+        (Vector3::new(-1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0), Vector3::new(0.0, 1.0, 0.0), RED),
+        (Vector3::new(0.0, 1.0, 0.0), Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, -1.0), GREEN),
+        (Vector3::new(0.0, -1.0, 0.0), Vector3::new(1.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0), BLUE),
+    ];
+
+    if detail == 0 {
+        let mut core = box_mesh(1.0, 1.0, 1.0);
+        core.paint_vertices(|_, _, n| {
+            if n.z > 0.7 {
+                WHITE
+            } else if n.z < -0.7 {
+                YELLOW
+            } else if n.x > 0.7 {
+                ORANGE
+            } else if n.x < -0.7 {
+                RED
+            } else if n.y > 0.7 {
+                GREEN
+            } else {
+                BLUE
+            }
+        });
+        return core;
+    }
+
+    let mut mesh = if detail >= 2 {
+        rounded_box(1.0, 1.0, 1.0, 0.04, 1)
+    } else {
+        box_mesh(1.0, 1.0, 1.0)
+    };
+    mesh.set_color(BLACK);
+
+    let thickness = if detail >= 2 { 0.016 } else { 0.0 };
+    let h = 0.5_f32;
+    for (n, u, v, color) in face_specs {
+        let center = n * h;
+        let c0 = center - u * h - v * h;
+        let c1 = center + u * h - v * h;
+        let c2 = center + u * h + v * h;
+        let c3 = center - u * h + v * h;
+        let m0 = center - v * h;
+        let m1 = center + u * h;
+        let m2 = center + v * h;
+        let m3 = center - u * h;
+
+        let diamond = [m0, m1, m2, m3];
+        mesh.merge(&raised_sticker(&diamond, 0.84, 0.02, thickness, color));
+
+        for tri in [[c0, m0, m3], [c1, m1, m0], [c2, m2, m1], [c3, m3, m2]] {
+            mesh.merge(&raised_sticker(&tri, 0.78, 0.02, thickness, color));
+        }
+    }
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,6 +453,19 @@ mod tests {
         assert_eq!(a.indices, b.indices);
         for (pa, pb) in a.positions.iter().zip(b.positions.iter()) {
             assert!((*pa - *pb).length() < 1e-6);
+        }
+    }
+
+    #[test]
+    fn skewb_builds_three_decreasing_lods_under_4000_tris() {
+        let m2 = build_skewb_mesh(2);
+        let m1 = build_skewb_mesh(1);
+        let m0 = build_skewb_mesh(0);
+
+        assert!(m2.tri_count() <= 4000);
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
         }
     }
 }
