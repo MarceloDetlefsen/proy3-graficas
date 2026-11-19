@@ -8,7 +8,7 @@ use raylib::prelude::Vector3;
 use crate::mesh_builder::{
     Mesh, beveled_extruded_contour, box_mesh, cone, cylinder, dodecahedron, dodecahedron_faces,
     extruded_prism, flat_polygon_mesh, loft_rings, raised_sticker, rdp_simplify_closed,
-    rounded_box, rounded_rect_profile_2d, sphere, sweep_profile,
+    rounded_box, rounded_rect_profile_2d, sphere, sweep_profile, torus,
 };
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
@@ -1053,6 +1053,129 @@ pub fn build_racket_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+/// Construye el casco de Samus Aran (Metroid) con domo terracota, franjas oscuras,
+/// visor angular emisivo, orejeras laterales con luz, bloque bucal con rejillas y
+/// tubos respiratorios hacia el anillo del cuello.
+pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
+    let armor = Vector3::new(0.70, 0.39, 0.27); // #B26444 refs/samus_helmet.jpg
+    let seam_dark = Vector3::new(0.24, 0.18, 0.16);
+    let hose_olive = Vector3::new(0.36, 0.37, 0.31);
+    let grille_dark = Vector3::new(0.16, 0.14, 0.14);
+    let visor_mint = Vector3::new(0.84, 0.96, 0.80);
+
+    let (rings, sectors, hose_segs, pipe_segs) = match detail {
+        0 => (6usize, 10usize, 3usize, 5usize),
+        1 => (10, 16, 5, 6),
+        _ => (14, 22, 7, 8),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Domo principal (esfera escalada) con franjas oscuras en la corona.
+    let mut dome = sphere(1.0, rings, sectors);
+    dome.scale(Vector3::new(0.84, 0.92, 0.90));
+    dome.translate(Vector3::new(0.0, 0.06, -0.02));
+    dome.paint_vertices(|_, p, _| {
+        let on_center_seam = p.x.abs() < 0.045 && p.y > 0.28 && p.z > -0.20;
+        let on_brow_seam = (p.x.abs() - (0.24 + (p.y - 0.35).max(0.0) * 0.22)).abs() < 0.038
+            && p.y > 0.20
+            && p.z > 0.05;
+        if on_center_seam || on_brow_seam {
+            seam_dark
+        } else {
+            armor
+        }
+    });
+    dome.set_material(0);
+    mesh.merge(&dome);
+
+    // 2. Visor frontal angular extruido con bisel (material_id = 2 emisivo).
+    let visor_poly = [
+        [-0.56, 0.30],
+        [-0.18, 0.24],
+        [-0.12, 0.32],
+        [0.12, 0.32],
+        [0.18, 0.24],
+        [0.56, 0.30],
+        [0.44, -0.10],
+        [0.20, -0.26],
+        [0.14, -0.50],
+        [-0.14, -0.50],
+        [-0.20, -0.26],
+        [-0.44, -0.10],
+    ];
+    let mut visor = beveled_extruded_contour(&visor_poly, 0.22, 0.92, 0.03);
+    visor.rotate_x(FRAC_PI_2);
+    visor.translate(Vector3::new(0.0, 0.06, 0.76));
+    visor.set_color(visor_mint);
+    visor.set_material(2);
+    mesh.merge(&visor);
+
+    // 3. Orejeras laterales con luz y pómulos salientes.
+    for side in [-1.0_f32, 1.0] {
+        let mut ear = sphere(1.0, (rings / 2).max(4), (sectors / 2).max(8));
+        ear.scale(Vector3::new(0.24, 0.34, 0.38));
+        ear.translate(Vector3::new(side * 0.76, 0.02, 0.04));
+        ear.set_color(armor);
+        ear.set_material(0);
+        mesh.merge(&ear);
+
+        let mut ear_light = rounded_box(0.08, 0.14, 0.10, 0.02, 1);
+        ear_light.translate(Vector3::new(side * 0.92, 0.02, 0.18));
+        ear_light.set_color(visor_mint);
+        ear_light.set_material(2);
+        mesh.merge(&ear_light);
+
+        let mut cheek = rounded_box(0.24, 0.16, 0.54, 0.04, 1);
+        cheek.rotate_y(side * 0.26);
+        cheek.rotate_x(0.18);
+        cheek.translate(Vector3::new(side * 0.66, -0.30, 0.28));
+        cheek.set_color(armor);
+        cheek.set_material(0);
+        mesh.merge(&cheek);
+    }
+
+    // 4. Bloque de la boca / mentón con rejillas horizontales.
+    let mut chin = rounded_box(0.32, 0.42, 0.34, 0.05, 1);
+    chin.translate(Vector3::new(0.0, -0.60, 0.64));
+    chin.set_color(armor);
+    chin.set_material(0);
+    mesh.merge(&chin);
+
+    for k in 0..3 {
+        let mut slat = box_mesh(0.20, 0.045, 0.08);
+        slat.translate(Vector3::new(0.0, -0.48 - k as f32 * 0.09, 0.80));
+        slat.set_color(grille_dark);
+        slat.set_material(0);
+        mesh.merge(&slat);
+    }
+
+    // 5. Anillo del cuello y tubos respiratorios segmentados.
+    let mut collar = torus(0.60, 0.09, sectors.max(10), (rings / 2).max(4));
+    collar.translate(Vector3::new(0.0, -0.82, 0.04));
+    collar.set_color(seam_dark);
+    collar.set_material(0);
+    mesh.merge(&collar);
+
+    for side in [-1.0_f32, 1.0] {
+        for s in 0..hose_segs {
+            let t = s as f32 / (hose_segs - 1).max(1) as f32;
+            let x = side * (0.20 + t * 0.56);
+            let y = -0.68 + (t - 0.35).powi(2) * 0.38;
+            let z = 0.66 - t * 0.46;
+            let mut ring = cylinder(0.075, 0.075, 0.07, pipe_segs);
+            ring.rotate_z(side * (0.45 + t * 0.55));
+            ring.rotate_y(-side * 0.55);
+            ring.translate(Vector3::new(x, y, z));
+            ring.set_color(if s % 2 == 0 { hose_olive } else { seam_dark });
+            ring.set_material(0);
+            mesh.merge(&ring);
+        }
+    }
+
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1236,6 +1359,22 @@ mod tests {
         for (pa, pb) in m2.positions.iter().zip(m2_repeat.positions.iter()) {
             assert!((*pa - *pb).length() < 1e-6);
         }
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.signed_volume() > 0.0);
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn samus_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_samus_helmet_mesh(2);
+        let m1 = build_samus_helmet_mesh(1);
+        let m0 = build_samus_helmet_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Samus L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.is_watertight());
             assert!(m.signed_volume() > 0.0);

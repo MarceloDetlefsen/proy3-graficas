@@ -160,6 +160,12 @@ impl GalleryViewer {
             self.distance = 2.9;
             self.target = Vector3::zero();
             self.spin = 0.0;
+        } else if showcase_id == "casco_samus" {
+            self.yaw = -0.25;
+            self.pitch = 0.12;
+            self.distance = 3.2;
+            self.target = Vector3::zero();
+            self.spin = 0.0;
         } else {
             self.reset_view(body_radius);
         }

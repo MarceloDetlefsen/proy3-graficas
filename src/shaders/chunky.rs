@@ -9,6 +9,22 @@ use crate::fragment::Fragment;
 use crate::shaders::{diffuse_factor, surface_mu, surface_view};
 
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
+    if fragment.material_id >= 1.5 {
+        // Visor emisivo de Samus: degradado verde menta y brillo animado suave.
+        let v_grad = (fragment.object_pos.y * 0.8 + 0.5).clamp(0.0, 1.0);
+        let rim_glow = (1.0 - surface_mu(fragment, uniforms)).powi(2);
+        let pulse = 0.90 + 0.10 * (uniforms.time * 2.2 * uniforms.shader_param).sin();
+        let center_col = Vector3::new(0.84, 0.97, 0.80);
+        let edge_col = Vector3::new(0.32, 0.78, 0.34);
+        let base = center_col * (1.0 - rim_glow * 0.75) + edge_col * (rim_glow * 0.75);
+        let out = base * (0.88 + 0.18 * v_grad) * pulse;
+        return Vector3::new(
+            out.x.clamp(0.0, 1.0),
+            out.y.clamp(0.0, 1.0),
+            out.z.clamp(0.0, 1.0),
+        );
+    }
+
     let n = fragment.normal.normalize();
     let ndl = diffuse_factor(n, uniforms);
     let band = if ndl > 0.68 {
