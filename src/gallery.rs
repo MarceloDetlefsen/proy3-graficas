@@ -10,7 +10,6 @@ use crate::camera::Camera;
 use crate::framebuffer::Framebuffer;
 use crate::icosphere::{DeformedIcosphereCache, MAX_ICOSPHERE_LEVEL};
 use crate::math::Mat4;
-use crate::mesh_builder::LodMeshCache;
 use crate::noise::Noise;
 use crate::primitive::append_screen_triangles;
 use crate::rasterizer::{
@@ -18,9 +17,7 @@ use crate::rasterizer::{
 };
 use crate::scene::Body;
 use crate::shaders::{self, Shader};
-use crate::showcase::{
-    SHOWCASE_ENTRIES, Showcase, body_for_showcase, mesh_builder_for_showcase, ready_indices,
-};
+use crate::showcase::{SHOWCASE_ENTRIES, Showcase, ready_indices};
 use crate::surface_map::BakedMaps;
 use crate::{RenderBuffers, Uniforms};
 
@@ -29,25 +26,19 @@ pub const GALLERY_MIN_LOD: usize = 3;
 
 pub struct GallerySelector {
     pub ready: Vec<usize>,
-    pub bodies: Vec<Body>,
     pub cursor: usize,
     pub shader_params: Vec<f32>,
 }
 
 impl GallerySelector {
-    pub fn new() -> Self {
+    pub fn new(bodies: &[Body]) -> Self {
         let ready = ready_indices();
-        let bodies: Vec<Body> = ready
-            .iter()
-            .filter_map(|&idx| body_for_showcase(&SHOWCASE_ENTRIES[idx]))
-            .collect();
         let shader_params = bodies
             .iter()
             .map(|b| shaders::live_param(b.shader).default)
             .collect();
         Self {
             ready,
-            bodies,
             cursor: 0,
             shader_params,
         }
@@ -63,10 +54,6 @@ impl GallerySelector {
 
     pub fn current_body_idx(&self) -> usize {
         self.cursor
-    }
-
-    pub fn current_body(&self) -> &Body {
-        &self.bodies[self.cursor]
     }
 
     pub fn select_next(&mut self) {
@@ -101,12 +88,10 @@ pub struct GalleryViewer {
     pub yaw: f32,
     pub pitch: f32,
     pub distance: f32,
-    pub target: Vector3,
     pub spin: f32,
     pub lod_level: usize,
     over_budget_frames: u8,
     cache: Option<(usize, DeformedIcosphereCache)>,
-    proc_cache: Option<(usize, LodMeshCache)>,
 }
 
 impl GalleryViewer {
@@ -115,12 +100,10 @@ impl GalleryViewer {
             yaw: 0.0,
             pitch: 0.25,
             distance: 4.0,
-            target: Vector3::zero(),
             spin: 0.0,
             lod_level: MAX_ICOSPHERE_LEVEL,
             over_budget_frames: 0,
             cache: None,
-            proc_cache: None,
         };
         viewer.reset_view(body_radius);
         viewer
@@ -130,21 +113,7 @@ impl GalleryViewer {
         self.yaw = 0.0;
         self.pitch = 0.25;
         self.distance = (body_radius * 3.2).clamp(2.2, 18.0);
-        self.target = Vector3::zero();
         self.spin = 0.0;
-    }
-
-    pub fn reset_view_for(&mut self, body_radius: f32, showcase_id: &str) {
-        if showcase_id == "meteoro_ff7" {
-            // Encuadre de referencia: cabeza abajo a la izquierda, cola hacia arriba a la derecha.
-            self.yaw = 0.0;
-            self.pitch = 0.04;
-            self.distance = 6.6;
-            self.target = Vector3::new(1.55, 0.85, 0.0);
-            self.spin = 0.0;
-        } else {
-            self.reset_view(body_radius);
-        }
     }
 
     pub fn apply_orbit_delta(&mut self, dyaw: f32, dpitch: f32) {
@@ -158,21 +127,13 @@ impl GalleryViewer {
         self.distance = (self.distance - wheel_delta * 0.45).clamp(min_d, max_d);
     }
 
-    pub fn advance(&mut self, dt: f32, body: &Body, shader_param: f32) {
-        if matches!(body.shader, Shader::Meteor) {
-            return;
-        }
-        let base_rate = if body.rotation_period.abs() > 1e-3 {
+    pub fn advance(&mut self, dt: f32, body: &Body) {
+        let spin_rate = if body.rotation_period.abs() > 1e-3 {
             std::f32::consts::TAU / body.rotation_period.max(18.0)
         } else {
             0.25
         };
-        let mult = if matches!(body.shader, Shader::Chunky) {
-            shader_param
-        } else {
-            1.0
-        };
-        self.spin += dt * base_rate * mult;
+        self.spin += dt * spin_rate;
     }
 
     pub fn record_frame_time(&mut self, frame_ms: f64) {
@@ -188,34 +149,20 @@ impl GalleryViewer {
     }
 
     pub fn camera(&self) -> Camera {
-        let cam_pos = self.target
-            + Vector3::new(
-                self.distance * self.pitch.cos() * self.yaw.sin(),
-                self.distance * self.pitch.sin(),
-                self.distance * self.pitch.cos() * self.yaw.cos(),
-            );
-        Camera::new(cam_pos, self.target, 45.0_f32.to_radians(), 0.1, 120.0)
+        let cam_pos = Vector3::new(
+            self.distance * self.pitch.cos() * self.yaw.sin(),
+            self.distance * self.pitch.sin(),
+            self.distance * self.pitch.cos() * self.yaw.cos(),
+        );
+        Camera::new(cam_pos, Vector3::zero(), 45.0_f32.to_radians(), 0.1, 120.0)
     }
 
     pub fn active_mesh<'a>(
         &'a mut self,
         body_index: usize,
-        showcase_id: &str,
         body: &Body,
         noise: &Noise,
     ) -> &'a [crate::vertex::Vertex] {
-        if let Some(builder) = mesh_builder_for_showcase(showcase_id) {
-            let needs_new = match &self.proc_cache {
-                Some((idx, _)) => *idx != body_index,
-                None => true,
-            };
-            if needs_new {
-                self.proc_cache = Some((body_index, LodMeshCache::new(builder)));
-            }
-            let proc_lod = self.lod_level.saturating_sub(3).min(2);
-            let (_, cache) = self.proc_cache.as_mut().expect("proc cache inicializada");
-            return cache.get_or_build(proc_lod);
-        }
         let needs_new = match &self.cache {
             Some((idx, _)) => *idx != body_index,
             None => true,
@@ -238,9 +185,7 @@ impl GalleryViewer {
     pub fn render_body(
         &mut self,
         body_index: usize,
-        showcase_id: &str,
         body: &Body,
-        custom_light: Option<Vector3>,
         shader_param: f32,
         time: f32,
         noise: &Noise,
@@ -252,9 +197,7 @@ impl GalleryViewer {
     ) -> usize {
         let cam = self.camera();
         let aspect = framebuffer.width as f32 / framebuffer.height.max(1) as f32;
-        let light_dir = custom_light
-            .unwrap_or_else(|| Vector3::new(-0.65, 0.80, 1.0))
-            .normalize();
+        let light_dir = Vector3::new(-0.65, 0.80, 1.0).normalize();
         let model_matrix = Mat4::rotation_z(body.axial_tilt)
             * Mat4::rotation_y(self.spin)
             * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius));
@@ -278,7 +221,7 @@ impl GalleryViewer {
             shader_param,
         };
 
-        let mesh = self.active_mesh(body_index, showcase_id, body, noise);
+        let mesh = self.active_mesh(body_index, body, noise);
         let tri_count = mesh.len() / 3;
 
         framebuffer.clear();
@@ -353,23 +296,24 @@ mod tests {
 
     #[test]
     fn gallery_selector_only_opens_ready_entries_and_clamps_live_param() {
-        let mut sel = GallerySelector::new();
-        assert!(sel.ready.len() >= 10);
-        for _ in 0..16 {
+        let bodies = crate::scene::solar_system();
+        let mut sel = GallerySelector::new(&bodies);
+        assert_eq!(sel.ready.len(), 9);
+        for _ in 0..12 {
             assert_eq!(sel.current_showcase().estado, ShowcaseStatus::Ready);
             sel.select_next();
         }
         sel.select_prev();
         assert_eq!(sel.current_showcase().estado, ShowcaseStatus::Ready);
 
-        let body = *sel.current_body();
+        let body = &bodies[sel.current_body_idx()];
         let spec = shaders::live_param(body.shader);
         for _ in 0..20 {
-            sel.adjust_param(&body, 1.0);
+            sel.adjust_param(body, 1.0);
         }
         assert!(sel.current_param() <= spec.max + 1e-5);
         for _ in 0..40 {
-            sel.adjust_param(&body, -1.0);
+            sel.adjust_param(body, -1.0);
         }
         assert!(sel.current_param() >= spec.min - 1e-5);
     }

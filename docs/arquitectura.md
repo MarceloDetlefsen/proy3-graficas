@@ -16,12 +16,3 @@
 5. **Rasterización por tiles con buffer de visibilidad** (`src/rasterizer.rs`): pantalla dividida en tiles de **`TILE_SIZE = 64`×`64`** píxeles procesados en paralelo (`rayon`); cada tile mantiene su `depth_buffer` y `tri_id_buffer` antes de invocar cualquier shader (eliminando el overdraw).
 6. **Sombreado de materiales y cielo** (`src/shaders.rs`, `src/surface_map.rs`, `src/sky.rs`): solo los píxeles visibles ejecutan `fragment_shader` usando mapas estáticos horneados (`512×256`) + capa animada + atenuación solar + brillo atmosférico; los píxeles vacíos (`INVALID_TRI_ID`) evalúan el cielo estelar y el halo solar.
 7. **Presentación y HUD RGBA** (`src/framebuffer.rs`, `src/hud.rs`): escalado *nearest-neighbor* del framebuffer interno (`400×300` por defecto, escalas `1/2`, `1/3`, `1/1`) a la ventana (`800×600`) y composición del `OverlayBuffer` RGBA propio (fuente `5×7` sin `draw_text` de raylib).
-
-## Constructor de Mallas Procedurales y Color por Vértice
-
-- **`src/mesh_builder.rs`**: define `Mesh` (posiciones, normales, colores por vértice, UVs e índices) con primitivas estancas (`box_mesh`, `rounded_box`, `cylinder`, `cone`, `sphere`, `torus`, `extruded_prism`, `loft_rings`), transformaciones (`translate`, `rotate_x/y/z`, `scale`), fusión (`merge`), verificación topológica (`is_watertight`, `outward_normal_ratio`) y caché de reconstrucción por nivel de detalle (`LodMeshCache`).
-- **Color por vértice con corrección de perspectiva** (`src/vertex.rs`, `src/clipping.rs`, `src/primitive.rs`, `src/rasterizer.rs`): `Vertex::color` se interpola linealmente en espacio de clip al recortar y con pesos en perspectiva `(pw0, pw1, pw2)` en `interpolate_screen_fragment` hasta `Fragment::color`.
-- **Cuerpos procedurales (`src/bodies.rs`, `src/showcase.rs`)**:
-  - **Cubo de Rubik** (`Shader::Chunky`): 27 cubitos con holgura y calcomanías por cara en 3 niveles de detalle (`108` / `324` / `3564` tris).
-  - **Trifuerza** (`Shader::Triforce`): tres prismas triangulares equiláteros con centro vacío y shader dorado con destello animado (`24` / `42` / `78` tris).
-  - **Meteoro de FF7** (`Shader::Meteor`): cometa con cabeza de icosfera vítrea y trazos blancos en espiral horneados, cola de 24–38 pinceladas con degradado por vértice y un orbe separado (`680` / `1328` / `2880` tris).
