@@ -212,11 +212,7 @@ pub fn deform_icosphere_for_shader(
         .map(|&p| {
             let dir = p.normalize();
             let h = shader_height(shader, noise, dir, frequency);
-            if matches!(shader, Shader::Fundido) {
-                dir * (1.0 + amplitude * h) - Vector3::new(0.0, amplitude * 0.90 * h, 0.0)
-            } else {
-                dir * (1.0 + amplitude * h)
-            }
+            dir * (1.0 + amplitude * h)
         })
         .collect();
     IcoMesh {
