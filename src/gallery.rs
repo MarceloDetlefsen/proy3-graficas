@@ -167,9 +167,9 @@ impl GalleryViewer {
             self.target = Vector3::zero();
             self.spin = 0.0;
         } else if showcase_id == "la_bombonera" {
-            self.yaw = 0.65;
-            self.pitch = 0.62;
-            self.distance = 2.9;
+            self.yaw = 0.62;
+            self.pitch = 0.70;
+            self.distance = 3.0;
             self.target = Vector3::zero();
             self.spin = 0.0;
         } else {

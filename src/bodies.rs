@@ -1277,130 +1277,242 @@ fn subdivided_pitch_slab(width: f32, height: f32, depth: f32, nx: usize, nz: usi
     m
 }
 
-/// Construye el estadio La Bombonera siguiendo `refs/bombonera.webp`:
-/// 3 lados de gradas empinadas escalonadas (azul `#103F91` y amarillo `#F2B705`),
-/// 1 lado recto de palcos grises con torres, y cancha verde con líneas blancas.
-pub fn build_bombonera_mesh(detail: usize) -> Mesh {
-    let boca_blue = Vector3::new(0x10 as f32 / 255.0, 0x3F as f32 / 255.0, 0x91 as f32 / 255.0);
-    let boca_gold = Vector3::new(0xF2 as f32 / 255.0, 0xB7 as f32 / 255.0, 0x05 as f32 / 255.0);
-    let concrete = Vector3::new(0.64, 0.65, 0.68);
-    let concrete_dark = Vector3::new(0.45, 0.47, 0.50);
-    let grass_a = Vector3::new(0.24, 0.45, 0.17);
-    let grass_b = Vector3::new(0.29, 0.51, 0.21);
-    let line_white = Vector3::new(0.95, 0.96, 0.94);
+/// Construye un prisma triangular/tetraédrico estanco de 4 triángulos (para píxeles de letras en gradas).
+fn watertight_seat_block(cx: f32, cy: f32, cz: f32, w: f32, h: f32, d: f32) -> Mesh {
+    let mut m = Mesh::new();
+    let hw = w * 0.5;
+    let hh = h * 0.5;
+    let hd = d * 0.5;
+    let p0 = m.push_vertex(Vector3::new(cx - hw, cy - hh, cz + hd), Vector3::zero(), [0.0, 0.0]);
+    let p1 = m.push_vertex(Vector3::new(cx + hw, cy - hh, cz + hd), Vector3::zero(), [0.0, 0.0]);
+    let p2 = m.push_vertex(Vector3::new(cx, cy + hh, cz + hd), Vector3::zero(), [0.0, 0.0]);
+    let p3 = m.push_vertex(Vector3::new(cx, cy, cz - hd), Vector3::zero(), [0.0, 0.0]);
+    m.push_triangle(p0, p1, p2);
+    m.push_triangle(p0, p3, p1);
+    m.push_triangle(p1, p3, p2);
+    m.push_triangle(p2, p3, p0);
+    m.compute_flat_normals();
+    m
+}
 
-    let (u_segs, pitch_nx, pitch_nz, smooth_bowl) = match detail {
-        0 => (10usize, 6usize, 8usize, true),
-        1 => (16, 12, 16, false),
-        _ => (24, 16, 22, false),
+/// Construye el estadio La Bombonera a partir de `refs/bombonera.webp`:
+/// campo 105:68 a 14 franjas con líneas y arcos, herradura en D de 3 niveles escalonados
+/// empinados (azul/amarillo/azul) con muro exterior y zócalo, letras "CABJ" y "BOCA" con
+/// la fuente 5×7 del HUD, edificio de palcos con 12×6 ventanas, torres y reflectores.
+pub fn build_bombonera_mesh(detail: usize) -> Mesh {
+    use crate::samus_bombonera_data::*;
+    let boca_blue = rgb_vec(BOCA_BLUE_RGB);
+    let boca_gold = rgb_vec(BOCA_GOLD_RGB);
+    let concrete = rgb_vec(BOCA_CONCRETE_RGB);
+    let zocalo_col = rgb_vec(BOCA_ZOCALO_RGB);
+    let grass_dark = rgb_vec(BOCA_GRASS_DARK_RGB);
+    let grass_light = rgb_vec(BOCA_GRASS_LIGHT_RGB);
+    let line_white = Vector3::new(0.95, 0.96, 0.94);
+    let window_dark = Vector3::new(0.18, 0.20, 0.24);
+    let aisle_dark = Vector3::new(0.12, 0.14, 0.18);
+
+    let (u_segs, pitch_nx, pitch_nz, steps_per_tier, show_letters, show_lamps) = match detail {
+        0 => (10usize, 4usize, 6usize, [1usize, 1, 1], false, false), // tazón liso
+        1 => (14, 8, 10, [2, 3, 3], false, true),
+        _ => (20, 10, 14, [5, 6, 7], true, true),
     };
 
     let mut mesh = Mesh::new();
 
-    // 1. Cancha verde con franjas de césped y líneas blancas por color de vértice.
-    let pitch_w = 0.86_f32;
-    let pitch_d = 1.24_f32;
-    let mut pitch = subdivided_pitch_slab(pitch_w, 0.08, pitch_d, pitch_nx, pitch_nz);
-    pitch.translate(Vector3::new(-0.04, -0.22, 0.0));
+    // 1. Campo 105:68 (largo = 1.60, ancho = 1.036) a 14 franjas con líneas blancas y arcos.
+    let pitch_l = 1.60_f32;
+    let pitch_w = 1.60_f32 * (68.0 / 105.0); // ≈ 1.036
+    let mut pitch = subdivided_pitch_slab(pitch_w, 0.06, pitch_l, pitch_nx, pitch_nz);
+    pitch.translate(Vector3::new(-0.08, -0.22, 0.0));
     pitch.paint_vertices(|_, p, _| {
-        if p.y < -0.19 {
-            return concrete_dark;
+        if p.y < -0.20 {
+            return aisle_dark;
         }
-        let lx = p.x + 0.04;
+        let lx = p.x + 0.08;
         let lz = p.z;
-        let on_outer = lx.abs() > pitch_w * 0.43 || lz.abs() > pitch_d * 0.44;
-        let on_half = lz.abs() < 0.045;
-        let on_circle = ((lx * lx + lz * lz).sqrt() - 0.16).abs() < 0.042;
-        let on_box = (lz.abs() > pitch_d * 0.31 && lz.abs() < pitch_d * 0.36 && lx.abs() < 0.22)
-            || (lz.abs() > pitch_d * 0.31 && (lx.abs() - 0.22).abs() < 0.045);
+        let on_outer = lx.abs() > pitch_w * 0.45 || lz.abs() > pitch_l * 0.46;
+        let on_half = lz.abs() < 0.038;
+        let on_circle = ((lx * lx + lz * lz).sqrt() - 0.14).abs() < 0.036;
+        let on_box = (lz.abs() > pitch_l * 0.34 && lz.abs() < pitch_l * 0.38 && lx.abs() < 0.24)
+            || (lz.abs() > pitch_l * 0.34 && (lx.abs() - 0.24).abs() < 0.036);
         if on_outer || on_half || on_circle || on_box {
             line_white
-        } else if ((lz * 8.0).floor() as i32).rem_euclid(2) == 0 {
-            grass_a
         } else {
-            grass_b
+            let stripe = ((lz + pitch_l * 0.5) / pitch_l * 14.0).floor() as i32;
+            if stripe.rem_euclid(2) == 0 {
+                grass_light
+            } else {
+                grass_dark
+            }
         }
     });
     mesh.merge(&pitch);
 
-    // 2. Grada en U de 3 lados (loft / barrido estanco de planta rectangular redondeada).
-    // Se construye en el plano XZ (rotado de XY a XZ después de sweep_profile).
+    // Arcos de gol en ambos extremos del campo.
+    for side in [-1.0_f32, 1.0] {
+        let mut goal = box_mesh(0.14, 0.055, 0.035);
+        goal.translate(Vector3::new(-0.08, -0.165, side * (pitch_l * 0.46)));
+        goal.set_color(line_white);
+        mesh.merge(&goal);
+    }
+
+    // 2. Zócalo de concreto gris claro sobresaliendo 0.05 alrededor del estadio.
+    let mut zocalo = box_mesh(pitch_w + 0.66, 0.04, pitch_l + 0.58);
+    zocalo.translate(Vector3::new(0.02, -0.27, 0.0));
+    zocalo.set_color(zocalo_col);
+    mesh.merge(&zocalo);
+
+    // 3. Herradura de gradas en D (3 lados: dos fondos + lado largo izquierdo -X).
     let mut u_path = Vec::with_capacity(u_segs + 1);
     for i in 0..=u_segs {
         let t = i as f32 / u_segs as f32;
-        // Ángulo desde -75° (esquina +X, -Z) pasando por 180° (-X) hasta +255° (+X, +Z).
-        let a = -0.35 * std::f32::consts::PI + t * (1.70 * std::f32::consts::PI);
-        // Superelipse rectangular redondeada en D.
+        let a = -0.34 * std::f32::consts::PI + t * (1.68 * std::f32::consts::PI);
         let ca = a.cos();
         let sa = a.sin();
-        let x = ca.signum() * ca.abs().powf(0.55) * 0.58 - 0.08;
-        let y = sa.signum() * sa.abs().powf(0.55) * 0.78;
+        let x = ca.signum() * ca.abs().powf(0.45) * 0.58 - 0.08;
+        let y = sa.signum() * sa.abs().powf(0.45) * 0.86;
         u_path.push(Vector3::new(x, y, 0.0));
     }
 
-    // Sección de grada empinada en (u = radial hacia afuera, v = altura).
-    let bowl_profile: Vec<[f32; 2]> = if smooth_bowl {
+    // Perfil escalonado de 3 bandejas empinadas (proporción medida BOCA_TIER_PROPORTIONS).
+    let mut profile_pts: Vec<[f32; 2]> = Vec::new();
+    // Base exterior y muro exterior hasta y = +0.26 (altura ≈ 0.50 sobre el campo).
+    profile_pts.push([0.24, -0.25]);
+    profile_pts.push([0.24, 0.26]);
+    profile_pts.push([0.19, 0.26]);
+
+    if detail == 0 {
         // Nivel bajo: tazón liso.
-        vec![
-            [-0.18, -0.26],
-            [0.18, -0.26],
-            [0.24, 0.24],
-            [0.14, 0.28],
-            [-0.18, -0.14],
-        ]
+        profile_pts.push([-0.14, -0.18]);
+        profile_pts.push([-0.14, -0.25]);
     } else {
-        // Nivel medio/alto: 3 bandejas empinadas escalonadas + muro exterior.
-        vec![
-            [-0.22, -0.26],
-            [0.20, -0.26],
-            [0.24, 0.28],
-            [0.15, 0.28],
-            [0.06, 0.14],
-            [0.00, 0.14],
-            [-0.08, 0.00],
-            [-0.14, 0.00],
-            [-0.22, -0.16],
-        ]
-    };
+        // Bajar por las 3 bandejas desde arriba (tier 2 azul -> tier 1 amarillo -> tier 0 azul).
+        let mut cur_u = 0.19_f32;
+        let mut cur_v = 0.26_f32;
+        let step_h = 0.024_f32;
+        let step_u = 0.017_f32;
+        for (tier_idx, &steps) in steps_per_tier.iter().rev().enumerate() {
+            for _ in 0..steps {
+                cur_v -= step_h;
+                profile_pts.push([cur_u, cur_v]);
+                cur_u -= step_u;
+                profile_pts.push([cur_u, cur_v]);
+            }
+            if tier_idx < 2 {
+                // Pasillo estrecho oscuro separador entre niveles.
+                cur_u -= 0.012;
+                profile_pts.push([cur_u, cur_v]);
+            }
+        }
+        profile_pts.push([cur_u, -0.25]);
+    }
 
     let widths = vec![1.0_f32; u_path.len()];
     let depths = vec![1.0_f32; u_path.len()];
-    let mut stands = sweep_profile(&u_path, &widths, &depths, &bowl_profile, false);
+    let mut stands = sweep_profile(&u_path, &widths, &depths, &profile_pts, false);
     stands.rotate_x(-FRAC_PI_2);
     stands.paint_vertices(|_, p, n| {
-        // Franja amarilla central en las gradas y banda amarilla en el muro exterior.
         let is_outer = n.x * p.x + n.z * p.z > 0.35;
         if is_outer {
-            if p.y > -0.08 && p.y < 0.06 {
+            if p.y > -0.06 && p.y < 0.06 {
                 boca_gold
             } else {
                 boca_blue
             }
-        } else if p.y > -0.03 && p.y < 0.11 {
-            boca_gold
         } else {
-            boca_blue
+            // Proporciones medidas de las 3 bandejas: [0..1] desde y = -0.18 hasta +0.26.
+            let t = ((p.y + 0.18) / 0.44).clamp(0.0, 1.0);
+            let t_low = BOCA_TIER_PROPORTIONS[0];
+            let t_mid = t_low + BOCA_TIER_PROPORTIONS[1];
+            if (t - t_low).abs() < 0.025 || (t - t_mid).abs() < 0.025 {
+                aisle_dark
+            } else if t < t_low || t > t_mid {
+                boca_blue
+            } else {
+                boca_gold
+            }
         }
     });
     mesh.merge(&stands);
 
-    // 3. Lado recto de palcos (edificio gris con 2 torres laterales).
-    let mut palcos = box_mesh(0.24, 0.62, 1.38);
-    palcos.translate(Vector3::new(0.54, 0.05, 0.0));
-    palcos.paint_vertices(|_, p, _| {
-        if p.x < 0.44 && ((p.y * 12.0).floor() as i32).rem_euclid(2) == 0 {
-            concrete_dark
+    // 4. Letras "CABJ" y "BOCA" en el nivel superior usando la fuente 5×7 del HUD.
+    if show_letters {
+        let words = [("CABJ", -0.44_f32), ("BOCA", 0.14_f32)];
+        for (word, z_start) in words {
+            for (ci, ch) in word.chars().enumerate() {
+                let Some(glyph) = crate::hud::glyph_5x7(ch) else {
+                    continue;
+                };
+                let cz_base = z_start + ci as f32 * 0.095;
+                for (row, &bits) in glyph.iter().enumerate() {
+                    for col in 0..5 {
+                        if (bits >> (4 - col)) & 1 != 0 && (row + col) % 2 == 0 {
+                            let y = 0.21 - row as f32 * 0.015;
+                            let x = -0.78 + row as f32 * 0.008;
+                            let z = cz_base + col as f32 * 0.015;
+                            let mut blk = watertight_seat_block(x, y, z, 0.016, 0.016, 0.016);
+                            blk.set_color(boca_gold);
+                            mesh.merge(&blk);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Edificio de palcos en el lado largo abierto (+X) con ventanas (12×6) y 2 torres.
+    let mut palcos = subdivided_pitch_slab(0.60, 0.18, pitch_l, 6, 12);
+    palcos.rotate_z(FRAC_PI_2);
+    palcos.translate(Vector3::new(0.54, 0.06, 0.0));
+    palcos.paint_vertices(|_, p, n| {
+        if n.x < -0.5 && p.y > -0.18 && p.y < 0.30 {
+            let r_idx = ((p.y + 0.18) * 14.0).floor() as i32;
+            let c_idx = ((p.z + pitch_l * 0.5) * 9.0).floor() as i32;
+            if r_idx.rem_euclid(2) == 1 && c_idx.rem_euclid(2) == 1 {
+                window_dark
+            } else {
+                concrete
+            }
         } else {
             concrete
         }
     });
     mesh.merge(&palcos);
 
+    // Dos torres extremas con losas de balcones apiladas.
     for side in [-1.0_f32, 1.0] {
-        let mut tower = box_mesh(0.28, 0.72, 0.20);
-        tower.translate(Vector3::new(0.54, 0.10, side * 0.68));
+        let tz = side * (pitch_l * 0.48);
+        let mut tower = box_mesh(0.24, 0.72, 0.18);
+        tower.translate(Vector3::new(0.54, 0.12, tz));
         tower.set_color(concrete);
         mesh.merge(&tower);
+        for b in 0..3 {
+            let mut balc = box_mesh(0.28, 0.03, 0.21);
+            balc.translate(Vector3::new(0.52, -0.06 + b as f32 * 0.18, tz));
+            balc.set_color(zocalo_col);
+            mesh.merge(&balc);
+        }
+    }
+
+    // Dos torres de luces delgadas en las esquinas + pequeños racimos sobre las gradas.
+    if show_lamps {
+        for side in [-1.0_f32, 1.0] {
+            let mut mast = cylinder(0.018, 0.012, 0.52, 6);
+            mast.translate(Vector3::new(0.46, 0.48, side * 0.76));
+            mast.set_color(zocalo_col);
+            mesh.merge(&mast);
+
+            let mut cluster = box_mesh(0.07, 0.04, 0.09);
+            cluster.translate(Vector3::new(0.46, 0.75, side * 0.76));
+            cluster.set_color(line_white);
+            mesh.merge(&cluster);
+        }
+        for z_lamp in [-0.42_f32, 0.0, 0.42] {
+            let mut rim_lamp = box_mesh(0.04, 0.04, 0.06);
+            rim_lamp.translate(Vector3::new(-0.84, 0.28, z_lamp));
+            rim_lamp.set_color(line_white);
+            mesh.merge(&rim_lamp);
+        }
     }
 
     mesh

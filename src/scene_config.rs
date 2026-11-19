@@ -212,7 +212,7 @@ pub fn favorites_body_spec(id: &str) -> FavoritesBodySpec {
             orbit_inclination: -0.02,
             rotation_period: 30.0,
             axial_tilt: 0.10,
-            bounding_mult: 1.25,
+            bounding_mult: 1.46,
         },
         "spurs_crest" => FavoritesBodySpec {
             radius: 1.10,
