@@ -408,6 +408,10 @@ pub fn generate_docs_captures() {
     // 12. Galería de trofeos: cuerpos procedurales del sistema de favoritos.
     for &(id, fname) in &[
         ("cubo_rubik", "galeria_rubik.png"),
+        ("cubo_skweb", "galeria_skewb.png"),
+        ("megaminx", "galeria_megaminx.png"),
+        ("joycon_izquierdo", "galeria_joycon_izq.png"),
+        ("joycon_derecho", "galeria_joycon_der.png"),
         ("trifuerza", "galeria_trifuerza.png"),
         ("meteoro_ff7", "galeria_meteoro_ff7.png"),
     ] {

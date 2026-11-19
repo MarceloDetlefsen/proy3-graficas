@@ -24,4 +24,7 @@
 - **Cuerpos procedurales (`src/bodies.rs`, `src/showcase.rs`)**:
   - **Cubo de Rubik** (`Shader::Chunky`): 27 cubitos con holgura y calcomanías por cara en 3 niveles de detalle (`108` / `324` / `3564` tris).
   - **Trifuerza** (`Shader::Triforce`): tres prismas triangulares equiláteros con centro vacío y shader dorado con destello animado (`24` / `42` / `78` tris).
-  - **Meteoro de FF7** (`Shader::Meteor`): cometa con cabeza de icosfera vítrea y trazos blancos en espiral horneados, cola de 24–38 pinceladas con degradado por vértice y un orbe separado (`680` / `1328` / `2880` tris).
+  - **Meteoro de FF7** (`Shader::Meteor`): cometa con cabeza de icosfera vítrea y trazos blancos en espiral horneados, cola de 24–38 pinceladas con degradado por vértice y un orbe separado (`672` / `1316` / `2880` tris).
+  - **Cubo Skewb** (`Shader::Chunky`): cubo negro de lado 1 con rombo central y 4 triángulos rectángulos isósceles por cara elevados (`12` / `48` / `372` tris).
+  - **Megaminx** (`Shader::Chunky`): dodecaedro regular negro con 11 pegatinas por cara en 12 colores (`36` / `312` / `1668` tris).
+  - **Joy-Con izquierdo / derecho** (`Shader::Chunky`): carcasa redondeada gris mate espejada, riel lateral `#00C3E3` / `#FF4554`, palanca, cruceta/ABXY, `-`/`+`, captura/Home y SL/SR (`240` / `392` / `696` y `264` / `424` / `744` tris).
