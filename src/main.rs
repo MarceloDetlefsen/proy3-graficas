@@ -1,6 +1,7 @@
 mod camera;
 mod clipping;
 mod culling;
+mod docs_capture;
 mod fragment;
 mod framebuffer;
 mod hud;
@@ -262,6 +263,11 @@ fn render(
 }
 
 fn main() {
+    if std::env::args().any(|a| a == "--docs") {
+        docs_capture::generate_docs_captures();
+        return;
+    }
+
     let obj_path = "assets/sphere.obj";
     let obj = load_obj(obj_path).expect("No se pudo cargar assets/sphere.obj");
     let (mesh_vertices, mesh_indices) = obj.to_indexed_mesh();
