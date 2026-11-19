@@ -1,4 +1,5 @@
 mod app;
+mod bodies;
 mod camera;
 mod clipping;
 mod culling;
@@ -10,6 +11,7 @@ mod hud;
 mod icosphere;
 mod lod;
 mod math;
+mod mesh_builder;
 mod mesh_lod;
 mod nav;
 mod noise;
@@ -763,9 +765,7 @@ fn main() {
             continue;
         }
         if matches!(app_ctrl.state, app::AppState::Gallery) {
-            let bodies = &menu_backdrop.bodies;
-            let selector = gallery_selector
-                .get_or_insert_with(|| gallery::GallerySelector::new(bodies));
+            let selector = gallery_selector.get_or_insert_with(gallery::GallerySelector::new);
             let mut body_changed = false;
             if window.is_key_pressed(KeyboardKey::KEY_A) {
                 selector.select_prev();
@@ -776,19 +776,21 @@ fn main() {
                 body_changed = true;
             }
             let body_idx = selector.current_body_idx();
-            let body = &bodies[body_idx];
+            let body = *selector.current_body();
+            let showcase_entry = selector.current_showcase();
             let viewer = gallery_viewer.get_or_insert_with(|| gallery::GalleryViewer::new(body.radius));
             if body_changed {
-                viewer.reset_view(body.radius);
+                viewer.reset_view_for(body.radius, showcase_entry.id);
             }
             if window.is_key_pressed(KeyboardKey::KEY_FOUR) {
-                selector.adjust_param(body, -1.0);
+                selector.adjust_param(&body, -1.0);
             }
             if window.is_key_pressed(KeyboardKey::KEY_FIVE) {
-                selector.adjust_param(body, 1.0);
+                selector.adjust_param(&body, 1.0);
             }
+            let param = selector.current_param();
             gallery_time += dt;
-            viewer.advance(dt, body);
+            viewer.advance(dt, &body, param);
 
             if window.is_mouse_button_down(MouseButton::MOUSE_BUTTON_LEFT) {
                 let md = window.get_mouse_delta();
@@ -811,14 +813,16 @@ fn main() {
                 viewer.apply_zoom(wheel, body.radius);
             }
             if window.is_key_pressed(KeyboardKey::KEY_R) {
-                viewer.reset_view(body.radius);
+                viewer.reset_view_for(body.radius, showcase_entry.id);
             }
 
             let t_gal = std::time::Instant::now();
             let tris = viewer.render_body(
                 body_idx,
-                body,
-                selector.current_param(),
+                showcase_entry.id,
+                &body,
+                showcase_entry.light_dir,
+                param,
                 gallery_time,
                 &noise,
                 &baked,
@@ -829,14 +833,14 @@ fn main() {
             );
             let spec = shaders::live_param(body.shader);
             let snap = hud::GalleryHudSnapshot {
-                entry: selector.current_showcase(),
+                entry: showcase_entry,
                 active_showcase_idx: selector.current_showcase_idx(),
                 radius: body.radius,
                 tris,
                 lod_level: viewer.lod_level,
                 shader_name: shader_name(body.shader),
                 live_param_name: spec.name,
-                live_param_value: selector.current_param(),
+                live_param_value: param,
                 fps: gallery_fps,
             };
             overlay_buf.resize(
@@ -1268,7 +1272,7 @@ fn main() {
             let body_mesh = session.body_caches[body_idx].get_or_build(level, &noise);
             let body_tris = body_mesh.len() / 3;
             tris_before_cull += body_tris;
-            if frustum_culling && !frustum.intersects_sphere(body_pos, scene::effective_radius(body))
+            if frustum_culling && !frustum.intersects_sphere(body_pos, scene::culling_radius(body))
             {
                 continue;
             }

@@ -16,6 +16,8 @@ pub struct ScreenVertex {
     pub normal: Vector3,
     #[allow(dead_code)]
     pub uv: [f32; 2],
+    pub color: Vector3,
+    pub material_id: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -40,6 +42,8 @@ fn clip_to_screen_vertex(v: &ClipVertex, viewport_w: f32, viewport_h: f32) -> Sc
         world_pos: v.world_pos,
         normal: v.normal.normalize(),
         uv: v.uv,
+        color: v.color,
+        material_id: v.material_id,
     }
 }
 

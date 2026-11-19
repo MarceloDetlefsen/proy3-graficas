@@ -1,6 +1,8 @@
 #![allow(dead_code)]
 //! Registro de trofeos (`Showcase`) para la galería y el sistema de favoritos.
 
+use raylib::prelude::Vector3;
+
 use crate::app::SystemId;
 use crate::shaders::Shader;
 
@@ -21,6 +23,7 @@ pub struct Showcase {
     pub estado: ShowcaseStatus,
     pub shader: Option<Shader>,
     pub has_mesh: bool,
+    pub light_dir: Option<Vector3>,
 }
 
 pub const SHOWCASE_ENTRIES: &[Showcase] = &[
@@ -35,6 +38,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Star),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "zebes",
@@ -46,6 +50,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Rocky),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "tau_ceti",
@@ -57,6 +62,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::GasGiant),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "ardens",
@@ -68,6 +74,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Ardens),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "abismo",
@@ -79,6 +86,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Abismo),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "basquia",
@@ -90,6 +98,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Basquia),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "vestigio",
@@ -101,6 +110,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Vestigio),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "mural",
@@ -112,6 +122,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Mural),
         has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "fundido",
@@ -123,6 +134,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Fundido),
         has_mesh: true,
+        light_dir: None,
     },
     // --- Sistema de favoritos (10 cuerpos Placeholder) ---
     Showcase {
@@ -135,6 +147,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "joycon_izquierdo",
@@ -146,6 +159,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "joycon_derecho",
@@ -157,17 +171,19 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "cubo_rubik",
         nombre: "Cubo de Rubik",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "27 cubitos negros con holgura y calcomanias por cara; shader chunky en 3 bandas con borde Fresnel.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "raqueta_tenis",
@@ -179,6 +195,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "cubo_skweb",
@@ -190,17 +207,19 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
-        id: "asteroide_ff7",
-        nombre: "Asteroide de FF7",
+        id: "meteoro_ff7",
+        nombre: "Meteoro de FF7",
         sistema: SystemId::Favoritos,
-        tipo: "Asteroide",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        tipo: "Cometa",
+        descripcion_es: "Cabeza vitrea con trazos blancos en espiral horneados, cola de pinceladas con degradado por vertice y orbe.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Meteor),
+        has_mesh: true,
+        light_dir: Some(Vector3 { x: -0.716, y: -0.577, z: 0.391 }),
     },
     Showcase {
         id: "casco_samus",
@@ -212,17 +231,19 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
     Showcase {
         id: "trifuerza",
         nombre: "Trifuerza",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Tres prismas triangulares equilateros con centro vacio; shader dorado metalico con destello animado.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Triforce),
+        has_mesh: true,
+        light_dir: None,
     },
     Showcase {
         id: "la_bombonera",
@@ -234,6 +255,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         estado: ShowcaseStatus::Placeholder,
         shader: None,
         has_mesh: false,
+        light_dir: None,
     },
 ];
 
@@ -251,6 +273,46 @@ pub fn favorites_ready_entries() -> Vec<&'static Showcase> {
         .iter()
         .filter(|e| e.sistema == SystemId::Favoritos && e.estado == ShowcaseStatus::Ready)
         .collect()
+}
+
+pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_builder::Mesh> {
+    match id {
+        "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
+        "trifuerza" => Some(crate::bodies::build_triforce_mesh),
+        "meteoro_ff7" => Some(crate::bodies::build_meteor_mesh),
+        _ => None,
+    }
+}
+
+pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
+    if entry.estado != ShowcaseStatus::Ready {
+        return None;
+    }
+    if entry.sistema == SystemId::Realista {
+        return crate::scene::solar_system()
+            .into_iter()
+            .find(|b| b.name == entry.nombre);
+    }
+    let shader = entry.shader?;
+    Some(crate::scene::Body {
+        name: entry.nombre,
+        kind: crate::scene::BodyKind::Planet,
+        radius: 1.0,
+        mass: 10.0,
+        orbit_radius: 0.0,
+        orbit_period: 0.0,
+        phase: 0.0,
+        orbit_inclination: 0.0,
+        rotation_period: 24.0,
+        axial_tilt: if entry.id == "meteoro_ff7" { 0.0 } else { 0.22 },
+        shader,
+        surface: crate::scene::SurfaceParams {
+            seed: 0,
+            noise_frequency: 4.0,
+            deformation_amplitude: 0.0,
+            max_deformation: 0.0,
+        },
+    })
 }
 
 /// El sistema de favoritos está listo para vuelo cuando tiene su estrella
@@ -305,7 +367,11 @@ mod tests {
     #[test]
     fn favorites_readiness_requires_star_and_three_bodies() {
         assert!(!is_favorites_system_ready(SHOWCASE_ENTRIES));
-        assert!(favorites_ready_entries().is_empty());
+        assert!(
+            favorites_ready_entries()
+                .iter()
+                .all(|e| e.estado == ShowcaseStatus::Ready)
+        );
 
         let sample = [
             Showcase {
@@ -318,6 +384,7 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Star),
                 has_mesh: true,
+                light_dir: None,
             },
             Showcase {
                 id: "b1",
@@ -329,6 +396,7 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Rocky),
                 has_mesh: true,
+                light_dir: None,
             },
             Showcase {
                 id: "b2",
@@ -340,6 +408,7 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Rocky),
                 has_mesh: true,
+                light_dir: None,
             },
             Showcase {
                 id: "b3",
@@ -351,8 +420,34 @@ mod tests {
                 estado: ShowcaseStatus::Ready,
                 shader: Some(Shader::Rocky),
                 has_mesh: true,
+                light_dir: None,
             },
         ];
         assert!(is_favorites_system_ready(&sample));
+    }
+
+    #[test]
+    fn ready_procedural_bodies_build_valid_decreasing_lods_under_4000_tris() {
+        for entry in SHOWCASE_ENTRIES {
+            if entry.estado == ShowcaseStatus::Ready
+                && let Some(builder) = mesh_builder_for_showcase(entry.id)
+            {
+                let m0 = builder(0);
+                let m1 = builder(1);
+                let m2 = builder(2);
+                assert!(m2.tri_count() <= 4000, "{} L2={}", entry.id, m2.tri_count());
+                assert!(
+                    m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count(),
+                    "{}: {} / {} / {}",
+                    entry.id,
+                    m0.tri_count(),
+                    m1.tri_count(),
+                    m2.tri_count()
+                );
+                for m in [&m0, &m1, &m2] {
+                    assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+                }
+            }
+        }
     }
 }
