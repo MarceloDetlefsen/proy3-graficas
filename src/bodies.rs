@@ -1063,9 +1063,70 @@ fn samus_radial_at(angle: f32) -> f32 {
     prof[i0] * (1.0 - f) + prof[i1] * f
 }
 
+/// Construye una placa de visor estanca y simétrica con anillo intermedio curvado
+/// para abrazar la cúpula convexa sin que la esfera atraviese los triángulos.
+fn curved_visor_shell<F: Fn(f32, f32) -> f32>(contour_xy: &[[f32; 2]], dome_z_at: F) -> Mesh {
+    let mut m = Mesh::new();
+    let n = contour_xy.len();
+    let cx = 0.0_f32;
+    let cy = -0.02_f32;
+    let front_off = 0.068_f32;
+    let back_off = -0.050_f32;
+
+    let c_front = m.push_vertex(
+        Vector3::new(cx, cy, dome_z_at(cx, cy) + front_off),
+        Vector3::new(0.0, 0.0, 1.0),
+        [0.5, 0.5],
+    );
+    let c_back = m.push_vertex(
+        Vector3::new(cx, cy, dome_z_at(cx, cy) + back_off),
+        Vector3::new(0.0, 0.0, -1.0),
+        [0.5, 0.5],
+    );
+
+    let mut ring_m = Vec::with_capacity(n);
+    let mut ring_f = Vec::with_capacity(n);
+    let mut ring_b = Vec::with_capacity(n);
+    for &[x, y] in contour_xy {
+        let mx = cx + (x - cx) * 0.55;
+        let my = cy + (y - cy) * 0.55;
+        ring_m.push(m.push_vertex(
+            Vector3::new(mx, my, dome_z_at(mx, my) + front_off - 0.004),
+            Vector3::new(mx * 0.3, my * 0.2, 0.95).normalize(),
+            [0.5, 0.5],
+        ));
+        let z_s = dome_z_at(x, y);
+        ring_f.push(m.push_vertex(
+            Vector3::new(x, y, z_s + front_off - 0.012),
+            Vector3::new(x * 0.4, y * 0.2, 0.9).normalize(),
+            [0.5, 0.5],
+        ));
+        ring_b.push(m.push_vertex(
+            Vector3::new(x * 1.04, y * 1.04, z_s + back_off),
+            Vector3::new(x * 0.5, y * 0.3, -0.8).normalize(),
+            [0.5, 0.5],
+        ));
+    }
+    for i in 0..n {
+        let j = (i + 1) % n;
+        // Tapa frontal en dos anillos curvos (c_front -> ring_m -> ring_f)
+        m.push_triangle(c_front, ring_m[i], ring_m[j]);
+        m.push_triangle(ring_m[i], ring_f[i], ring_f[j]);
+        m.push_triangle(ring_m[i], ring_f[j], ring_m[j]);
+        // Tapa trasera mirando -Z
+        m.push_triangle(c_back, ring_b[j], ring_b[i]);
+        // Bisel lateral conectando frente y atrás
+        m.push_triangle(ring_f[i], ring_b[i], ring_b[j]);
+        m.push_triangle(ring_f[i], ring_b[j], ring_f[j]);
+    }
+    m.compute_flat_normals();
+    m
+}
+
 /// Construye el casco de Samus Aran a partir de las medidas de `refs/samus_helmet.jpg`:
-/// cúpula ovalada con barniz, 3 surcos oscuros proyectados, visor verde emisivo curvado
-/// sobre el rostro, barbilla con 3 rendijas, orejeras simétricas con pómulos y mangueras acanaladas.
+/// cúpula ovalada terracota, 3 surcos oscuros simétricos abrazando la corona, visor angular
+/// verde menta curvado sobre el rostro, barbilla con 3 rendijas, orejeras con pómulos y
+/// dos mangueras acanaladas.
 pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     use crate::samus_bombonera_data::*;
     let armor = rgb_vec(SAMUS_ARMOR_RGB);
@@ -1073,7 +1134,7 @@ pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     let visor_col = rgb_vec(SAMUS_VISOR_CENTER_RGB);
     let hose_a = rgb_vec(SAMUS_HOSE_A_RGB);
     let hose_b = rgb_vec(SAMUS_HOSE_B_RGB);
-    let grille_dark = Vector3::new(0.14, 0.12, 0.12);
+    let grille_dark = Vector3::new(0.16, 0.14, 0.14);
 
     let (rings, sectors, ear_rings, ear_sectors, hose_ribs, hose_prof_segs) = match detail {
         0 => (10usize, 16usize, 5usize, 8usize, 6usize, 4usize),
@@ -1086,96 +1147,131 @@ pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     let ry = 0.90_f32;
     let rz = 0.84_f32;
 
-    // Función de superficie de la cúpula para proyectar surcos y curvar el visor sin huecos.
     let dome_z_at = |x: f32, y: f32| -> f32 {
         let nx = x / rx;
         let ny = (y - 0.04) / ry;
         (1.0 - nx * nx - ny * ny).max(0.02).sqrt() * rz
     };
 
-    // 1. Cúpula ovalada limpia con ligero estrechamiento hacia la mandíbula.
+    // 1. Cúpula ovalada limpia con ligero estrechamiento mandibular (satinado sin mancha blanca).
     let mut dome = sphere(1.0, rings, sectors);
     for p in &mut dome.positions {
-        let jaw_taper = 1.0 - 0.16 * (-p.y).max(0.0);
+        let jaw_taper = 1.0 - 0.18 * (-p.y).max(0.0);
         p.x *= rx * jaw_taper;
         p.y = p.y * ry + 0.04;
         p.z *= rz;
     }
     dome.compute_smooth_normals();
     dome.set_color(armor);
-    dome.set_material(1); // barniz metálico
+    dome.set_material(0);
     mesh.merge(&dome);
 
-    // 2. Tres surcos oscuros (central + 2 laterales) abrazando la cúpula hasta el visor.
+    // 2. Tres surcos oscuros simétricos pegados a la superficie desde la coronilla hasta el visor.
     let groove_prof = rounded_rect_profile_2d(0.15, 1);
     let groove_paths: Vec<Vec<[f32; 2]>> = vec![
-        vec![[0.0, 0.92], [0.0, 0.72], [0.0, 0.48], [0.0, 0.25]],
-        vec![[-0.22, 0.88], [-0.26, 0.62], [-0.24, 0.34], [-0.46, 0.20]],
-        vec![[0.22, 0.88], [0.26, 0.62], [0.24, 0.34], [0.46, 0.20]],
+        vec![
+            [0.0, 0.92],
+            [0.0, 0.80],
+            [0.0, 0.66],
+            [0.0, 0.52],
+            [0.0, 0.38],
+            [0.0, 0.25],
+        ],
+        vec![
+            [-0.18, 0.90],
+            [-0.21, 0.78],
+            [-0.22, 0.64],
+            [-0.21, 0.50],
+            [-0.20, 0.36],
+            [-0.31, 0.28],
+            [-0.42, 0.20],
+        ],
+        vec![
+            [0.18, 0.90],
+            [0.21, 0.78],
+            [0.22, 0.64],
+            [0.21, 0.50],
+            [0.20, 0.36],
+            [0.31, 0.28],
+            [0.42, 0.20],
+        ],
     ];
     for gpts in &groove_paths {
         let mut path = Vec::with_capacity(gpts.len());
         for &[gx, gy] in gpts {
-            path.push(Vector3::new(gx, gy, dome_z_at(gx, gy) + 0.006));
+            path.push(Vector3::new(gx, gy, dome_z_at(gx, gy) + 0.008));
         }
-        let widths = vec![0.032; path.len()];
-        let depths = vec![0.022; path.len()];
+        let widths = vec![0.028; path.len()];
+        let depths = vec![0.020; path.len()];
         let mut ribbon = sweep_profile(&path, &widths, &depths, &groove_prof, false);
         ribbon.set_color(groove_col);
         ribbon.set_material(0);
         mesh.merge(&ribbon);
     }
 
-    // 3. Visor frontal medido, curvado sobre la superficie de la cúpula sin que la cúpula lo atraviese.
-    let visor_xz: Vec<[f32; 2]> = SAMUS_VISOR_POLY
-        .iter()
-        .map(|&[x, y]| [x * 0.84, -y * 0.84])
-        .collect();
-    let mut visor = beveled_extruded_contour(&visor_xz, 0.24, 0.94, 0.022);
-    visor.rotate_x(FRAC_PI_2);
-    for p in &mut visor.positions {
-        let surf_z = dome_z_at(p.x, p.y);
-        p.z += surf_z + 0.02;
-    }
-    visor.compute_flat_normals();
+    // 3. Visor simétrico curvado sobre la cúpula (borde superior ancho con punta central).
+    let visor_contour_ccw = [
+        [-0.50, 0.25],
+        [-0.44, -0.04],
+        [-0.18, -0.26],
+        [-0.11, -0.46],
+        [0.11, -0.46],
+        [0.18, -0.26],
+        [0.44, -0.04],
+        [0.50, 0.25],
+        [0.16, 0.19],
+        [0.10, 0.25],
+        [-0.10, 0.25],
+        [-0.16, 0.19],
+    ];
+    let mut visor = curved_visor_shell(&visor_contour_ccw, dome_z_at);
     visor.set_color(visor_col);
     visor.set_material(2); // visor emisivo animado
     mesh.merge(&visor);
 
-    // 4. Barbilla estrechándose hacia abajo con 3 rendijas horizontales oscuras.
+    // 4. Barbilla integrada bajo el visor con tres rendijas horizontales oscuras.
     let chin_rings = vec![
-        (-0.94_f32, vec![[-0.13, 0.34], [0.13, 0.34], [0.10, 0.64], [-0.10, 0.64]]),
-        (-0.66, vec![[-0.21, 0.32], [0.21, 0.32], [0.17, 0.72], [-0.17, 0.72]]),
-        (-0.34, vec![[-0.25, 0.30], [0.25, 0.30], [0.22, 0.76], [-0.22, 0.76]]),
+        (-0.92_f32, vec![[-0.12, 0.30], [0.12, 0.30], [0.09, 0.56], [-0.09, 0.56]]),
+        (-0.66, vec![[-0.19, 0.30], [0.19, 0.30], [0.15, 0.64], [-0.15, 0.64]]),
+        (-0.40, vec![[-0.22, 0.30], [0.22, 0.30], [0.18, 0.68], [-0.18, 0.68]]),
     ];
     let mut chin = loft_rings(&chin_rings);
     chin.set_color(armor);
-    chin.set_material(1);
+    chin.set_material(0);
     mesh.merge(&chin);
 
     for k in 0..3 {
-        let mut slat = box_mesh(0.19 - k as f32 * 0.02, 0.038, 0.05);
-        slat.translate(Vector3::new(0.0, -0.54 - k as f32 * 0.10, 0.72));
+        let mut slat = box_mesh(0.16 - k as f32 * 0.015, 0.036, 0.06);
+        slat.translate(Vector3::new(0.0, -0.52 - k as f32 * 0.10, 0.65 - k as f32 * 0.02));
         slat.set_color(grille_dark);
         slat.set_material(0);
         mesh.merge(&slat);
     }
 
-    // 5. Orejeras grandes simétricas a media altura y pómulos diagonales hacia la barbilla.
+    // 5. Orejeras grandes simétricas + guardas de pómulo barridas hacia la barbilla.
+    let cheek_prof = rounded_rect_profile_2d(0.28, 1);
     for side in [-1.0_f32, 1.0] {
         let mut ear = sphere(1.0, ear_rings, ear_sectors);
-        ear.scale(Vector3::new(0.24, 0.30, 0.32));
-        ear.translate(Vector3::new(side * 0.74, -0.02, -0.02));
+        ear.scale(Vector3::new(0.22, 0.28, 0.30));
+        ear.translate(Vector3::new(side * 0.72, -0.02, -0.02));
         ear.set_color(armor);
-        ear.set_material(1);
+        ear.set_material(0);
         mesh.merge(&ear);
 
-        let mut cheek = rounded_box(0.22, 0.14, 0.48, 0.035, 1);
-        cheek.rotate_y(side * 0.30);
-        cheek.rotate_x(0.24);
-        cheek.translate(Vector3::new(side * 0.66, -0.28, 0.20));
+        let cheek_path = vec![
+            Vector3::new(side * 0.68, -0.18, 0.06),
+            Vector3::new(side * 0.60, -0.32, 0.26),
+            Vector3::new(side * 0.48, -0.44, 0.42),
+        ];
+        let mut cheek = sweep_profile(
+            &cheek_path,
+            &[0.14, 0.13, 0.11],
+            &[0.18, 0.16, 0.14],
+            &cheek_prof,
+            false,
+        );
         cheek.set_color(armor);
-        cheek.set_material(1);
+        cheek.set_material(0);
         mesh.merge(&cheek);
     }
 
@@ -1186,12 +1282,12 @@ pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
     let total_steps = hose_ribs * 2;
     for s in 0..=total_steps {
         let t = s as f32 / total_steps as f32;
-        let hx = 0.16 + t * 0.46;
-        let hy = -0.78 + t * t * 0.36;
-        let hz = 0.64 - t * 0.42;
+        let hx = 0.14 + t * 0.38;
+        let hy = -0.74 + t * t * 0.32;
+        let hz = 0.56 - t * 0.22;
         let rib_mod = if s % 2 == 1 { 1.15 } else { 0.85 };
         path_pts.push(Vector3::new(hx, hy, hz));
-        widths.push(0.11 * rib_mod);
+        widths.push(0.105 * rib_mod);
     }
     for side in [-1.0_f32, 1.0] {
         let sided_path: Vec<Vector3> = path_pts
