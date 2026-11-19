@@ -8,6 +8,7 @@ use crate::vertex::Vertex;
 
 pub mod abismo;
 pub mod ardens;
+pub mod asteroid;
 pub mod basquia;
 pub mod chunky;
 pub mod fundido;
@@ -33,6 +34,7 @@ pub enum Shader {
     Fundido,
     Chunky,
     Triforce,
+    Asteroid,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -120,6 +122,7 @@ pub fn live_param(shader: Shader) -> LiveParam {
         Shader::Fundido => "Brillo magma",
         Shader::Chunky => "Velocidad giro",
         Shader::Triforce => "Velocidad destello",
+        Shader::Asteroid => "Intensidad grietas",
         Shader::Ship | Shader::Prop(_) => "Brillo",
     };
     LiveParam {
@@ -150,6 +153,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Fundido => fundido::shade(fragment, uniforms),
         Shader::Chunky => chunky::shade(fragment, uniforms),
         Shader::Triforce => triforce::shade(fragment, uniforms),
+        Shader::Asteroid => asteroid::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -164,7 +168,9 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         }
     };
     let p = uniforms.shader_param;
-    if !matches!(shader, Shader::Chunky | Shader::Triforce) && (p - 1.0).abs() > 1e-3 {
+    if !matches!(shader, Shader::Chunky | Shader::Triforce | Shader::Asteroid)
+        && (p - 1.0).abs() > 1e-3
+    {
         let luma = 0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z;
         color.x = (luma + (color.x - luma) * p).clamp(0.0, 1.0);
         color.y = (luma + (color.y - luma) * p).clamp(0.0, 1.0);
@@ -201,6 +207,7 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Fundido => "Shader: Fundido",
         Shader::Chunky => "Shader: Chunky",
         Shader::Triforce => "Shader: Triforce",
+        Shader::Asteroid => "Shader: Asteroid",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }

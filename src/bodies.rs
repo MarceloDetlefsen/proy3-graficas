@@ -193,6 +193,41 @@ pub fn build_triforce_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+/// Construye el Asteroide de FF7 a partir de una icosfera con deformación fuerte
+/// (`planet_height`), escala no uniforme alargada y un cráter principal.
+pub fn build_asteroid_mesh(detail: usize) -> Mesh {
+    let ico_lvl = match detail {
+        0 => 1, // 80 tris
+        1 => 2, // 320 tris
+        _ => 3, // 1280 tris
+    };
+    let ico = crate::icosphere::icosphere_level(ico_lvl);
+    let noise = crate::noise::Noise::new(77);
+    let crater_dir = Vector3::new(0.42, 0.55, 0.72).normalize();
+
+    let mut mesh = Mesh::new();
+    for &unit in &ico.positions {
+        let h = crate::surface_map::planet_height(&noise, unit, 3.5);
+        let mut r = 0.85 + (h - 0.5) * 0.42;
+
+        // Cráter en la cara frontal-superior.
+        let ang = unit.dot(crater_dir).clamp(-1.0, 1.0).acos();
+        if ang < 0.44 {
+            let t = ang / 0.44;
+            let bowl = (1.0 - t * t).max(0.0);
+            let rim = (-((t - 0.85) / 0.14).powi(2)).exp() * 0.08;
+            r += rim - bowl * 0.24;
+        }
+        let pos = unit * r;
+        let uv = crate::icosphere::spherical_uv(unit);
+        mesh.push_vertex(pos, unit, uv);
+    }
+    mesh.indices = ico.indices;
+    mesh.scale(Vector3::new(1.38, 0.82, 0.94));
+    mesh.compute_smooth_normals();
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -216,6 +251,20 @@ mod tests {
         let m2 = build_triforce_mesh(2);
         let m1 = build_triforce_mesh(1);
         let m0 = build_triforce_mesh(0);
+
+        assert!(m2.tri_count() <= 4000);
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+        }
+    }
+
+    #[test]
+    fn asteroid_builds_three_decreasing_watertight_lods_under_4000_tris() {
+        let m2 = build_asteroid_mesh(2);
+        let m1 = build_asteroid_mesh(1);
+        let m0 = build_asteroid_mesh(0);
 
         assert!(m2.tri_count() <= 4000);
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());

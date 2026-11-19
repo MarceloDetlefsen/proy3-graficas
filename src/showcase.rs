@@ -196,11 +196,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Asteroide de FF7",
         sistema: SystemId::Favoritos,
         tipo: "Asteroide",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Icosfera alargada con deformacion fuerte y crater; roca oscura con grietas Voronoi horneadas y pulso rojo incandescente.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Asteroid),
+        has_mesh: true,
     },
     Showcase {
         id: "casco_samus",
@@ -257,6 +257,7 @@ pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_bu
     match id {
         "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
         "trifuerza" => Some(crate::bodies::build_triforce_mesh),
+        "asteroide_ff7" => Some(crate::bodies::build_asteroid_mesh),
         _ => None,
     }
 }

@@ -10,7 +10,7 @@ use raylib::prelude::Vector3;
 use std::f32::consts::{FRAC_PI_2, PI, TAU};
 
 use crate::noise::Noise;
-use crate::shaders::{abismo, ardens, basquia, fundido, gas_giant, mural, rocky, vestigio, Shader};
+use crate::shaders::{abismo, ardens, asteroid, basquia, fundido, gas_giant, mural, rocky, vestigio, Shader};
 
 pub const DEFAULT_BAKE_WIDTH: usize = 512;
 pub const DEFAULT_BAKE_HEIGHT: usize = 256;
@@ -26,6 +26,7 @@ pub struct BakedMaps {
     pub vestigio: EquirectMap<4>,
     pub mural: EquirectMap<4>,
     pub fundido: EquirectMap<4>,
+    pub asteroid: EquirectMap<4>,
 }
 
 impl BakedMaps {
@@ -52,6 +53,7 @@ impl BakedMaps {
         let vestigio = EquirectMap::from_fn(pw, ph, |dir| vestigio::sample_static(noise, dir, 5.0));
         let mural = EquirectMap::from_fn(width, height, |dir| mural::sample_static(noise, dir, 7.0));
         let fundido = EquirectMap::from_fn(pw, ph, |dir| fundido::sample_static(noise, dir, 3.0));
+        let asteroid = EquirectMap::from_fn(pw, ph, |dir| asteroid::sample_static(noise, dir));
         Self {
             rocky,
             rocky_normals,
@@ -62,6 +64,7 @@ impl BakedMaps {
             vestigio,
             mural,
             fundido,
+            asteroid,
         }
     }
 }
