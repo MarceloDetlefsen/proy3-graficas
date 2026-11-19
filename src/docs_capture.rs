@@ -214,7 +214,7 @@ pub fn generate_docs_captures() {
     let ship_lods = load_ship_lods();
     let (sv, si) = &ship_lods.levels[0];
     let ship_verts: Vec<_> = si.iter().map(|&idx| sv[idx].clone()).collect();
-    let cam_ship = Camera::new(Vector3::new(1.8, 0.9, 2.6), Vector3::zero(), 45.0_f32.to_radians(), 0.1, 100.0);
+    let cam_ship = Camera::new(Vector3::new(0.95, 0.45, 1.35), Vector3::zero(), 45.0_f32.to_radians(), 0.1, 100.0);
     let ship_u = Uniforms {
         model_matrix: Mat4::scale(Vector3::new(0.025, 0.025, 0.025)),
         view_matrix: cam_ship.view_matrix(),
@@ -285,8 +285,16 @@ pub fn generate_docs_captures() {
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
     }
 
-    // 6. Normales ON / OFF en Zebes.
-    let cam_zebes = Camera::new(zebes_pos + Vector3::new(1.5, 0.6, 2.8), zebes_pos, 45.0_f32.to_radians(), 0.1, 400.0);
+    // 6. Normales ON / OFF en Zebes (lado iluminado por el Sol).
+    let to_sun_zebes = (body_position_at(&bodies[0], time) - zebes_pos).normalize();
+    let side_zebes = to_sun_zebes.cross(Vector3::new(0.0, 1.0, 0.0)).normalize();
+    let cam_zebes = Camera::new(
+        zebes_pos + (to_sun_zebes * 0.80 + side_zebes * 0.48 + Vector3::new(0.0, 0.22, 0.0)).normalize() * 3.1,
+        zebes_pos,
+        45.0_f32.to_radians(),
+        0.1,
+        400.0,
+    );
     render_scene_frame(&bodies, &mut caches, &noise, &baked, &cam_zebes, time, threads, TriangleMode::FilledBarycentric, true, Some(4), true, 42, false, &mut fb, &mut bufs);
     compose_and_save(&fb, None, &out_dir.join("normales_on.png"));
     render_scene_frame(&bodies, &mut caches, &noise, &baked, &cam_zebes, time, threads, TriangleMode::FilledBarycentric, true, Some(4), false, 42, false, &mut fb, &mut bufs);
