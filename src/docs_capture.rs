@@ -404,5 +404,50 @@ pub fn generate_docs_captures() {
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
     }
 
-    println!("Capturas oficiales generadas en docs/captures/ (26 archivos)");
+    // 12. Galería de trofeos: cuerpos procedurales del sistema de favoritos.
+    for &(id, fname) in &[
+        ("cubo_rubik", "galeria_rubik.png"),
+        ("trifuerza", "galeria_trifuerza.png"),
+        ("asteroide_ff7", "galeria_asteroide_ff7.png"),
+    ] {
+        let showcase_idx = crate::showcase::SHOWCASE_ENTRIES
+            .iter()
+            .position(|e| e.id == id)
+            .expect("showcase id existe");
+        let entry = &crate::showcase::SHOWCASE_ENTRIES[showcase_idx];
+        let body = crate::showcase::body_for_showcase(entry).expect("cuerpo Ready");
+        gal_viewer.reset_view(body.radius);
+        gal_viewer.yaw = 0.55;
+        gal_viewer.pitch = 0.35;
+        gal_viewer.lod_level = 5;
+        let tris = gal_viewer.render_body(
+            showcase_idx,
+            entry.id,
+            &body,
+            1.0,
+            time,
+            &noise,
+            &baked,
+            &mut fb,
+            &mut bufs,
+            TriangleMode::FilledBarycentric,
+            threads,
+        );
+        let spec = crate::shaders::live_param(body.shader);
+        let gsnap = hud::GalleryHudSnapshot {
+            entry,
+            active_showcase_idx: showcase_idx,
+            radius: body.radius,
+            tris,
+            lod_level: gal_viewer.lod_level,
+            shader_name: crate::shaders::shader_name(body.shader),
+            live_param_name: spec.name,
+            live_param_value: spec.default,
+            fps: 60.0,
+        };
+        hud::render_gallery_overlay(&mut ov, &gsnap);
+        compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
+    }
+
+    println!("Capturas oficiales generadas en docs/captures/ (29 archivos)");
 }
