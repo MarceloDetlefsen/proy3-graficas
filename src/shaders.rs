@@ -161,6 +161,21 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         color.y = (luma + (color.y - luma) * p).clamp(0.0, 1.0);
         color.z = (luma + (color.z - luma) * p).clamp(0.0, 1.0);
     }
+    if !matches!(shader, Shader::Star) {
+        let dist_sun = fragment.world_pos.length();
+        let atten = crate::scene_config::solar_attenuation(dist_sun);
+        let min_amb = crate::scene_config::MIN_AMBIENT;
+        let scale = min_amb + (1.0 - min_amb) * atten;
+        color *= scale;
+        if let Some(rim) = crate::scene_config::atmosphere_rim(shader) {
+            let mu = surface_mu(fragment, uniforms);
+            let fresnel = (1.0 - mu).powf(rim.power) * rim.strength * scale;
+            color += rim.color * fresnel;
+        }
+        color.x = color.x.clamp(0.0, 1.0);
+        color.y = color.y.clamp(0.0, 1.0);
+        color.z = color.z.clamp(0.0, 1.0);
+    }
     color
 }
 

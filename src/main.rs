@@ -18,6 +18,7 @@ mod primitive;
 mod rasterizer;
 mod rng;
 mod scene;
+mod scene_config;
 mod shaders;
 mod ship;
 mod sim;

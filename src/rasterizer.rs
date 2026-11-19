@@ -395,7 +395,21 @@ fn shade_band(
                         inv,
                         uniforms.camera_pos,
                     );
-                    let sc = crate::sky::sample_sky(dir, sky_seed, uniforms.time);
+                    let mut sc = crate::sky::sample_sky(dir, sky_seed, uniforms.time);
+                    // Halo solar en píxeles vacíos sin geometría extra.
+                    let to_sun = -uniforms.camera_pos;
+                    let sun_dist = to_sun.length();
+                    if sun_dist > 1e-3 {
+                        let sun_dir = to_sun * (1.0 / sun_dist);
+                        let cos_ang = dir.dot(sun_dir).clamp(-1.0, 1.0);
+                        let sin_ang = (1.0 - cos_ang * cos_ang).max(0.0).sqrt();
+                        let sun_ang = (3.5 / sun_dist).min(0.6);
+                        let halo_r = sun_ang * crate::scene_config::SOLAR_HALO_RADIUS_MULT;
+                        if cos_ang > 0.0 && sin_ang < halo_r {
+                            let t = 1.0 - (sin_ang / halo_r);
+                            sc += crate::scene_config::SOLAR_HALO_COLOR * (t * t * 0.55);
+                        }
+                    }
                     let c_idx = idx * 4;
                     color_band[c_idx] = (sc.x.clamp(0.0, 1.0) * 255.0) as u8;
                     color_band[c_idx + 1] = (sc.y.clamp(0.0, 1.0) * 255.0) as u8;
