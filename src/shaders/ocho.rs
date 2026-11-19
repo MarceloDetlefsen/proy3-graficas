@@ -19,6 +19,22 @@ fn lemniscate_field(p: Vector3) -> f32 {
     r2 * r2 - 0.58 * (p.x * p.x - p.y * p.y)
 }
 
+#[inline]
+fn lemniscate_distance(p: Vector3, lem: f32) -> f32 {
+    let r2 = p.x * p.x + p.y * p.y;
+    let dx = 4.0 * r2 * p.x - 1.16 * p.x;
+    let dy = 4.0 * r2 * p.y + 1.16 * p.y;
+    let grad_len = (dx * dx + dy * dy).sqrt();
+    if grad_len > 0.06 {
+        lem.abs() / grad_len
+    } else {
+        (p.x - p.y)
+            .abs()
+            .min((p.x + p.y).abs())
+            * std::f32::consts::FRAC_1_SQRT_2
+    }
+}
+
 pub fn height_at(_noise: &Noise, dir: Vector3, _frequency: f32) -> f32 {
     let p = dir.normalize();
     let lem = lemniscate_field(p);
@@ -28,22 +44,25 @@ pub fn height_at(_noise: &Noise, dir: Vector3, _frequency: f32) -> f32 {
 pub fn sample_static(_noise: &Noise, dir: Vector3) -> [f32; 4] {
     let p = dir.normalize();
     let lem = lemniscate_field(p);
-    let continent = 1.0 - noise::smoothstep(-0.02, 0.02, lem);
-    let contour = 1.0 - noise::smoothstep(0.0, 0.026, lem.abs());
-    [continent, contour, lem, 0.0]
+    let dist = lemniscate_distance(p, lem);
+    let signed_dist = if lem >= 0.0 { dist } else { -dist };
+    let continent = 1.0 - noise::smoothstep(-0.010, 0.010, signed_dist);
+    [continent, dist, lem, 0.0]
 }
 
 pub fn shade(fragment: &Fragment, uniforms: &Uniforms) -> Vector3 {
     let p = fragment.object_pos.normalize();
-    let [continent, _contour, lem, _] = if let Some(baked) = uniforms.baked.as_ref() {
-        baked.ocho.sample_dir(p)
-    } else {
-        sample_static(&uniforms.noise, p)
-    };
+    let lem = lemniscate_field(p);
+    let dist = lemniscate_distance(p, lem);
+    let signed_dist = if lem >= 0.0 { dist } else { -dist };
+    let continent = 1.0 - noise::smoothstep(-0.008, 0.008, signed_dist);
 
-    // El contorno "respira" suavemente con el tiempo.
-    let breathe = 0.026 + 0.008 * (uniforms.time * 1.6).sin();
-    let contour = 1.0 - noise::smoothstep(0.0, breathe, lem.abs());
+    // Contorno afilado (~1.5 px) y cruce central limpio sin mancha negra; respiración ±5%.
+    let vh = uniforms.viewport_height.max(1) as f32;
+    let breathe = 1.0 + 0.05 * (uniforms.time * 1.6).sin();
+    let half_width = (4.5 / vh).clamp(0.007, 0.018) * breathe;
+    let edge_soft = (1.5 / vh).clamp(0.002, 0.006);
+    let contour = 1.0 - noise::smoothstep(half_width - edge_soft, half_width + edge_soft, dist);
 
     // Cel shading (posterización de la luz en 3 bandas).
     let diffuse = diffuse_factor(fragment.normal, uniforms);
