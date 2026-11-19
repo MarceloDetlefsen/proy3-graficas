@@ -6,7 +6,8 @@ use std::f32::consts::FRAC_PI_2;
 use raylib::prelude::Vector3;
 
 use crate::mesh_builder::{
-    Mesh, box_mesh, extruded_prism, loft_rings, raised_sticker, rounded_box, sphere,
+    Mesh, box_mesh, dodecahedron, dodecahedron_faces, extruded_prism, flat_polygon_mesh,
+    loft_rings, raised_sticker, rounded_box, sphere,
 };
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
@@ -399,6 +400,80 @@ pub fn build_skewb_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+fn megaminx_face_color(dir: Vector3) -> Vector3 {
+    // Paleta de 12 colores con los 5 visibles en refs/megaminx.webp en su posición relativa:
+    // blanco (frente-arriba), rojo (abajo-izq), azul (abajo-der), verde (arriba-izq), amarillo (arriba-der).
+    let palette: [(Vector3, Vector3); 12] = [
+        (Vector3::new(0.0, 0.53, 0.85), WHITE),                              // Frente-arriba: Blanco
+        (Vector3::new(-0.85, -0.53, 0.0), RED),                              // Izq-abajo: Rojo
+        (Vector3::new(0.85, -0.53, 0.0), BLUE),                              // Der-abajo: Azul
+        (Vector3::new(-0.53, 0.85, 0.0), GREEN),                             // Arriba-izq: Verde
+        (Vector3::new(0.53, 0.85, 0.0), YELLOW),                             // Arriba-der: Amarillo
+        (Vector3::new(0.0, -0.53, 0.85), Vector3::new(0.58, 0.24, 0.78)),    // Morado
+        (Vector3::new(0.0, 0.53, -0.85), Vector3::new(0.55, 0.58, 0.62)),    // Gris
+        (Vector3::new(0.0, -0.53, -0.85), Vector3::new(0.95, 0.45, 0.72)),   // Rosa
+        (Vector3::new(-0.85, 0.53, 0.0), Vector3::new(0.25, 0.82, 0.92)),    // Celeste
+        (Vector3::new(0.85, 0.53, 0.0), ORANGE),                             // Naranja
+        (Vector3::new(-0.53, -0.85, 0.0), Vector3::new(0.10, 0.42, 0.20)),   // Verde oscuro
+        (Vector3::new(0.53, -0.85, 0.0), Vector3::new(0.92, 0.84, 0.65)),    // Crema
+    ];
+    let n = dir.normalize();
+    let mut best_idx = 0;
+    let mut best_dot = -2.0_f32;
+    for (i, (ref_dir, _)) in palette.iter().enumerate() {
+        let d = n.dot(ref_dir.normalize());
+        if d > best_dot {
+            best_dot = d;
+            best_idx = i;
+        }
+    }
+    palette[best_idx].1
+}
+
+/// Construye el Megaminx sobre un dodecaedro regular de circunradio 1 con 11
+/// pegatinas por cara (pentágono central, 5 cuadriláteros de arista y 5 cometas de esquina).
+pub fn build_megaminx_mesh(detail: usize) -> Mesh {
+    let faces = dodecahedron_faces(1.0);
+    if detail == 0 {
+        let mut mesh = Mesh::new();
+        for face in faces {
+            let center = (face[0] + face[1] + face[2] + face[3] + face[4]) * 0.2;
+            let color = megaminx_face_color(center);
+            mesh.merge(&flat_polygon_mesh(&face, color));
+        }
+        return mesh;
+    }
+
+    let mut mesh = dodecahedron(0.985);
+    mesh.set_color(BLACK);
+    let thickness = if detail >= 2 { 0.015 } else { 0.0 };
+
+    for face in faces {
+        let c = (face[0] + face[1] + face[2] + face[3] + face[4]) * 0.2;
+        let color = megaminx_face_color(c);
+        let p: [Vector3; 5] = std::array::from_fn(|i| c + (face[i] - c) * 0.38);
+        let ea: [Vector3; 5] =
+            std::array::from_fn(|i| face[i] + (face[(i + 1) % 5] - face[i]) * 0.31);
+        let eb: [Vector3; 5] =
+            std::array::from_fn(|i| face[i] + (face[(i + 1) % 5] - face[i]) * 0.69);
+
+        // 1. Pentágono central
+        mesh.merge(&raised_sticker(&p, 0.84, 0.02, thickness, color));
+
+        for i in 0..5 {
+            // 2. Cuadrilátero de arista
+            let edge_quad = [p[i], ea[i], eb[i], p[(i + 1) % 5]];
+            mesh.merge(&raised_sticker(&edge_quad, 0.82, 0.02, thickness, color));
+
+            // 3. Cuadrilátero de esquina en forma de cometa
+            let prev = (i + 4) % 5;
+            let kite = [p[i], eb[prev], face[i], ea[i]];
+            mesh.merge(&raised_sticker(&kite, 0.80, 0.02, thickness, color));
+        }
+    }
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -463,6 +538,19 @@ mod tests {
         let m0 = build_skewb_mesh(0);
 
         assert!(m2.tri_count() <= 4000);
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+        }
+    }
+
+    #[test]
+    fn megaminx_builds_three_decreasing_lods_under_4000_tris() {
+        let m2 = build_megaminx_mesh(2);
+        let m1 = build_megaminx_mesh(1);
+        let m0 = build_megaminx_mesh(0);
+
+        assert!(m2.tri_count() <= 4000, "Megaminx L2={} > 4000", m2.tri_count());
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));

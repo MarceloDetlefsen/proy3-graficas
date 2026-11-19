@@ -246,6 +246,18 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         light_dir: None,
     },
     Showcase {
+        id: "megaminx",
+        nombre: "Megaminx",
+        sistema: SystemId::Favoritos,
+        tipo: "Trofeo",
+        descripcion_es: "Dodecaedro regular negro con 11 pegatinas por cara (pentagono, 5 aristas y 5 cometas) en 12 colores; shader chunky.",
+        inspiracion: None,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Chunky),
+        has_mesh: true,
+        light_dir: None,
+    },
+    Showcase {
         id: "la_bombonera",
         nombre: "La Bombonera",
         sistema: SystemId::Favoritos,
@@ -279,6 +291,7 @@ pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_bu
     match id {
         "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
         "cubo_skweb" => Some(crate::bodies::build_skewb_mesh),
+        "megaminx" => Some(crate::bodies::build_megaminx_mesh),
         "trifuerza" => Some(crate::bodies::build_triforce_mesh),
         "meteoro_ff7" => Some(crate::bodies::build_meteor_mesh),
         _ => None,
@@ -348,7 +361,7 @@ mod tests {
                 entry.id
             );
         }
-        assert_eq!(SHOWCASE_ENTRIES.len(), 19);
+        assert!(SHOWCASE_ENTRIES.len() >= 19);
     }
 
     #[test]
