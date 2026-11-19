@@ -161,9 +161,9 @@ impl GalleryViewer {
             self.target = Vector3::zero();
             self.spin = 0.0;
         } else if showcase_id == "casco_samus" {
-            self.yaw = -0.25;
-            self.pitch = 0.12;
-            self.distance = 3.2;
+            self.yaw = 0.0;
+            self.pitch = 0.04;
+            self.distance = 3.1;
             self.target = Vector3::zero();
             self.spin = 0.0;
         } else if showcase_id == "la_bombonera" {

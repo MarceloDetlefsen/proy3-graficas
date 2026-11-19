@@ -8,7 +8,7 @@ use raylib::prelude::Vector3;
 use crate::mesh_builder::{
     Mesh, beveled_extruded_contour, box_mesh, cone, cylinder, dodecahedron, dodecahedron_faces,
     extruded_prism, flat_polygon_mesh, loft_rings, raised_sticker, rdp_simplify_closed,
-    rounded_box, rounded_rect_profile_2d, sphere, sweep_profile, torus,
+    rounded_box, rounded_rect_profile_2d, sphere, sweep_profile,
 };
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
@@ -1053,124 +1053,152 @@ pub fn build_racket_mesh(detail: usize) -> Mesh {
     mesh
 }
 
-/// Construye el casco de Samus Aran (Metroid) con domo terracota, franjas oscuras,
-/// visor angular emisivo, orejeras laterales con luz, bloque bucal con rejillas y
-/// tubos respiratorios hacia el anillo del cuello.
-pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
-    let armor = Vector3::new(0.70, 0.39, 0.27); // #B26444 refs/samus_helmet.jpg
-    let seam_dark = Vector3::new(0.24, 0.18, 0.16);
-    let hose_olive = Vector3::new(0.36, 0.37, 0.31);
-    let grille_dark = Vector3::new(0.16, 0.14, 0.14);
-    let visor_mint = Vector3::new(0.84, 0.96, 0.80);
+fn samus_radial_at(angle: f32) -> f32 {
+    let prof = crate::samus_bombonera_data::SAMUS_DOME_RADIAL_PROFILE;
+    let n = prof.len();
+    let t = angle.rem_euclid(std::f32::consts::TAU) / std::f32::consts::TAU * n as f32;
+    let i0 = (t.floor() as usize) % n;
+    let i1 = (i0 + 1) % n;
+    let f = t - t.floor();
+    prof[i0] * (1.0 - f) + prof[i1] * f
+}
 
-    let (rings, sectors, hose_segs, pipe_segs) = match detail {
-        0 => (6usize, 10usize, 3usize, 5usize),
-        1 => (10, 16, 5, 6),
-        _ => (14, 22, 7, 8),
+/// Construye el casco de Samus Aran a partir de las medidas de `refs/samus_helmet.jpg`:
+/// cúpula con perfil radial medido y barniz, 3 surcos oscuros proyectados, visor verde
+/// emisivo medido, barbilla con 3 rendijas, orejeras simétricas y mangueras acanaladas.
+pub fn build_samus_helmet_mesh(detail: usize) -> Mesh {
+    use crate::samus_bombonera_data::*;
+    let armor = rgb_vec(SAMUS_ARMOR_RGB);
+    let groove_col = rgb_vec(SAMUS_GROOVE_RGB);
+    let visor_col = rgb_vec(SAMUS_VISOR_CENTER_RGB);
+    let hose_a = rgb_vec(SAMUS_HOSE_A_RGB);
+    let hose_b = rgb_vec(SAMUS_HOSE_B_RGB);
+    let grille_dark = Vector3::new(0.14, 0.12, 0.12);
+
+    let (rings, sectors, ear_rings, ear_sectors, hose_ribs, hose_prof_segs) = match detail {
+        0 => (10usize, 16usize, 5usize, 8usize, 6usize, 4usize),
+        1 => (14, 22, 7, 12, 8, 6),
+        _ => (18, 28, 9, 16, 10, 8),
     };
 
     let mut mesh = Mesh::new();
+    let dome_depth = SAMUS_HALF_WIDTH * 0.85;
 
-    // 1. Domo principal (esfera escalada) con franjas oscuras en la corona.
+    // 1. Cúpula ovalada ajustando cada vértice al perfil radial frontal medido.
     let mut dome = sphere(1.0, rings, sectors);
-    dome.scale(Vector3::new(0.84, 0.92, 0.90));
-    dome.translate(Vector3::new(0.0, 0.06, -0.02));
-    dome.paint_vertices(|_, p, _| {
-        let on_center_seam = p.x.abs() < 0.045 && p.y > 0.28 && p.z > -0.20;
-        let on_brow_seam = (p.x.abs() - (0.24 + (p.y - 0.35).max(0.0) * 0.22)).abs() < 0.038
-            && p.y > 0.20
-            && p.z > 0.05;
-        if on_center_seam || on_brow_seam {
-            seam_dark
-        } else {
-            armor
+    for p in &mut dome.positions {
+        let xy_len = (p.x * p.x + p.y * p.y).sqrt();
+        if xy_len > 1e-4 {
+            let ang = p.y.atan2(p.x);
+            let r_prof = samus_radial_at(ang).clamp(0.72, 1.04);
+            let scale_xy = r_prof * (0.94_f32).min(1.0 - (-p.y - 0.55).max(0.0) * 0.42);
+            p.x *= scale_xy;
+            p.y *= scale_xy;
         }
-    });
-    dome.set_material(0);
+        p.z *= dome_depth;
+    }
+    dome.compute_smooth_normals();
+    dome.set_color(armor);
+    dome.set_material(1); // barniz metálico
     mesh.merge(&dome);
 
-    // 2. Visor frontal angular extruido con bisel (material_id = 2 emisivo).
-    let visor_poly = [
-        [-0.56, 0.30],
-        [-0.18, 0.24],
-        [-0.12, 0.32],
-        [0.12, 0.32],
-        [0.18, 0.24],
-        [0.56, 0.30],
-        [0.44, -0.10],
-        [0.20, -0.26],
-        [0.14, -0.50],
-        [-0.14, -0.50],
-        [-0.20, -0.26],
-        [-0.44, -0.10],
-    ];
-    let mut visor = beveled_extruded_contour(&visor_poly, 0.22, 0.92, 0.03);
-    visor.rotate_x(FRAC_PI_2);
-    visor.translate(Vector3::new(0.0, 0.06, 0.76));
-    visor.set_color(visor_mint);
-    visor.set_material(2);
-    mesh.merge(&visor);
-
-    // 3. Orejeras laterales con luz y pómulos salientes.
-    for side in [-1.0_f32, 1.0] {
-        let mut ear = sphere(1.0, (rings / 2).max(4), (sectors / 2).max(8));
-        ear.scale(Vector3::new(0.24, 0.34, 0.38));
-        ear.translate(Vector3::new(side * 0.76, 0.02, 0.04));
-        ear.set_color(armor);
-        ear.set_material(0);
-        mesh.merge(&ear);
-
-        let mut ear_light = rounded_box(0.08, 0.14, 0.10, 0.02, 1);
-        ear_light.translate(Vector3::new(side * 0.92, 0.02, 0.18));
-        ear_light.set_color(visor_mint);
-        ear_light.set_material(2);
-        mesh.merge(&ear_light);
-
-        let mut cheek = rounded_box(0.24, 0.16, 0.54, 0.04, 1);
-        cheek.rotate_y(side * 0.26);
-        cheek.rotate_x(0.18);
-        cheek.translate(Vector3::new(side * 0.66, -0.30, 0.28));
-        cheek.set_color(armor);
-        cheek.set_material(0);
-        mesh.merge(&cheek);
+    // 2. Tres surcos oscuros proyectados sobre la superficie de la cúpula.
+    let groove_prof = rounded_rect_profile_2d(0.15, 1);
+    for groove in SAMUS_GROOVES {
+        if groove.len() < 2 {
+            continue;
+        }
+        let mut path = Vec::with_capacity(groove.len());
+        for &[gx, gy] in *groove {
+            let r_prof = samus_radial_at(gy.atan2(gx)).max(0.8);
+            let r2 = (gx * gx + gy * gy) / (r_prof * r_prof);
+            let gz = (1.0 - r2).max(0.05).sqrt() * dome_depth + 0.008;
+            path.push(Vector3::new(gx, gy, gz));
+        }
+        let widths = vec![0.032; path.len()];
+        let depths = vec![0.024; path.len()];
+        let mut ribbon = sweep_profile(&path, &widths, &depths, &groove_prof, false);
+        ribbon.set_color(groove_col);
+        ribbon.set_material(0);
+        mesh.merge(&ribbon);
     }
 
-    // 4. Bloque de la boca / mentón con rejillas horizontales.
-    let mut chin = rounded_box(0.32, 0.42, 0.34, 0.05, 1);
-    chin.translate(Vector3::new(0.0, -0.60, 0.64));
+    // 3. Visor frontal medido (placa extruida adelantada y enterrada hacia la cúpula).
+    let visor_xz: Vec<[f32; 2]> = SAMUS_VISOR_POLY.iter().map(|&[x, y]| [x, -y]).collect();
+    let mut visor = beveled_extruded_contour(&visor_xz, 0.34, 0.94, 0.025);
+    visor.rotate_x(FRAC_PI_2);
+    visor.translate(Vector3::new(0.0, 0.0, dome_depth * 0.80));
+    visor.set_color(visor_col);
+    visor.set_material(2); // visor emisivo animado
+    mesh.merge(&visor);
+
+    // 4. Barbilla estrechándose hacia abajo con 3 rendijas horizontales oscuras.
+    let chin_rings = vec![
+        (-0.96_f32, vec![[-0.14, 0.38], [0.14, 0.38], [0.11, 0.72], [-0.11, 0.72]]),
+        (-0.68, vec![[-0.22, 0.36], [0.22, 0.36], [0.18, 0.78], [-0.18, 0.78]]),
+        (-0.36, vec![[-0.26, 0.34], [0.26, 0.34], [0.24, 0.80], [-0.24, 0.80]]),
+    ];
+    let mut chin = loft_rings(&chin_rings);
     chin.set_color(armor);
-    chin.set_material(0);
+    chin.set_material(1);
     mesh.merge(&chin);
 
     for k in 0..3 {
-        let mut slat = box_mesh(0.20, 0.045, 0.08);
-        slat.translate(Vector3::new(0.0, -0.48 - k as f32 * 0.09, 0.80));
+        let mut slat = box_mesh(0.22 - k as f32 * 0.02, 0.038, 0.06);
+        slat.translate(Vector3::new(0.0, -0.56 - k as f32 * 0.10, 0.77));
         slat.set_color(grille_dark);
         slat.set_material(0);
         mesh.merge(&slat);
     }
 
-    // 5. Anillo del cuello y tubos respiratorios segmentados.
-    let mut collar = torus(0.60, 0.09, sectors.max(10), (rings / 2).max(4));
-    collar.translate(Vector3::new(0.0, -0.82, 0.04));
-    collar.set_color(seam_dark);
-    collar.set_material(0);
-    mesh.merge(&collar);
-
+    // 5. Orejeras grandes simétricas a media altura.
     for side in [-1.0_f32, 1.0] {
-        for s in 0..hose_segs {
-            let t = s as f32 / (hose_segs - 1).max(1) as f32;
-            let x = side * (0.20 + t * 0.56);
-            let y = -0.68 + (t - 0.35).powi(2) * 0.38;
-            let z = 0.66 - t * 0.46;
-            let mut ring = cylinder(0.075, 0.075, 0.07, pipe_segs);
-            ring.rotate_z(side * (0.45 + t * 0.55));
-            ring.rotate_y(-side * 0.55);
-            ring.translate(Vector3::new(x, y, z));
-            ring.set_color(if s % 2 == 0 { hose_olive } else { seam_dark });
-            ring.set_material(0);
-            mesh.merge(&ring);
-        }
+        let mut ear = sphere(1.0, ear_rings, ear_sectors);
+        ear.scale(Vector3::new(SAMUS_EAR_RADII[0], SAMUS_EAR_RADII[1], 0.28));
+        ear.translate(Vector3::new(side * SAMUS_EAR_CENTER[0], SAMUS_EAR_CENTER[1], -0.02));
+        ear.set_color(armor);
+        ear.set_material(1);
+        mesh.merge(&ear);
+    }
+
+    // 6. Dos mangueras acanaladas (8-10 costillas con radio ±15% alternando dos grises).
+    let hose_pts: Vec<[f32; 2]> = if SAMUS_HOSE_RIGHT_LINE.len() >= 2 {
+        SAMUS_HOSE_RIGHT_LINE.to_vec()
+    } else {
+        vec![[0.24, -0.78], [0.42, -0.68], [0.58, -0.52], [0.70, -0.32]]
+    };
+    let hose_prof = rounded_rect_profile_2d(0.42, (hose_prof_segs / 4).max(1));
+    let mut path_pts = Vec::with_capacity(hose_ribs * 2 + 1);
+    let mut widths = Vec::with_capacity(hose_ribs * 2 + 1);
+    let total_steps = hose_ribs * 2;
+    for s in 0..=total_steps {
+        let t = s as f32 / total_steps as f32;
+        let seg_f = t * (hose_pts.len() - 1) as f32;
+        let i0 = (seg_f.floor() as usize).min(hose_pts.len() - 2);
+        let f = seg_f - i0 as f32;
+        let hx = hose_pts[i0][0] * (1.0 - f) + hose_pts[i0 + 1][0] * f;
+        let hy = hose_pts[i0][1] * (1.0 - f) + hose_pts[i0 + 1][1] * f;
+        let hz = 0.68 - t * 0.48;
+        let rib_mod = if s % 2 == 1 { 1.15 } else { 0.85 };
+        path_pts.push(Vector3::new(hx, hy, hz));
+        widths.push(0.11 * rib_mod);
+    }
+    for side in [-1.0_f32, 1.0] {
+        let sided_path: Vec<Vector3> = path_pts
+            .iter()
+            .map(|&p| Vector3::new(side * p.x, p.y, p.z))
+            .collect();
+        let mut hose = sweep_profile(&sided_path, &widths, &widths, &hose_prof, false);
+        hose.paint_vertices(|_, p, _| {
+            let phase = ((p.x.abs() + p.y.abs()) * 14.0).floor() as i32;
+            if phase.rem_euclid(2) == 0 {
+                hose_a
+            } else {
+                hose_b
+            }
+        });
+        hose.set_material(0);
+        mesh.merge(&hose);
     }
 
     mesh
@@ -1573,16 +1601,30 @@ mod tests {
     #[test]
     fn samus_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
         let m2 = build_samus_helmet_mesh(2);
+        let m2_repeat = build_samus_helmet_mesh(2);
         let m1 = build_samus_helmet_mesh(1);
         let m0 = build_samus_helmet_mesh(0);
         assert!(m2.tri_count() <= 4000, "Samus L2={} > 4000", m2.tri_count());
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        assert_eq!(m2.positions, m2_repeat.positions);
         for m in [&m0, &m1, &m2] {
             assert!(m.is_watertight());
             assert!(m.signed_volume() > 0.0);
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
             let br = m.bounding_radius();
             assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
+        }
+    }
+
+    #[test]
+    fn samus_measured_contours_have_no_duplicates_or_degeneracy() {
+        use crate::samus_bombonera_data::{SAMUS_DOME_RADIAL_PROFILE, SAMUS_VISOR_POLY};
+        assert_eq!(SAMUS_DOME_RADIAL_PROFILE.len(), 48);
+        assert!(SAMUS_VISOR_POLY.len() >= 6);
+        for i in 0..SAMUS_VISOR_POLY.len() {
+            let a = SAMUS_VISOR_POLY[i];
+            let b = SAMUS_VISOR_POLY[(i + 1) % SAMUS_VISOR_POLY.len()];
+            assert!((a[0] - b[0]).hypot(a[1] - b[1]) > 1e-4);
         }
     }
 
