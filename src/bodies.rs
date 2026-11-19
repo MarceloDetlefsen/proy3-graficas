@@ -6,8 +6,8 @@ use std::f32::consts::FRAC_PI_2;
 use raylib::prelude::Vector3;
 
 use crate::mesh_builder::{
-    Mesh, box_mesh, cylinder, dodecahedron, dodecahedron_faces, extruded_prism, flat_polygon_mesh,
-    loft_rings, raised_sticker, rounded_box, sphere,
+    Mesh, beveled_extruded_contour, box_mesh, cone, cylinder, dodecahedron, dodecahedron_faces,
+    extruded_prism, flat_polygon_mesh, loft_rings, raised_sticker, rounded_box, sphere, torus,
 };
 use crate::noise::mix_color;
 use crate::rng::SplitMix64;
@@ -622,6 +622,130 @@ pub fn build_suns_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+/// Construye el Escudo del Tottenham Hotspur con placa extruida con bisel,
+/// barras de cinta, balón con parches y gallo estilizado armado con primitivas.
+pub fn build_spurs_mesh(detail: usize) -> Mesh {
+    let navy = Vector3::new(0.075, 0.133, 0.341); // #132257
+    let field_white = Vector3::new(0.96, 0.97, 0.99);
+
+    let (rings, sectors, seg) = match detail {
+        0 => (4, 6, 5),
+        1 => (6, 10, 8),
+        _ => (10, 16, 12),
+    };
+
+    let mut mesh = Mesh::new();
+
+    // 1. Placa de escudo extruida con bisel (borde azul marino).
+    let shield_2d: [[f32; 2]; 7] = [
+        [-0.78, -0.82],
+        [0.0, -0.92],
+        [0.78, -0.82],
+        [0.74, 0.18],
+        [0.44, 0.68],
+        [0.0, 0.94],
+        [-0.44, 0.68],
+    ];
+    let mut shield_2d_full = shield_2d.to_vec();
+    shield_2d_full.push([-0.74, 0.18]);
+    let mut plaque = beveled_extruded_contour(&shield_2d_full, 0.18, 0.93, 0.035);
+    plaque.rotate_x(FRAC_PI_2);
+    plaque.set_color(navy);
+    mesh.merge(&plaque);
+
+    // Campo blanco hundido en el frente (+Z).
+    let mut field = beveled_extruded_contour(&shield_2d_full, 0.04, 0.85, 0.01);
+    field.rotate_x(FRAC_PI_2);
+    field.scale(Vector3::new(0.86, 0.86, 1.0));
+    field.set_color(field_white);
+    field.translate(Vector3::new(0.0, 0.0, 0.085));
+    mesh.merge(&field);
+
+    // Barras de cinta inferiores (sin texto 3D).
+    for (by, bw) in [(-0.56_f32, 0.96_f32), (-0.70, 0.72)] {
+        let mut bar = box_mesh(bw, 0.08, 0.04);
+        bar.set_color(navy);
+        bar.translate(Vector3::new(0.0, by, 0.11));
+        mesh.merge(&bar);
+    }
+
+    // 2. Balón clásico con parches/costuras en la parte inferior.
+    let ball_pos = Vector3::new(0.0, -0.24, 0.22);
+    let mut ball = sphere(0.22, rings, sectors);
+    ball.set_color(navy);
+    ball.translate(ball_pos);
+    mesh.merge(&ball);
+
+    let mut seam_ring = torus(0.215, 0.014, sectors, 6);
+    seam_ring.set_color(field_white);
+    seam_ring.translate(ball_pos);
+    mesh.merge(&seam_ring);
+
+    let mut patch = box_mesh(0.11, 0.06, 0.04);
+    patch.set_color(field_white);
+    patch.translate(ball_pos + Vector3::new(0.06, -0.02, 0.20));
+    mesh.merge(&patch);
+
+    // 3. Gallo estilizado armado con primitivas posado sobre el balón.
+    let mut body = sphere(0.16, rings, sectors);
+    body.scale(Vector3::new(0.85, 1.25, 0.65));
+    body.rotate_z(0.32);
+    body.set_color(navy);
+    body.translate(Vector3::new(0.02, 0.26, 0.22));
+    mesh.merge(&body);
+
+    let mut neck = cylinder(0.065, 0.095, 0.24, seg);
+    neck.rotate_z(0.15);
+    neck.set_color(navy);
+    neck.translate(Vector3::new(-0.07, 0.48, 0.22));
+    mesh.merge(&neck);
+
+    let mut collar = sphere(0.068, rings, sectors);
+    collar.scale(Vector3::new(0.7, 1.4, 0.6));
+    collar.set_color(field_white);
+    collar.translate(Vector3::new(-0.05, 0.48, 0.25));
+    mesh.merge(&collar);
+
+    let mut head = sphere(0.085, rings, sectors);
+    head.set_color(navy);
+    head.translate(Vector3::new(-0.10, 0.62, 0.22));
+    mesh.merge(&head);
+
+    let mut beak = cone(0.038, 0.12, seg);
+    beak.rotate_z(FRAC_PI_2 + 0.15);
+    beak.set_color(navy);
+    beak.translate(Vector3::new(-0.20, 0.61, 0.22));
+    mesh.merge(&beak);
+
+    let mut crest = box_mesh(0.08, 0.06, 0.05);
+    crest.set_color(navy);
+    crest.translate(Vector3::new(-0.08, 0.70, 0.22));
+    mesh.merge(&crest);
+
+    // Cola de 3 plumas curvas hacia arriba-derecha.
+    for (ang, dx, dy) in [(-0.45_f32, 0.18, 0.34), (-0.75, 0.22, 0.28), (-1.05, 0.24, 0.21)] {
+        let mut feather = box_mesh(0.07, 0.24, 0.05);
+        feather.rotate_z(ang);
+        feather.set_color(navy);
+        feather.translate(Vector3::new(dx, dy, 0.22));
+        mesh.merge(&feather);
+    }
+
+    // Pata con espolón hacia atrás.
+    let mut leg = cylinder(0.032, 0.042, 0.24, seg);
+    leg.set_color(navy);
+    leg.translate(Vector3::new(0.02, 0.05, 0.22));
+    mesh.merge(&leg);
+
+    let mut spur = cone(0.025, 0.10, seg);
+    spur.rotate_z(-FRAC_PI_2 + 0.25);
+    spur.set_color(navy);
+    spur.translate(Vector3::new(0.09, 0.03, 0.22));
+    mesh.merge(&spur);
+
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -731,6 +855,20 @@ mod tests {
             assert!(m.is_watertight());
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
             assert!((m.bounding_radius() - 1.0).abs() < 1e-4);
+        }
+    }
+
+    #[test]
+    fn spurs_builds_three_decreasing_lods_under_4000_tris_and_bounded() {
+        let m2 = build_spurs_mesh(2);
+        let m1 = build_spurs_mesh(1);
+        let m0 = build_spurs_mesh(0);
+        assert!(m2.tri_count() <= 4000, "Spurs L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            let br = m.bounding_radius();
+            assert!(m.positions.iter().all(|p| p.length() <= br + 1e-4));
         }
     }
 }

@@ -258,6 +258,10 @@ impl GalleryViewer {
         let model_matrix = if matches!(body.shader, Shader::PhoenixSuns) {
             Mat4::rotation_z(self.spin)
                 * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
+        } else if body.name == "Escudo del Tottenham Hotspur" {
+            let osc = (self.spin * 1.4).sin() * 0.45;
+            Mat4::rotation_y(osc)
+                * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
         } else {
             Mat4::rotation_z(body.axial_tilt)
                 * Mat4::rotation_y(self.spin)
