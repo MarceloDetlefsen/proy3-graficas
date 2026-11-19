@@ -6,7 +6,7 @@ use std::f32::consts::FRAC_PI_2;
 use raylib::prelude::Vector3;
 
 use crate::mesh_builder::{
-    Mesh, box_mesh, dodecahedron, dodecahedron_faces, extruded_prism, flat_polygon_mesh,
+    Mesh, box_mesh, cylinder, dodecahedron, dodecahedron_faces, extruded_prism, flat_polygon_mesh,
     loft_rings, raised_sticker, rounded_box, sphere,
 };
 use crate::noise::mix_color;
@@ -474,6 +474,138 @@ pub fn build_megaminx_mesh(detail: usize) -> Mesh {
     mesh
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JoyConSide {
+    Left,
+    Right,
+}
+
+/// Construye un Joy-Con (`Left` o `Right`) espejado:
+/// caja redondeada (alto 2.0, ancho 0.7, grosor 0.35) gris oscuro mate,
+/// riel lateral de color (izquierdo `#00C3E3`, derecho `#FF4554`), palanca,
+/// cruceta/ABXY, botón `-`/`+`, captura/home y tira SL/SR.
+pub fn joycon(side: JoyConSide, detail: usize) -> Mesh {
+    let dark_gray = Vector3::new(0.16, 0.17, 0.20);
+    let button_dark = Vector3::new(0.07, 0.07, 0.08);
+    let button_ring = Vector3::new(0.11, 0.12, 0.14);
+    let rail_color = match side {
+        JoyConSide::Left => Vector3::new(0.0, 0.765, 0.890),  // #00C3E3
+        JoyConSide::Right => Vector3::new(1.000, 0.271, 0.329), // #FF4554
+    };
+    let rail_x = match side {
+        JoyConSide::Left => 0.33,
+        JoyConSide::Right => -0.33,
+    };
+    let plus_minus_x = match side {
+        JoyConSide::Left => 0.18,
+        JoyConSide::Right => -0.18,
+    };
+
+    let seg_cyl = match detail {
+        0 => 6,
+        1 => 8,
+        _ => 12,
+    };
+
+    // Carcasa principal
+    let mut mesh = match detail {
+        0 => box_mesh(0.70, 2.00, 0.35),
+        1 => rounded_box(0.70, 2.00, 0.35, 0.13, 1),
+        _ => rounded_box(0.70, 2.00, 0.35, 0.13, 2),
+    };
+    mesh.set_color(dark_gray);
+
+    // Riel lateral de color y botones SL / SR
+    let mut rail = box_mesh(0.10, 1.82, 0.26);
+    rail.set_color(rail_color);
+    rail.translate(Vector3::new(rail_x, 0.0, 0.0));
+    mesh.merge(&rail);
+
+    for sy in [0.42_f32, -0.42] {
+        let mut sl_sr = box_mesh(0.05, 0.24, 0.12);
+        sl_sr.set_color(button_dark);
+        sl_sr.translate(Vector3::new(rail_x + rail_x.signum() * 0.05, sy, 0.0));
+        mesh.merge(&sl_sr);
+    }
+
+    let front_z = 0.175_f32;
+    let stick_y = match side {
+        JoyConSide::Left => 0.44,
+        JoyConSide::Right => -0.16,
+    };
+    let pad_y = match side {
+        JoyConSide::Left => -0.16,
+        JoyConSide::Right => 0.44,
+    };
+
+    // Palanca: base cilíndrica + tapa cóncava con anillo
+    let mut base = cylinder(0.12, 0.14, 0.08, seg_cyl);
+    base.rotate_x(FRAC_PI_2);
+    base.set_color(button_dark);
+    base.translate(Vector3::new(0.0, stick_y, front_z + 0.04));
+    mesh.merge(&base);
+
+    let mut cap_ring = cylinder(0.15, 0.12, 0.04, seg_cyl);
+    cap_ring.rotate_x(FRAC_PI_2);
+    cap_ring.set_color(button_ring);
+    cap_ring.translate(Vector3::new(0.0, stick_y, front_z + 0.09));
+    mesh.merge(&cap_ring);
+
+    let mut cap_inner = cylinder(0.10, 0.10, 0.02, seg_cyl);
+    cap_inner.rotate_x(FRAC_PI_2);
+    cap_inner.set_color(button_dark);
+    cap_inner.translate(Vector3::new(0.0, stick_y, front_z + 0.105));
+    mesh.merge(&cap_inner);
+
+    // 4 botones (cruceta en izquierdo, ABXY en rombo en derecho)
+    for (dx, dy) in [(0.0_f32, 0.15_f32), (0.0, -0.15), (-0.15, 0.0), (0.15, 0.0)] {
+        let mut btn = cylinder(0.06, 0.06, 0.04, seg_cyl);
+        btn.rotate_x(FRAC_PI_2);
+        btn.set_color(button_dark);
+        btn.translate(Vector3::new(dx, pad_y + dy, front_z + 0.02));
+        mesh.merge(&btn);
+    }
+
+    // Botón menos (-) o más (+)
+    let mut minus_bar = box_mesh(0.11, 0.03, 0.03);
+    minus_bar.set_color(button_dark);
+    minus_bar.translate(Vector3::new(plus_minus_x, 0.76, front_z + 0.015));
+    mesh.merge(&minus_bar);
+    if side == JoyConSide::Right {
+        let mut plus_bar = box_mesh(0.03, 0.11, 0.03);
+        plus_bar.set_color(button_dark);
+        plus_bar.translate(Vector3::new(plus_minus_x, 0.76, front_z + 0.015));
+        mesh.merge(&plus_bar);
+    }
+
+    // Botón de captura (izquierdo, cuadrado) o Home (derecho, circular)
+    match side {
+        JoyConSide::Left => {
+            let mut cap = box_mesh(0.11, 0.11, 0.035);
+            cap.set_color(button_dark);
+            cap.translate(Vector3::new(0.04, -0.62, front_z + 0.015));
+            mesh.merge(&cap);
+        }
+        JoyConSide::Right => {
+            let mut home = cylinder(0.065, 0.065, 0.035, seg_cyl);
+            home.rotate_x(FRAC_PI_2);
+            home.set_color(button_dark);
+            home.translate(Vector3::new(-0.04, -0.62, front_z + 0.015));
+            mesh.merge(&home);
+        }
+    }
+
+    mesh
+}
+
+pub fn build_joycon_left_mesh(detail: usize) -> Mesh {
+    joycon(JoyConSide::Left, detail)
+}
+
+pub fn build_joycon_right_mesh(detail: usize) -> Mesh {
+    joycon(JoyConSide::Right, detail)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -554,6 +686,21 @@ mod tests {
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+        }
+    }
+
+    #[test]
+    fn joycon_left_and_right_build_three_decreasing_lods_under_4000_tris() {
+        for builder in [build_joycon_left_mesh, build_joycon_right_mesh] {
+            let m2 = builder(2);
+            let m1 = builder(1);
+            let m0 = builder(0);
+
+            assert!(m2.tri_count() <= 4000);
+            assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+            for m in [&m0, &m1, &m2] {
+                assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+            }
         }
     }
 }
