@@ -70,6 +70,11 @@ pub fn atmosphere_rim(shader: Shader) -> Option<AtmosphereRim> {
             power: 4.0,
             strength: 0.14,
         }),
-        Shader::Star | Shader::Ship | Shader::Prop(_) => None,
+        Shader::Star
+        | Shader::Chunky
+        | Shader::Triforce
+        | Shader::Meteor
+        | Shader::Ship
+        | Shader::Prop(_) => None,
     }
 }
