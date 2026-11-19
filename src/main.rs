@@ -10,6 +10,7 @@ mod hud;
 mod icosphere;
 mod lod;
 mod math;
+mod mesh_builder;
 mod mesh_lod;
 mod nav;
 mod noise;
