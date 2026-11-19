@@ -154,6 +154,12 @@ impl GalleryViewer {
             self.distance = 8.4;
             self.target = Vector3::new(-0.55, -0.35, 0.0);
             self.spin = 0.0;
+        } else if showcase_id == "raqueta_tenis" {
+            self.yaw = 0.0;
+            self.pitch = 0.0;
+            self.distance = 2.9;
+            self.target = Vector3::zero();
+            self.spin = 0.0;
         } else {
             self.reset_view(body_radius);
         }
@@ -274,6 +280,10 @@ impl GalleryViewer {
         } else if matches!(body.shader, Shader::Spurs) {
             let osc = (self.spin * 1.4).sin() * 0.6109; // ±35°
             Mat4::rotation_y(osc)
+                * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
+        } else if body.name == "Raqueta de tenis" {
+            let rot = self.spin * (std::f32::consts::TAU / 12.0); // periodo ≈ 16 s (spin=0.75 rad/s)
+            Mat4::rotation_y(rot)
                 * Mat4::scale(Vector3::new(body.radius, body.radius, body.radius))
         } else {
             Mat4::rotation_z(body.axial_tilt)

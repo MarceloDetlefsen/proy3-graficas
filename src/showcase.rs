@@ -190,7 +190,7 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Raqueta de tenis",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Marco ovalado negro y azul, garganta en Y, mango con bandas y red 14x16 de asteroides; shader chunky.",
+        descripcion_es: "Marco Wilson Ultra medido en turquesa, azul y marino con barniz, mango octogonal y cuerdas de asteroides 11x13 con la W roja.",
         inspiracion: None,
         estado: ShowcaseStatus::Ready,
         shader: Some(Shader::Chunky),
@@ -348,7 +348,7 @@ pub fn body_for_showcase(entry: &Showcase) -> Option<crate::scene::Body> {
         phase: 0.0,
         orbit_inclination: 0.0,
         rotation_period: 24.0,
-        axial_tilt: if matches!(entry.id, "meteoro_ff7" | "phoenix_suns" | "spurs_crest") {
+        axial_tilt: if matches!(entry.id, "meteoro_ff7" | "phoenix_suns" | "spurs_crest" | "raqueta_tenis") {
             0.0
         } else {
             0.22

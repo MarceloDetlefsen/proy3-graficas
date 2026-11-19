@@ -11,6 +11,7 @@ mod hud;
 mod icosphere;
 mod lod;
 mod logo_data;
+mod racket_data;
 mod math;
 mod mesh_builder;
 mod mesh_lod;

@@ -1184,6 +1184,110 @@ pub fn beveled_extruded_contour(
     m
 }
 
+/// Perfil 2D CCW de rectángulo redondeado normalizado (`u ∈ [-0.5, 0.5]`, `v ∈ [-0.5, 0.5]`).
+pub fn rounded_rect_profile_2d(corner_radius: f32, corner_segs: usize) -> Vec<[f32; 2]> {
+    let r = corner_radius.clamp(0.0, 0.45);
+    let segs = corner_segs.max(1);
+    let inner = 0.5 - r;
+    if r <= 1e-4 {
+        return vec![[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+    }
+    let fpi2 = std::f32::consts::FRAC_PI_2;
+    let corners = [
+        (inner, inner, 0.0_f32),
+        (-inner, inner, fpi2),
+        (-inner, -inner, PI),
+        (inner, -inner, 3.0 * fpi2),
+    ];
+    let mut pts = Vec::with_capacity(4 * segs);
+    for (cx, cy, start_a) in corners {
+        for s in 0..segs {
+            let a = start_a + fpi2 * (s as f32 / segs as f32);
+            pts.push([cx + r * a.cos(), cy + r * a.sin()]);
+        }
+    }
+    pts
+}
+
+/// Barre un perfil 2D (`u` en el plano XY perpendicular a la trayectoria, `v` en eje Z)
+/// a lo largo de `path`, con ancho en el plano `widths[i]` y profundidad en Z `depths[i]`.
+/// Si `closed` es `true`, cierra el lazo; si es `false`, agrega tapas estancas.
+pub fn sweep_profile(
+    path: &[Vector3],
+    widths: &[f32],
+    depths: &[f32],
+    profile_unit: &[[f32; 2]],
+    closed: bool,
+) -> Mesh {
+    let n = path.len();
+    let p_len = profile_unit.len();
+    assert!(n >= 2 && widths.len() == n && depths.len() == n && p_len >= 3);
+
+    let mut m = Mesh::new();
+    let z_axis = Vector3::new(0.0, 0.0, 1.0);
+    let mut ring_starts = Vec::with_capacity(n);
+
+    for i in 0..n {
+        let prev = if i == 0 {
+            if closed { path[n - 1] } else { path[0] }
+        } else {
+            path[i - 1]
+        };
+        let next = if i + 1 == n {
+            if closed { path[0] } else { path[n - 1] }
+        } else {
+            path[i + 1]
+        };
+        let tangent = (next - prev).normalize();
+        let normal_xy = tangent.cross(z_axis).normalize();
+
+        let start = m.positions.len();
+        ring_starts.push(start);
+        for &[u, v] in profile_unit {
+            let pos = path[i] + normal_xy * (u * widths[i]) + z_axis * (v * depths[i]);
+            let norm = (normal_xy * u + z_axis * v).normalize();
+            m.push_vertex(pos, norm, [u + 0.5, i as f32 / n as f32]);
+        }
+    }
+
+    let seg_count = if closed { n } else { n - 1 };
+    for i in 0..seg_count {
+        let i_next = (i + 1) % n;
+        let r0 = ring_starts[i];
+        let r1 = ring_starts[i_next];
+        for j in 0..p_len {
+            let j_next = (j + 1) % p_len;
+            let a0 = r0 + j;
+            let a1 = r1 + j;
+            let b0 = r0 + j_next;
+            let b1 = r1 + j_next;
+            m.push_triangle(a0, a1, b1);
+            m.push_triangle(a0, b1, b0);
+        }
+    }
+
+    if !closed {
+        let t_start = (path[1] - path[0]).normalize();
+        let c_start = m.push_vertex(path[0], -t_start, [0.5, 0.5]);
+        let r0 = ring_starts[0];
+        for j in 0..p_len {
+            let j_next = (j + 1) % p_len;
+            m.push_triangle(c_start, r0 + j, r0 + j_next);
+        }
+
+        let t_end = (path[n - 1] - path[n - 2]).normalize();
+        let c_end = m.push_vertex(path[n - 1], t_end, [0.5, 0.5]);
+        let rn = ring_starts[n - 1];
+        for j in 0..p_len {
+            let j_next = (j + 1) % p_len;
+            m.push_triangle(c_end, rn + j_next, rn + j);
+        }
+    }
+
+    m.compute_flat_normals();
+    m
+}
+
 /// Dispersa copias de `proto` sobre `points` con escala y rotación reproducibles por `seed`.
 pub fn scatter_instances_in_mesh(
     base: &mut Mesh,
@@ -1424,5 +1528,29 @@ mod tests {
         for (pa, pb) in a.positions.iter().zip(b.positions.iter()) {
             assert!((*pa - *pb).length() < 1e-6);
         }
+    }
+
+    #[test]
+    fn sweep_profile_closed_and_open_are_watertight_with_outward_normals() {
+        let profile = rounded_rect_profile_2d(0.22, 2);
+        let mut loop_path = Vec::new();
+        for i in 0..24 {
+            let a = TAU * (i as f32 / 24.0);
+            loop_path.push(Vector3::new(0.4 * a.cos(), 0.5 * a.sin(), 0.0));
+        }
+        let widths = vec![0.04; 24];
+        let depths = vec![0.08; 24];
+        let hoop = sweep_profile(&loop_path, &widths, &depths, &profile, true);
+        assert!(hoop.is_watertight());
+        assert!(hoop.signed_volume() > 0.0);
+
+        let open_path = vec![
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(0.1, 0.3, 0.0),
+            Vector3::new(0.25, 0.6, 0.0),
+        ];
+        let open = sweep_profile(&open_path, &[0.04, 0.045, 0.05], &[0.10, 0.09, 0.08], &profile, false);
+        assert!(open.is_watertight());
+        assert!(open.signed_volume() > 0.0);
     }
 }
