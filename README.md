@@ -1,4 +1,4 @@
-# Proyecto 3 — Sistema Solar por Software (Rust + Raylib)
+# Proyecto 3 — Space Travel
 
 [![CI](https://github.com/MarceloDetlefsen/proy3-graficas/actions/workflows/ci.yml/badge.svg)](https://github.com/MarceloDetlefsen/proy3-graficas/actions/workflows/ci.yml)
 
@@ -76,64 +76,65 @@ flowchart LR
 
 Más detalle: [docs/arquitectura.md](docs/arquitectura.md).
 
+## Cuerpos del sistema solar (9)
+
+| | | |
+|:---:|:---:|:---:|
+| ![Sol](docs/captures/sol.png)<br>**Sol** (`Star`)<br>Estrella emisiva con granulación de manchas, corona animada, sin auto-sombra y halo solar en píxeles vacíos. | ![Zebes](docs/captures/zebes.png)<br>**Zebes** (`Rocky`)<br>Planeta rocoso con mar turquesa, biomas, grietas minerales, nubes vivas, relieve deformado y *normal mapping* tangente. | ![Tau Ceti](docs/captures/tau_ceti.png)<br>**Tau Ceti** (`GasGiant`)<br>Gigante gaseoso con bandas latitudinales turbulentas y gran vórtice ciclónico animado en el hemisferio sur. |
+| ![Ardens](docs/captures/ardens.png)<br>**Ardens** (`Ardens`)<br>Placas basálticas Voronoi con relieve direccional y grietas de lava magenta-dorada que laten con géiseres emisivos. | ![Abismo](docs/captures/abismo.png)<br>**Abismo** (`Abismo`)<br>Océano 3D con 4 ondas direccionales, cáusticas Voronoi dobles, *maelstrom* polar de 4 brazos y bioluminiscencia nocturna. | ![Basquia](docs/captures/basquia.png)<br>**Basquia** (`Basquia`)<br>Lienzo negro con trazos gruesos de *oilstick*/crayón por rejilla 3D, coronas de 3 puntas y conteos animados a ~6 FPS. |
+| ![Vestigio](docs/captures/vestigio.png)<br>**Vestigio** (`Vestigio`)<br>Desierto oliva-rosa con dunas anisotrópicas 8×, 4 *dust devils* con estela, desfase cromático VHS, *scanlines* y grano. | ![Mural](docs/captures/mural.png)<br>**Mural** (`Mural`)<br>Muro de pintura descascarada en 3 capas `fbm` 3D (gris azulado, crema, rojo), grietas *ridge*, tinta y escamas animadas. | ![Fundido](docs/captures/fundido.png)<br>**Fundido** (`Fundido`)<br>Superficie en transición térmica con mitad superior salmón y bandas onduladas de magma naranja en el hemisferio sur. |
+
 ## Componentes principales
 
 ### Motor MVP y recorte
-- **Evidencia**: [culling_on.png](docs/captures/culling_on.png), `src/math.rs` (`Mat4::perspective_rh`, `Mat4::look_at_rh`), `src/clipping.rs` (`clip_near_plane`).
+Construye las transformaciones de modelo (`T·R·S`), cámara (`look_at_rh`) y proyección perspectiva (`perspective_rh`) en mano derecha mirando hacia `-Z`, y recorta triángulos contra el plano cercano (`clip_near_plane`) antes de dividir por `w`.
+- **Variable en código**: `fov_y = 45°`, `near = 0.1`, `far = 400.0` (`src/camera.rs`, `src/main.rs`) y `DEGENERATE_EPS = 1e-6` (`src/rasterizer.rs`).
 
-| Parámetro o constante | Qué cambia |
-|---|---|
-| `fov_y = 45°`, `near = 0.1`, `far = 400.0` | Campo de visión y planos de recorte de la cámara |
-| `DEGENERATE_EPS = 1e-6` (`src/rasterizer.rs`) | Umbral para descartar triángulos degenerados |
+![Culling activado](docs/captures/culling_on.png)
 
 ### Rasterizador y rendimiento
-- **Evidencia**: [culling_off.png](docs/captures/culling_off.png), `src/rasterizer.rs` (`rasterize_visibility_tiled`, `shade_visibility_tiled_materials`), `docs/rendimiento.md`.
+Divide la pantalla en *tiles* de `64×64` procesados en paralelo con `std::thread::scope` y utiliza un buffer de visibilidad (`depth_buffer` + `tri_id_buffer`) para sombrear una sola vez por píxel visible, descartando esferas fuera del frustum antes de ensamblar triángulos.
+- **Variable en código**: `TILE_SIZE = 64` (`src/rasterizer.rs`) y `res_scales = [2, 3, 1]` (`src/main.rs`, tecla `R`).
 
-| Parámetro o constante | Qué cambia |
-|---|---|
-| `TILE_SIZE = 64` | Tamaño de tile (`64×64` px) para paralelismo y caché |
-| `res_scales = [2, 3, 1]` | Resolución interna (`400×300`, `266×200`, `800×600`) con tecla `R` |
+| Culling ON | Culling OFF |
+|:---:|:---:|
+| ![Culling ON](docs/captures/culling_on.png) | ![Culling OFF](docs/captures/culling_off.png) |
 
 ### Navegación
-- **Evidencia**: [modo_local.png](docs/captures/modo_local.png), [nave.png](docs/captures/nave.png), `src/physics.rs` (`PhysicsStepper`), `src/nav.rs` (`NavState`).
+Integra movimiento 6-DOF y gravedad a paso fijo (`FIXED_DT`) independiente del FPS, usando colisión contra el radio efectivo deformado y cambio automático con histéresis entre marco global y marco local del planeta más cercano.
+- **Variable en código**: `FIXED_DT = 1.0 / 120.0`, `GRAVITY_G = 7.2` (`src/physics.rs`) y `LOCAL_ENTER_RADII = 2.5` / `LOCAL_EXIT_RADII = 3.0` (`src/nav.rs`).
 
-| Parámetro o constante | Qué cambia |
-|---|---|
-| `FIXED_DT = 1.0 / 120.0`, `MAX_SUBSTEPS = 8` | Paso fijo de física independiente del FPS |
-| `GRAVITY_G = 7.2`, `MAX_GRAVITY_ACCEL = 15.0` | Intensidad y cota de la atracción gravitacional |
-| `LOCAL_ENTER_RADII = 2.5`, `LOCAL_EXIT_RADII = 3.0` | Histéresis de entrada/salida al marco local del planeta |
+| Modo Local | Nave 3D |
+|:---:|:---:|
+| ![Modo Local](docs/captures/modo_local.png) | ![Nave](docs/captures/nave.png) |
 
 ### Planetas y shaders
-- **Evidencia**: [sol.png](docs/captures/sol.png), [zebes.png](docs/captures/zebes.png), [tau_ceti.png](docs/captures/tau_ceti.png), [ardens.png](docs/captures/ardens.png), [abismo.png](docs/captures/abismo.png), [basquia.png](docs/captures/basquia.png), [vestigio.png](docs/captures/vestigio.png), [mural.png](docs/captures/mural.png), [fundido.png](docs/captures/fundido.png); `src/scene.rs` (`solar_system`), `src/scene_config.rs`, `src/shaders.rs` (`live_param`).
+Orquesta los 9 cuerpos celestes con configuración centralizada (escalado de órbitas para un recorrido de ~1 min, atenuación solar con ambiente mínimo, halo solar en píxeles vacíos y brillo atmosférico Fresnel por planeta) y parámetro en vivo por shader.
+- **Variable en código**: `ORBIT_DISTANCE_SCALE = 0.65`, `ORBIT_SPEED_SCALE = 1.15`, `MIN_AMBIENT = 0.14`, `SOLAR_ATTENUATION_K = 0.00055` (`src/scene_config.rs`) y `live_param` (`src/shaders.rs`, teclas `4`/`5`).
 
-| Parámetro o constante | Qué cambia |
-|---|---|
-| `ORBIT_DISTANCE_SCALE = 0.65`, `ORBIT_SPEED_SCALE = 1.15` | Escala de órbitas para recorrido completo de ~1 minuto |
-| `MIN_AMBIENT = 0.14`, `SOLAR_ATTENUATION_K = 0.00055` | Ambiente mínimo y atenuación de la luz solar por distancia |
-| `live_param` (`0.25..=2.0`, paso `0.15`) | Modulador en vivo por shader con teclas `4` / `5` |
+![Sistema completo](docs/captures/sistema_completo.png)
 
 ### Relieve y normales
-- **Evidencia**: [normales_on.png](docs/captures/normales_on.png), [normales_off.png](docs/captures/normales_off.png), [deform_baja.png](docs/captures/deform_baja.png), [deform_alta.png](docs/captures/deform_alta.png), [lod_cerca.png](docs/captures/lod_cerca.png), [lod_lejos.png](docs/captures/lod_lejos.png); `src/icosphere.rs` (`deform_icosphere_for_shader`), `src/lod.rs`.
+Genera icosferas procedurales (`0..=5`) deformadas por la misma función `height_at` del horneado, selecciona el nivel LOD según el radio proyectado en pantalla con histéresis y perturba las normales en espacio tangente en `Zebes`.
+- **Variable en código**: `ICOSPHERE_THRESHOLDS_PX = [8.0, 18.0, 40.0, 85.0, 160.0]`, `DEFAULT_HYSTERESIS = 0.12` (`src/lod.rs`) y `deformation_amplitude` / `noise_frequency` (`src/scene.rs`, teclas `,`/`.` y `[`/`]`).
 
-| Parámetro o constante | Qué cambia |
-|---|---|
-| `ICOSPHERE_THRESHOLDS_PX = [8, 18, 40, 85, 160]` | Umbrales de radio en píxeles para LOD `0..=5` |
-| `DEFAULT_HYSTERESIS = 0.12` | Banda muerta de histéresis en cambio de LOD |
+| Normales ON | Deformación alta |
+|:---:|:---:|
+| ![Normales ON](docs/captures/normales_on.png) | ![Deformación alta](docs/captures/deform_alta.png) |
 
 ### Superficie
-- **Evidencia**: [semilla_42.png](docs/captures/semilla_42.png), [semilla_99.png](docs/captures/semilla_99.png); `src/surface_scatter.rs` (`scatter_for_body`), `src/rng.rs` (`SplitMix64`).
+Distribuye instancias sobre la esfera con espiral de Fibonacci, perturbación `SplitMix64` y filtrado por ruido procedural, orientando cada objeto según la normal deformada y aplicando *frustum culling* y LOD por distancia.
+- **Variable en código**: `surface_seed = 42` (`src/main.rs`, teclas `I`/`O`), `MAX_PROP_DISTANCE = 32.0` (`src/main.rs`) e `INSTANCE_LOD_DIST = 12.0` (`src/lod.rs`).
 
-| Parámetro o constante | Qué cambia |
-|---|---|
-| `surface_seed = 42` | Semilla inicial de distribución (ajustable con `I` / `O`) |
-| `MAX_PROP_DISTANCE = 32.0`, `INSTANCE_LOD_DIST = 12.0` | Distancia máxima de dibujado y cambio de LOD de instancias |
+| Semilla 42 | Semilla 99 |
+|:---:|:---:|
+| ![Semilla 42](docs/captures/semilla_42.png) | ![Semilla 99](docs/captures/semilla_99.png) |
 
 ### HUD
-- **Evidencia**: [ayuda_hud.png](docs/captures/ayuda_hud.png); `src/hud.rs` (`glyph_5x7`, `OverlayBuffer`, `CONTROLS`, `render_hud`), `src/framebuffer.rs` (`draw_with_overlay`).
+Dibuja la barra de título, telemetría, contadores de culling/LOD, selección de cuerpos (`Tab`) y el panel de ayuda (`H`) mediante una fuente bitmap `5×7` propia sobre un `OverlayBuffer` RGBA compuesto al presentar sin texto de Raylib.
+- **Variable en código**: `GLYPH_WIDTH = 5`, `GLYPH_HEIGHT = 7` y tabla `CONTROLS` (`src/hud.rs`).
 
-| Parámetro o constante | Qué cambia |
-|---|---|
-| `GLYPH_WIDTH = 5`, `GLYPH_HEIGHT = 7` | Fuente bitmap propia (ASCII 32–126 + `á é í ó ú ñ ¿ ¡`) |
+![Panel de ayuda HUD](docs/captures/ayuda_hud.png)
 
 ## Funcionalidades o criterios evaluables
 
@@ -225,11 +226,8 @@ proy3-graficas/
 - `raylib = "6.0.0"` (con `SUPPORT_IMAGE_GENERATION`): ventana, lectura de teclado/ratón, carga/actualización de textura y exportación de PNG.
 - Biblioteca estándar de Rust (`std::thread::scope`): paralelismo por bandas/tiles sin dependencias externas.
 
-## Uso de IA y recursos externos
+## Autor
 
-- **Asistencia de IA**: <<COMPLETAR: herramientas usadas>>. El autor revisó, probó y puede explicar cada módulo del código fuente.
-- **Recursos externos**: laboratorios 4 y 6 del curso como base del renderizador, modelo `assets/ship.obj` del laboratorio 4, y paletas de color inspiradas en álbumes musicales sin utilizar sus portadas como texturas.
-
-## Autores
-
-- **Marcelo Detlefsen** — Carné 24554, Universidad del Valle de Guatemala, Gráficas por Computadora — Proyecto 3 (trabajo individual: arquitectura del motor por software, shaders procedurales, física/navegación, HUD propio, pruebas y documentación).
+**Marcelo Detlefsen** - Carné 24554  
+*Universidad del Valle de Guatemala*  
+*Gráficas por Computadora - Proyecto 3*
