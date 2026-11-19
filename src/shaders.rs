@@ -9,6 +9,7 @@ use crate::vertex::Vertex;
 pub mod abismo;
 pub mod ardens;
 pub mod basquia;
+pub mod chunky;
 pub mod fundido;
 pub mod gas_giant;
 pub mod mural;
@@ -29,6 +30,7 @@ pub enum Shader {
     Vestigio,
     Mural,
     Fundido,
+    Chunky,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -114,6 +116,7 @@ pub fn live_param(shader: Shader) -> LiveParam {
         Shader::Vestigio => "Contraste VHS",
         Shader::Mural => "Contraste pintura",
         Shader::Fundido => "Brillo magma",
+        Shader::Chunky => "Velocidad giro",
         Shader::Ship | Shader::Prop(_) => "Brillo",
     };
     LiveParam {
@@ -142,6 +145,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Vestigio => vestigio::shade(fragment, uniforms),
         Shader::Mural => mural::shade(fragment, uniforms),
         Shader::Fundido => fundido::shade(fragment, uniforms),
+        Shader::Chunky => chunky::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -191,6 +195,7 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Vestigio => "Shader: Vestigio",
         Shader::Mural => "Shader: Mural",
         Shader::Fundido => "Shader: Fundido",
+        Shader::Chunky => "Shader: Chunky",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }
