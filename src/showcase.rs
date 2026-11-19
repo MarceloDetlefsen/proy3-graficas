@@ -218,11 +218,11 @@ pub const SHOWCASE_ENTRIES: &[Showcase] = &[
         nombre: "Trifuerza",
         sistema: SystemId::Favoritos,
         tipo: "Trofeo",
-        descripcion_es: "Trofeo pendiente de modelado y shader.",
+        descripcion_es: "Tres prismas triangulares equilateros con centro vacio; shader dorado metalico con destello animado.",
         inspiracion: None,
-        estado: ShowcaseStatus::Placeholder,
-        shader: None,
-        has_mesh: false,
+        estado: ShowcaseStatus::Ready,
+        shader: Some(Shader::Triforce),
+        has_mesh: true,
     },
     Showcase {
         id: "la_bombonera",
@@ -256,6 +256,7 @@ pub fn favorites_ready_entries() -> Vec<&'static Showcase> {
 pub fn mesh_builder_for_showcase(id: &str) -> Option<fn(usize) -> crate::mesh_builder::Mesh> {
     match id {
         "cubo_rubik" => Some(crate::bodies::build_rubik_mesh),
+        "trifuerza" => Some(crate::bodies::build_triforce_mesh),
         _ => None,
     }
 }

@@ -1,9 +1,11 @@
 #![allow(dead_code)]
 //! Cuerpos procedurales del sistema de favoritos construidos con `mesh_builder`.
 
+use std::f32::consts::FRAC_PI_2;
+
 use raylib::prelude::Vector3;
 
-use crate::mesh_builder::{Mesh, box_mesh, rounded_box};
+use crate::mesh_builder::{Mesh, box_mesh, extruded_prism, loft_rings, rounded_box};
 
 const BLACK: Vector3 = Vector3 { x: 0.06, y: 0.06, z: 0.07 };
 const WHITE: Vector3 = Vector3 { x: 0.96, y: 0.96, z: 0.94 };
@@ -138,6 +140,59 @@ pub fn build_rubik_mesh(detail: usize) -> Mesh {
     }
 }
 
+/// Construye la Trifuerza con tres prismas triangulares equiláteros y el centro vacío.
+pub fn build_triforce_mesh(detail: usize) -> Mesh {
+    let side = 0.88_f32;
+    let h = side * 3.0_f32.sqrt() * 0.5;
+    let r_top = h * (2.0 / 3.0);
+    let r_bot = h * (1.0 / 3.0);
+    let base_tri = [
+        [0.0, -r_top],
+        [side * 0.5, r_bot],
+        [-side * 0.5, r_bot],
+    ];
+    let scale_poly = |s: f32| -> Vec<[f32; 2]> {
+        base_tri.iter().map(|&[x, z]| [x * s, z * s]).collect()
+    };
+
+    let build_prism = || -> Mesh {
+        let mut p = match detail {
+            0 => extruded_prism(&base_tri, 0.24),
+            1 => loft_rings(&[
+                (-0.12, scale_poly(0.90)),
+                (0.0, scale_poly(1.0)),
+                (0.12, scale_poly(0.90)),
+            ]),
+            _ => loft_rings(&[
+                (-0.13, scale_poly(0.84)),
+                (-0.09, scale_poly(0.96)),
+                (0.0, scale_poly(1.0)),
+                (0.09, scale_poly(0.96)),
+                (0.13, scale_poly(0.84)),
+            ]),
+        };
+        p.rotate_x(FRAC_PI_2);
+        p.compute_flat_normals();
+        p
+    };
+
+    let gap_s = side * 1.04;
+    let gap_h = h * 1.04;
+    let offsets = [
+        Vector3::new(0.0, gap_h * 0.5, 0.0),
+        Vector3::new(-gap_s * 0.5, -gap_h * 0.5, 0.0),
+        Vector3::new(gap_s * 0.5, -gap_h * 0.5, 0.0),
+    ];
+    let mut mesh = Mesh::new();
+    for off in offsets {
+        let mut prism = build_prism();
+        prism.set_color(Vector3::new(0.95, 0.78, 0.20));
+        prism.translate(off);
+        mesh.merge(&prism);
+    }
+    mesh
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,6 +204,20 @@ mod tests {
         let m0 = build_rubik_mesh(0);
 
         assert!(m2.tri_count() <= 4000, "Rubik L2={} > 4000", m2.tri_count());
+        assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
+        for m in [&m0, &m1, &m2] {
+            assert!(m.is_watertight());
+            assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
+        }
+    }
+
+    #[test]
+    fn triforce_builds_three_decreasing_watertight_lods_under_4000_tris() {
+        let m2 = build_triforce_mesh(2);
+        let m1 = build_triforce_mesh(1);
+        let m0 = build_triforce_mesh(0);
+
+        assert!(m2.tri_count() <= 4000);
         assert!(m2.tri_count() > m1.tri_count() && m1.tri_count() > m0.tri_count());
         for m in [&m0, &m1, &m2] {
             assert!(m.is_watertight());

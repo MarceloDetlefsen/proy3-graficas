@@ -16,6 +16,7 @@ pub mod mural;
 pub mod rocky;
 pub mod ship;
 pub mod star;
+pub mod triforce;
 pub mod vestigio;
 
 #[allow(dead_code)]
@@ -31,6 +32,7 @@ pub enum Shader {
     Mural,
     Fundido,
     Chunky,
+    Triforce,
     Ship,
     Prop(crate::surface_scatter::SurfacePropKind),
 }
@@ -117,6 +119,7 @@ pub fn live_param(shader: Shader) -> LiveParam {
         Shader::Mural => "Contraste pintura",
         Shader::Fundido => "Brillo magma",
         Shader::Chunky => "Velocidad giro",
+        Shader::Triforce => "Velocidad destello",
         Shader::Ship | Shader::Prop(_) => "Brillo",
     };
     LiveParam {
@@ -146,6 +149,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         Shader::Mural => mural::shade(fragment, uniforms),
         Shader::Fundido => fundido::shade(fragment, uniforms),
         Shader::Chunky => chunky::shade(fragment, uniforms),
+        Shader::Triforce => triforce::shade(fragment, uniforms),
         Shader::Ship => ship::shade(fragment, uniforms),
         Shader::Prop(kind) => {
             use crate::surface_scatter::SurfacePropKind;
@@ -160,7 +164,7 @@ pub fn fragment_shader(fragment: &Fragment, shader: Shader, uniforms: &Uniforms)
         }
     };
     let p = uniforms.shader_param;
-    if !matches!(shader, Shader::Chunky) && (p - 1.0).abs() > 1e-3 {
+    if !matches!(shader, Shader::Chunky | Shader::Triforce) && (p - 1.0).abs() > 1e-3 {
         let luma = 0.2126 * color.x + 0.7152 * color.y + 0.0722 * color.z;
         color.x = (luma + (color.x - luma) * p).clamp(0.0, 1.0);
         color.y = (luma + (color.y - luma) * p).clamp(0.0, 1.0);
@@ -196,6 +200,7 @@ pub fn shader_name(shader: Shader) -> &'static str {
         Shader::Mural => "Shader: Mural",
         Shader::Fundido => "Shader: Fundido",
         Shader::Chunky => "Shader: Chunky",
+        Shader::Triforce => "Shader: Triforce",
         Shader::Ship => "Shader: Ship",
         Shader::Prop(_) => "Shader: Surface Prop",
     }
