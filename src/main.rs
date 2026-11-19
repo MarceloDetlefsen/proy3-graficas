@@ -1,8 +1,10 @@
 mod camera;
 mod clipping;
 mod culling;
+mod docs_capture;
 mod fragment;
 mod framebuffer;
+mod hud;
 mod icosphere;
 mod lod;
 mod math;
@@ -16,6 +18,7 @@ mod primitive;
 mod rasterizer;
 mod rng;
 mod scene;
+mod scene_config;
 mod shaders;
 mod ship;
 mod sim;
@@ -69,6 +72,7 @@ pub struct Uniforms {
     pub viewport_height: i32,
     pub noise: Noise,
     pub baked: Option<Arc<BakedMaps>>,
+    pub shader_param: f32,
 }
 
 struct CaptureOptions {
@@ -260,6 +264,11 @@ fn render(
 }
 
 fn main() {
+    if std::env::args().any(|a| a == "--docs") {
+        docs_capture::generate_docs_captures();
+        return;
+    }
+
     let obj_path = "assets/sphere.obj";
     let obj = load_obj(obj_path).expect("No se pudo cargar assets/sphere.obj");
     let (mesh_vertices, mesh_indices) = obj.to_indexed_mesh();
@@ -330,6 +339,7 @@ fn main() {
             viewport_height: internal_height,
             noise: noise.clone(),
             baked: Some(Arc::clone(&baked)),
+            shader_param: 1.0,
         };
         let mut render_buffers = RenderBuffers::new(vertex_array.len());
         framebuffer.clear();
@@ -389,11 +399,17 @@ fn main() {
     let mut nav_state = nav::NavState::new();
     let mut gravity_enabled = true;
     let mut gravity_mag = 0.0_f32;
+    let mut overlay_buf = hud::OverlayBuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32);
+    let mut selected_body: usize = 0;
     let mut show_help = false;
     let mut follow_cam = FollowCamera::new(&ship, 5.5, 1.6);
     let mut follow_mode = true;
     window.disable_cursor();
     let mut bodies = solar_system();
+    let mut body_shader_params: Vec<f32> = bodies
+        .iter()
+        .map(|b| shaders::live_param(b.shader).default)
+        .collect();
     let icosphere_lods = icosphere::build_icosphere_lods();
     let mut body_caches: Vec<icosphere::DeformedIcosphereCache> = bodies
         .iter()
@@ -407,7 +423,6 @@ fn main() {
         .collect();
     let mut body_lods = vec![3_usize; bodies.len()];
     let mut forced_lod: Option<usize> = None;
-    let mut last_rebuild_ms = 0.0_f64;
     let mut surface_seed: u64 = 42;
     let build_candidates = |seed: u64, bodies: &[scene::Body]| {
         bodies
@@ -476,8 +491,35 @@ fn main() {
         if window.is_key_pressed(KeyboardKey::KEY_BACKSPACE) {
             follow_cam.recenter();
         }
-        if window.is_key_pressed(KeyboardKey::KEY_TAB) {
+        if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
             sim_clock.toggle_pause();
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_TAB) {
+            selected_body = (selected_body + 1) % bodies.len();
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_NINE) {
+            let b = &mut bodies[selected_body];
+            b.radius = (b.radius - 0.1).max(0.3);
+            b.surface.max_deformation = b.radius * b.surface.deformation_amplitude;
+            planet_instances[selected_body] =
+                surface_scatter::build_body_instances(b, &planet_candidates[selected_body], &noise);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_ZERO) {
+            let b = &mut bodies[selected_body];
+            b.radius = (b.radius + 0.1).min(6.0);
+            b.surface.max_deformation = b.radius * b.surface.deformation_amplitude;
+            planet_instances[selected_body] =
+                surface_scatter::build_body_instances(b, &planet_candidates[selected_body], &noise);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_FOUR) {
+            let spec = shaders::live_param(bodies[selected_body].shader);
+            body_shader_params[selected_body] =
+                (body_shader_params[selected_body] - spec.step).max(spec.min);
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_FIVE) {
+            let spec = shaders::live_param(bodies[selected_body].shader);
+            body_shader_params[selected_body] =
+                (body_shader_params[selected_body] + spec.step).min(spec.max);
         }
         if window.is_key_pressed(KeyboardKey::KEY_H) {
             show_help = !show_help;
@@ -606,7 +648,6 @@ fn main() {
             amp_delta = 0.03;
         }
         if amp_delta != 0.0 || rebuild_surface {
-            let t_reb = std::time::Instant::now();
             for (i, body) in bodies.iter_mut().enumerate() {
                 if matches!(body.shader, Shader::Rocky) {
                     body.surface.deformation_amplitude =
@@ -629,7 +670,6 @@ fn main() {
                 ));
             }
             planet_instances = build_all_instances(&bodies, &planet_candidates, &noise);
-            last_rebuild_ms = t_reb.elapsed().as_secs_f64() * 1000.0;
         }
         let capture_requested = window.is_key_pressed(KeyboardKey::KEY_P);
         if !follow_mode {
@@ -760,6 +800,7 @@ fn main() {
             viewport_height: internal_height,
             noise: noise.clone(),
             baked: Some(Arc::clone(&baked)),
+            shader_param: 1.0,
         };
 
         let t_clear = std::time::Instant::now();
@@ -817,6 +858,7 @@ fn main() {
                 TriMaterial {
                     shader: body.shader,
                     light_dir: body_light,
+                    shader_param: body_shader_params[body_idx],
                 },
             );
 
@@ -857,6 +899,7 @@ fn main() {
                     TriMaterial {
                         shader: Shader::Prop(inst.kind),
                         light_dir: body_light,
+                        shader_param: 1.0,
                     },
                 );
             }
@@ -901,6 +944,7 @@ fn main() {
                 TriMaterial {
                     shader: Shader::Ship,
                     light_dir: ship_light,
+                    shader_param: 1.0,
                 },
             );
         }
@@ -1027,52 +1071,70 @@ fn main() {
             tris_before_cull,
             tris_after_cull,
         ));
-        let rocky_amp = bodies
-            .iter()
-            .find(|b| matches!(b.shader, Shader::Rocky))
-            .map_or(0.0, |b| b.surface.deformation_amplitude);
-        overlay.push(format!(
-            "Deform(,/.): Amp={:.2} Freq([/])={:.1} ({:.2} ms) | Norm(B):{} Debug(Y):{}",
-            rocky_amp,
-            noise_frequency,
-            last_rebuild_ms,
-            if normal_mapping { "ON" } else { "OFF" },
-            if debug_normals { "ON" } else { "OFF" },
-        ));
-        overlay.push(format!(
-            "Semilla(I/O): {} | Instancias(/): {}/{} (Cull {})",
+        let sel_body = &bodies[selected_body];
+        let sel_spec = shaders::live_param(sel_body.shader);
+        let selected_summary = format!(
+            "Sel(Tab): {} | R(9/0):{:.2} | {}(4/5):{:.2}",
+            sel_body.name,
+            sel_body.radius,
+            sel_spec.name,
+            body_shader_params[selected_body]
+        );
+        let avg = perf_stats.average();
+        let fps = if avg.total_ms > 0.0 {
+            1000.0 / avg.total_ms
+        } else {
+            0.0
+        };
+        let win_w = window.get_screen_width().max(1) as u32;
+        let win_h = window.get_screen_height().max(1) as u32;
+        overlay_buf.resize(win_w, win_h);
+        let mode_full = format!("{} [{}]", mode_str, override_str);
+        let lod_full = format!(
+            "LOD(Z):{} {}",
+            lod_mode_str,
+            body_lod_summary.join(" ")
+        );
+        let ship_lod_str = format!(
+            "Nave:L{}({})",
+            ship_lod,
+            ship_vertex_arrays[ship_lod].len() / 3
+        );
+        let hud_snap = hud::HudSnapshot {
+            title: &label,
+            fps,
+            total_ms: avg.total_ms,
+            vertex_ms: avg.vertex_ms,
+            raster_ms: avg.raster_ms,
+            shading_ms: avg.shading_ms,
+            present_ms: avg.present_ms,
+            internal_width: framebuffer.width,
+            internal_height: framebuffer.height,
+            threads,
+            tris_before_cull,
+            tris_after_cull,
+            frustum_culling,
+            lod_summary: &lod_full,
+            ship_lod_summary: &ship_lod_str,
+            mode_summary: &mode_full,
+            gravity_enabled,
+            gravity_mag,
+            speed: ship.velocity.length(),
+            altitude_summary: &alt_str,
+            time_scale: sim_clock.scale,
+            paused: sim_clock.paused,
             surface_seed,
             instances_drawn,
             instances_total,
-            if instance_culling { "ON" } else { "OFF" }
-        ));
-        if let Some(idx) = collision_body {
-            overlay.push(format!("COLISION: {} (superficie)", bodies[idx].name));
-        }
-        if perf_stats.enabled {
-            overlay.extend(perf_stats.overlay_lines());
-        }
-        if show_help {
-            overlay.extend([
-                "--- Controles de vuelo (H para cerrar) ---".to_string(),
-                "W / S       : Empuje adelante / atras".to_string(),
-                "Shift       : Impulso (boost)".to_string(),
-                "Espacio     : Frenado progresivo".to_string(),
-                "Mouse/Flech.: Cabeceo y guinada".to_string(),
-                "Q / E       : Alabeo (roll)".to_string(),
-                "G           : Activar / desactivar gravedad".to_string(),
-                "L           : Modo control (Auto/Local/Global)".to_string(),
-                "Z / X / M   : Forzar LOD / Frustum / Wireframe".to_string(),
-                ", . / [ ]   : Amplitud / Frecuencia deform.".to_string(),
-                "B / Y       : Normal map / Debug normales".to_string(),
-                "I / O       : Cambiar semilla superficie".to_string(),
-                "/           : Culling de instancias ON/OFF".to_string(),
-                "F / Backsp. : Camara seguir/libre / Recentrar".to_string(),
-                "Tab / - =   : Pausa / Escala de tiempo".to_string(),
-            ]);
-        }
+            instance_culling,
+            selected_summary: &selected_summary,
+            collision_body: collision_body.map(|idx| bodies[idx].name),
+            show_perf: perf_stats.enabled,
+            show_help,
+        };
+        hud::render_hud(&mut overlay_buf, &hud_snap);
         let t_pres = std::time::Instant::now();
-        framebuffer.draw_in_window(&mut window, &thread, &label, &overlay);
+        framebuffer.draw_with_overlay(&mut window, &thread, &overlay_buf);
         sample.present_ms = t_pres.elapsed().as_secs_f64() * 1000.0;
         sample.total_ms = frame_start.elapsed().as_secs_f64() * 1000.0;
         perf_stats.push(sample);

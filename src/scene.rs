@@ -37,7 +37,7 @@ pub struct Body {
 }
 
 pub fn solar_system() -> Vec<Body> {
-    vec![
+    let mut bodies = vec![
         Body {
             name: "Sol",
             kind: BodyKind::Star,
@@ -209,7 +209,14 @@ pub fn solar_system() -> Vec<Body> {
                 max_deformation: 1.0 * 0.12,
             },
         },
-    ]
+    ];
+    for b in &mut bodies {
+        if !matches!(b.kind, BodyKind::Star) {
+            b.orbit_radius *= crate::scene_config::ORBIT_DISTANCE_SCALE;
+            b.orbit_period /= crate::scene_config::ORBIT_SPEED_SCALE;
+        }
+    }
+    bodies
 }
 
 pub fn effective_radius(body: &Body) -> f32 {

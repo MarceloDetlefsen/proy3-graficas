@@ -133,6 +133,7 @@ mod tests {
             viewport_height: 600,
             noise: crate::noise::Noise::new(0),
             baked: None,
+            shader_param: 1.0,
         }
     }
 

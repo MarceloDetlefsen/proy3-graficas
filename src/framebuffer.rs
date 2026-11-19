@@ -17,6 +17,7 @@ pub struct Framebuffer {
     background_color: Color,
     pub current_color: Color,
     texture: Option<Texture2D>,
+    overlay_texture: Option<Texture2D>,
 }
 
 impl Framebuffer {
@@ -42,6 +43,7 @@ impl Framebuffer {
             background_color,
             current_color: Color::WHITE,
             texture: None,
+            overlay_texture: None,
         }
     }
 
@@ -151,12 +153,11 @@ impl Framebuffer {
         }
     }
 
-    pub fn draw_in_window(
+    pub fn draw_with_overlay(
         &mut self,
         window: &mut RaylibHandle,
         thread: &RaylibThread,
-        label: &str,
-        overlay: &[String],
+        overlay: &crate::hud::OverlayBuffer,
     ) {
         if self.texture.is_none() {
             let image = Image::gen_image_color(
@@ -169,6 +170,20 @@ impl Framebuffer {
                 self.texture = Some(tex);
             }
         }
+        let ov_w = overlay.width.max(1);
+        let ov_h = overlay.height.max(1);
+        let need_new_ov = self
+            .overlay_texture
+            .as_ref()
+            .is_none_or(|t| t.width() != ov_w as i32 || t.height() != ov_h as i32);
+        if need_new_ov {
+            let image = Image::gen_image_color(ov_w as i32, ov_h as i32, Color::BLANK);
+            if let Ok(tex) = window.load_texture_from_image(thread, &image) {
+                tex.set_texture_filter(thread, TextureFilter::TEXTURE_FILTER_POINT);
+                self.overlay_texture = Some(tex);
+            }
+        }
+
         let win_w = window.get_screen_width() as f32;
         let win_h = window.get_screen_height() as f32;
         let scale = (win_w / self.width as f32).min(win_h / self.height as f32);
@@ -179,16 +194,17 @@ impl Framebuffer {
 
         if let Some(texture) = self.texture.as_mut() {
             let _ = texture.update_texture(&self.color_pixels);
-            let mut drawing = window.begin_drawing(thread);
-            drawing.clear_background(Color::BLACK);
-            drawing.draw_texture_pro(texture, src, dst, Vector2::zero(), 0.0, Color::WHITE);
-            drawing.draw_text(label, 16, 16, 20, Color::WHITE);
-            if !overlay.is_empty() {
-                let box_h = 16 + overlay.len() as i32 * 20;
-                drawing.draw_rectangle(12, 44, 460, box_h, Color::new(0, 0, 0, 175));
-                for (i, line) in overlay.iter().enumerate() {
-                    drawing.draw_text(line, 20, 52 + i as i32 * 20, 16, Color::GREEN);
-                }
+            let ov_tex = self.overlay_texture.as_mut();
+            if let Some(ov) = ov_tex {
+                let _ = ov.update_texture(&overlay.pixels);
+                let mut drawing = window.begin_drawing(thread);
+                drawing.clear_background(Color::BLACK);
+                drawing.draw_texture_pro(texture, src, dst, Vector2::zero(), 0.0, Color::WHITE);
+                drawing.draw_texture(ov, 0, 0, Color::WHITE);
+            } else {
+                let mut drawing = window.begin_drawing(thread);
+                drawing.clear_background(Color::BLACK);
+                drawing.draw_texture_pro(texture, src, dst, Vector2::zero(), 0.0, Color::WHITE);
             }
         }
     }
