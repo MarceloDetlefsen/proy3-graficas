@@ -24,7 +24,7 @@ pub fn glyph_5x7(ch: char) -> Option<[u8; 7]> {
         '*' => [0x00, 0x04, 0x15, 0x0E, 0x15, 0x04, 0x00],
         '+' => [0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00],
         ',' => [0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x08],
-        '-' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
+        '-' => [0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x00],
         '.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C],
         '/' => [0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10],
         '0' => [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
@@ -82,17 +82,17 @@ pub fn glyph_5x7(ch: char) -> Option<[u8; 7]> {
         'd' => [0x01, 0x01, 0x0F, 0x11, 0x11, 0x11, 0x0F],
         'e' => [0x00, 0x00, 0x0E, 0x11, 0x1F, 0x10, 0x0E],
         'f' => [0x06, 0x08, 0x1E, 0x08, 0x08, 0x08, 0x08],
-        'g' => [0x00, 0x0F, 0x11, 0x11, 0x0F, 0x01, 0x0E],
+        'g' => [0x00, 0x0E, 0x11, 0x11, 0x0F, 0x01, 0x1E],
         'h' => [0x10, 0x10, 0x1E, 0x11, 0x11, 0x11, 0x11],
         'i' => [0x04, 0x00, 0x0C, 0x04, 0x04, 0x04, 0x0E],
         'j' => [0x02, 0x00, 0x06, 0x02, 0x02, 0x12, 0x0C],
         'k' => [0x10, 0x10, 0x12, 0x14, 0x18, 0x14, 0x12],
-        'l' => [0x0C, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
+        'l' => [0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x06],
         'm' => [0x00, 0x00, 0x1A, 0x15, 0x15, 0x11, 0x11],
         'n' => [0x00, 0x00, 0x1E, 0x11, 0x11, 0x11, 0x11],
         'o' => [0x00, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E],
         'p' => [0x00, 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10],
-        'q' => [0x00, 0x0F, 0x11, 0x11, 0x0F, 0x01, 0x01],
+        'q' => [0x00, 0x0E, 0x12, 0x12, 0x0E, 0x02, 0x03],
         'r' => [0x00, 0x00, 0x16, 0x19, 0x10, 0x10, 0x10],
         's' => [0x00, 0x00, 0x0F, 0x10, 0x0E, 0x01, 0x1E],
         't' => [0x08, 0x08, 0x1E, 0x08, 0x08, 0x09, 0x06],
@@ -110,17 +110,22 @@ pub fn glyph_5x7(ch: char) -> Option<[u8; 7]> {
         'á' => [0x02, 0x04, 0x0E, 0x01, 0x0F, 0x11, 0x0F],
         'é' => [0x02, 0x04, 0x0E, 0x11, 0x1F, 0x10, 0x0E],
         'í' => [0x02, 0x04, 0x0C, 0x04, 0x04, 0x04, 0x0E],
-        'ó' => [0x02, 0x04, 0x0E, 0x11, 0x11, 0x11, 0x0E],
+        'ó' => [0x02, 0x04, 0x00, 0x0E, 0x11, 0x11, 0x0E],
         'ú' => [0x02, 0x04, 0x11, 0x11, 0x11, 0x13, 0x0D],
+        'ü' => [0x0A, 0x00, 0x11, 0x11, 0x11, 0x13, 0x0D],
         'ñ' => [0x0D, 0x12, 0x1E, 0x11, 0x11, 0x11, 0x11],
         'Á' => [0x02, 0x04, 0x0E, 0x11, 0x1F, 0x11, 0x11],
         'É' => [0x02, 0x04, 0x1F, 0x10, 0x1E, 0x10, 0x1F],
         'Í' => [0x02, 0x04, 0x0E, 0x04, 0x04, 0x04, 0x0E],
         'Ó' => [0x02, 0x04, 0x0E, 0x11, 0x11, 0x11, 0x0E],
         'Ú' => [0x02, 0x04, 0x11, 0x11, 0x11, 0x11, 0x0E],
+        'Ü' => [0x0A, 0x00, 0x11, 0x11, 0x11, 0x11, 0x0E],
         'Ñ' => [0x0D, 0x12, 0x11, 0x19, 0x15, 0x13, 0x11],
         '¿' => [0x04, 0x00, 0x04, 0x0C, 0x10, 0x11, 0x0E],
         '¡' => [0x04, 0x00, 0x04, 0x04, 0x04, 0x04, 0x04],
+        '·' => [0x00, 0x00, 0x06, 0x06, 0x00, 0x00, 0x00],
+        '—' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
+        '…' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15],
         _ => return None,
     };
     Some(rows)
@@ -544,24 +549,64 @@ pub struct GalleryHudSnapshot<'a> {
     pub fps: f64,
 }
 
-fn wrap_words(text: &str, max_chars: usize) -> Vec<String> {
+/// Envuelve `text` por palabras para que ninguna línea supere `max_width_px` a la escala dada.
+pub fn wrap_text(text: &str, max_width_px: i32, scale: i32) -> Vec<String> {
+    let s = scale.max(1);
+    let advance = (GLYPH_WIDTH as i32 + 1) * s;
+    let char_w = GLYPH_WIDTH as i32 * s;
+    let max_chars = if max_width_px < char_w {
+        1
+    } else {
+        ((max_width_px - char_w) / advance + 1) as usize
+    };
     let mut lines = Vec::new();
     let mut current = String::new();
     for word in text.split_whitespace() {
+        let word_len = word.chars().count();
         if current.is_empty() {
-            current.push_str(word);
-        } else if current.chars().count() + 1 + word.chars().count() <= max_chars {
+            if word_len <= max_chars {
+                current.push_str(word);
+            } else {
+                let mut chunk = String::new();
+                for ch in word.chars() {
+                    if chunk.chars().count() >= max_chars {
+                        lines.push(chunk);
+                        chunk = String::new();
+                    }
+                    chunk.push(ch);
+                }
+                current = chunk;
+            }
+        } else if current.chars().count() + 1 + word_len <= max_chars {
             current.push(' ');
             current.push_str(word);
         } else {
             lines.push(current);
-            current = word.to_string();
+            current = String::new();
+            if word_len <= max_chars {
+                current.push_str(word);
+            } else {
+                let mut chunk = String::new();
+                for ch in word.chars() {
+                    if chunk.chars().count() >= max_chars {
+                        lines.push(chunk);
+                        chunk = String::new();
+                    }
+                    chunk.push(ch);
+                }
+                current = chunk;
+            }
         }
     }
     if !current.is_empty() {
         lines.push(current);
     }
     lines
+}
+
+fn wrap_words(text: &str, max_chars: usize) -> Vec<String> {
+    let max_px = (max_chars.max(1) as i32) * (GLYPH_WIDTH as i32 + 1) - 1;
+    wrap_text(text, max_px, 1)
 }
 
 pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapshot<'_>) {
@@ -665,9 +710,73 @@ mod tests {
                 );
             }
         }
-        for ch in ['á', 'é', 'í', 'ó', 'ú', 'ñ', '¿', '¡', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ñ'] {
+        for ch in [
+            'á', 'é', 'í', 'ó', 'ú', 'ü', 'ñ', '¿', '¡', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ü', 'Ñ',
+            '·', '—', '…',
+        ] {
             let glyph = glyph_5x7(ch).unwrap_or_else(|| panic!("Falta glifo para {ch:?}"));
             assert!(glyph.iter().any(|&r| r != 0));
+        }
+    }
+
+    #[test]
+    fn all_glyphs_have_distinct_bitmaps() {
+        let mut seen: std::collections::HashMap<[u8; 7], char> = std::collections::HashMap::new();
+        let extras = [
+            'á', 'é', 'í', 'ó', 'ú', 'ü', 'ñ', '¿', '¡', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ü', 'Ñ',
+            '·', '—', '…',
+        ];
+        for ch in (32_u8..=126_u8).map(|c| c as char).chain(extras) {
+            let glyph = glyph_5x7(ch).unwrap_or_else(|| panic!("Falta glifo para {ch:?}"));
+            if let Some(&prev) = seen.get(&glyph) {
+                panic!("Glifos idénticos para {prev:?} y {ch:?}: {glyph:?}");
+            }
+            seen.insert(glyph, ch);
+        }
+    }
+
+    #[test]
+    fn all_program_ui_strings_have_glyph_coverage() {
+        let mut texts: Vec<&str> = Vec::new();
+        for entry in crate::app::MENU_ENTRIES {
+            texts.push(entry.label());
+        }
+        for sys in [crate::app::SystemId::Realista, crate::app::SystemId::Favoritos] {
+            texts.push(sys.display_name());
+        }
+        for c in CONTROLS {
+            texts.push(c.key);
+            texts.push(c.action);
+        }
+        for e in crate::showcase::SHOWCASE_ENTRIES {
+            texts.push(e.nombre);
+            texts.push(e.tipo);
+            texts.push(e.descripcion_es);
+            if let Some(insp) = e.inspiracion {
+                texts.push(insp);
+            }
+            if let Some(sh) = e.shader {
+                texts.push(crate::shaders::shader_name(sh));
+                texts.push(crate::shaders::live_param(sh).name);
+            }
+        }
+        for text in texts {
+            for ch in text.chars() {
+                assert!(
+                    glyph_5x7(ch).is_some(),
+                    "Carácter sin glifo {ch:?} en texto {text:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wrap_text_respects_max_width() {
+        let lines = wrap_text("Uno dos tres cuatro cinco seis siete", 70, 1);
+        assert!(lines.len() >= 3);
+        for line in &lines {
+            let (w, _) = OverlayBuffer::measure_text(line, 1);
+            assert!(w <= 70, "Línea excede 70px ({w}px): {line:?}");
         }
     }
 
