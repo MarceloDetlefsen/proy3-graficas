@@ -2,9 +2,22 @@
 
 [![CI](https://github.com/MarceloDetlefsen/proy3-graficas/actions/workflows/ci.yml/badge.svg)](https://github.com/MarceloDetlefsen/proy3-graficas/actions/workflows/ci.yml)
 
-Renderizador 3D por software escrito en Rust que simula un sistema solar navegable con 9 cuerpos celestes (1 estrella y 8 planetas con shaders procedurales propios). Implementa pipeline `MVP` propio en mano derecha, recorte en espacio de clip contra el plano cercano, *frustum culling* por esferas envolventes, *backface culling*, rasterizador por *tiles* de `64×64` con buffer de visibilidad y paralelismo mediante `std::thread::scope`, icosferas procedurales con deformación radial y *LOD* con histéresis, mapeo de normales en espacio tangente, distribución procedural sobre la superficie con espiral de Fibonacci y `SplitMix64`, física a paso fijo (`1/120 s`) con gravedad y modo local/global, y un HUD RGBA propio con fuente bitmap `5×7`.
+Simulador espacial 3D interactivo en el que piloteas una nave alrededor de dos sistemas planetarios completos —un sistema solar realista y un sistema de trofeos y objetos favoritos— o examinas cada planeta y objeto de cerca en una galería giratoria. Todo el dibujo en pantalla, las luces, los relieves, las texturas animadas y los textos se calculan cuadro a cuadro desde cero en Rust sobre la CPU, usando Raylib únicamente para abrir la ventana, leer el teclado y mostrar la imagen final.
 
-![Sistema Solar completo](docs/captures/sistema_completo.png)
+Renderizador 3D por software escrito en Rust que simula un sistema solar navegable con 9 cuerpos celestes (1 estrella y 8 planetas con shaders procedurales propios) y un segundo sistema de favoritos con 13 cuerpos procedurales. Implementa pipeline `MVP` propio en mano derecha, recorte en espacio de clip contra el plano cercano, *frustum culling* por esferas envolventes, *backface culling*, rasterizador por *tiles* de `64×64` con buffer de visibilidad y paralelismo mediante `std::thread::scope`, icosferas procedurales con deformación radial y *LOD* con histéresis, mapeo de normales en espacio tangente, distribución procedural sobre la superficie con espiral de Fibonacci y `SplitMix64`, física a paso fijo (`1/120 s`) con gravedad y modo local/global, constructor de mallas estancas y un HUD RGBA propio con fuente bitmap `5×7`.
+
+<!-- reemplazar con los GIF reales -->
+| Sistema solar realista | Sistema de favoritos | Galería de trofeos |
+|:---:|:---:|:---:|
+| ![Sistema solar realista](docs/gifs/sistema_realista.gif) | ![Sistema de favoritos](docs/gifs/sistema_favoritos.gif) | ![Galería de trofeos](docs/gifs/galeria.gif) |
+
+## Inicio rápido
+
+1. Elige una opción en el menú principal con `W`/`S` o flechas y pulsa `Enter`.
+2. En vuelo, acelera hacia adelante o atrás con `W`/`S` (mantén `Shift` para turbo) y frena con `Espacio`.
+3. Gira la nave o la vista con el `Ratón` o las `Flechas`, e inclínala con `Q`/`E`.
+4. Pulsa `F` para alternar entre seguir la nave y cámara libre, y `Retroceso` para recentrar.
+5. Pulsa `H` en cualquier momento para abrir o cerrar el panel de ayuda, y `Esc` para volver al menú.
 
 ## Demostración
 
@@ -26,7 +39,7 @@ cargo run --release
 # Ejecutar la suite de pruebas unitarias
 cargo test
 
-# Generar las 23 capturas oficiales en docs/captures/ (sin ventana)
+# Generar las capturas oficiales en docs/captures/ y docs/captures/ui/ (sin ventana)
 cargo run --release -- --docs
 ```
 
@@ -34,28 +47,28 @@ cargo run --release -- --docs
 
 Tabla generada desde `CONTROLS` (`src/hud.rs`):
 
-| Acción | Tecla |
+| Tecla | Acción |
 |---|---|
-| Empuje adelante / atrás | `W / S` |
-| Impulso (boost) | `Shift` |
-| Frenado progresivo | `Espacio` |
-| Cabeceo y guiñada (cámara en Libre) | `Mouse/Flechas` |
-| Alabeo (roll) | `Q / E` |
-| Cámara Seguir/Libre / Recentrar | `F / Backspace` |
-| Modo control (Auto/Local/Global) / Gravedad | `L / G` |
-| Pausar simulación / Escala de tiempo | `Enter / - =` |
-| Seleccionar cuerpo siguiente | `Tab` |
-| Ajustar radio del cuerpo seleccionado | `9 / 0` |
-| Ajustar parámetro en vivo del shader | `4 / 5` |
-| Amplitud / Frecuencia de deformación | `, . / [ ]` |
-| Cambiar semilla de distribución | `I / O` |
-| Forzar LOD / Frustum culling / Wireframe | `Z / X / M` |
-| Normal map / Debug normales / Cull instancias | `B / Y / /` |
-| Métricas / Resolución interna / Hilos | `F3 / R / T` |
-| Backface culling / Re-hornear / Captura PNG | `C / K / P` |
-| Galería: cambiar cuerpo / reiniciar vista | `A / D / R` |
-| Volver al menú (en menú: salir) | `Esc` |
-| Mostrar u ocultar este panel de ayuda | `H` |
+| `W / S` | Acelerar hacia adelante o atrás |
+| `Shift` | Turbo para ir más rápido |
+| `Espacio` | Frenar poco a poco |
+| `Ratón / Flechas` | Girar la vista (en cámara libre) |
+| `Q / E` | Inclinar la nave a izquierda o derecha |
+| `F / Retroceso` | Cambiar cámara (seguir / libre) · Recentrar |
+| `L / G` | Control de vuelo (Auto/Cerca/Libre) · Gravedad |
+| `Enter / - =` | Pausar el tiempo · Velocidad del tiempo |
+| `Tab` | Elegir el siguiente objeto del sistema |
+| `9 / 0` | Cambiar tamaño del objeto elegido |
+| `4 / 5` | Ajustar el efecto visual del objeto elegido |
+| `, . / [ ]` | Altura y detalle del relieve del planeta |
+| `I / O` | Semilla (cambia el reparto aleatorio de objetos) |
+| `Z / X / M` | Nivel de detalle · Descartar fuera de vista · Ver la malla (alambre) |
+| `B / Y / /` | Relieve fino (normal map) · Ver relieve · Ocultar objetos lejanos |
+| `F3 / R / T` | FPS (cuadros por segundo: mide la fluidez) · Calidad de imagen · Núcleos |
+| `C / K / P` | Ocultar caras traseras · Recalcular texturas de superficie · Guardar foto |
+| `A / D / R` | En galería: cambiar objeto · Reiniciar vista |
+| `Esc` | Volver al menú principal (en el menú: salir) |
+| `H` | Mostrar u ocultar este panel de ayuda |
 
 ## Arquitectura o pipeline
 
