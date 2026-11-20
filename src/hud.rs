@@ -261,25 +261,25 @@ pub struct ControlDoc {
 
 /// Única tabla de verdad para el panel de ayuda (H) y la documentación.
 pub const CONTROLS: &[ControlDoc] = &[
-    ControlDoc { key: "W / S", action: "Empuje adelante / atrás" },
-    ControlDoc { key: "Shift", action: "Impulso (boost)" },
-    ControlDoc { key: "Espacio", action: "Frenado progresivo" },
-    ControlDoc { key: "Mouse/Flechas", action: "Cabeceo y guiñada (cámara en Libre)" },
-    ControlDoc { key: "Q / E", action: "Alabeo (roll)" },
-    ControlDoc { key: "F / Backspace", action: "Cámara Seguir/Libre / Recentrar" },
-    ControlDoc { key: "L / G", action: "Modo control (Auto/Local/Global) / Gravedad" },
-    ControlDoc { key: "Enter / - =", action: "Pausar simulación / Escala de tiempo" },
-    ControlDoc { key: "Tab", action: "Seleccionar cuerpo siguiente" },
-    ControlDoc { key: "9 / 0", action: "Ajustar radio del cuerpo seleccionado" },
-    ControlDoc { key: "4 / 5", action: "Ajustar parámetro en vivo del shader" },
-    ControlDoc { key: ", . / [ ]", action: "Amplitud / Frecuencia de deformación" },
-    ControlDoc { key: "I / O", action: "Cambiar semilla de distribución" },
-    ControlDoc { key: "Z / X / M", action: "Forzar LOD / Frustum culling / Wireframe" },
-    ControlDoc { key: "B / Y / /", action: "Normal map / Debug normales / Cull instancias" },
-    ControlDoc { key: "F3 / R / T", action: "Métricas / Resolución interna / Hilos" },
-    ControlDoc { key: "C / K / P", action: "Backface culling / Re-hornear / Captura PNG" },
-    ControlDoc { key: "A / D / R", action: "Galería: cambiar cuerpo / reiniciar vista" },
-    ControlDoc { key: "Esc", action: "Volver al menú (en menú: salir)" },
+    ControlDoc { key: "W / S", action: "Acelerar hacia adelante o atrás" },
+    ControlDoc { key: "Shift", action: "Turbo para ir más rápido" },
+    ControlDoc { key: "Espacio", action: "Frenar poco a poco" },
+    ControlDoc { key: "Ratón / Flechas", action: "Girar la vista (en cámara libre)" },
+    ControlDoc { key: "Q / E", action: "Inclinar la nave a izquierda o derecha" },
+    ControlDoc { key: "F / Retroceso", action: "Cambiar cámara (seguir / libre) · Recentrar" },
+    ControlDoc { key: "L / G", action: "Control de vuelo (Auto/Cerca/Libre) · Gravedad" },
+    ControlDoc { key: "Enter / - =", action: "Pausar el tiempo · Velocidad del tiempo" },
+    ControlDoc { key: "Tab", action: "Elegir el siguiente objeto del sistema" },
+    ControlDoc { key: "9 / 0", action: "Cambiar tamaño del objeto elegido" },
+    ControlDoc { key: "4 / 5", action: "Ajustar el efecto visual del objeto elegido" },
+    ControlDoc { key: ", . / [ ]", action: "Altura y detalle del relieve del planeta" },
+    ControlDoc { key: "I / O", action: "Semilla (cambia el reparto aleatorio de objetos)" },
+    ControlDoc { key: "Z / X / M", action: "Nivel de detalle · Descartar fuera de vista · Ver la malla (alambre)" },
+    ControlDoc { key: "B / Y / /", action: "Relieve fino (normal map) · Ver relieve · Ocultar objetos lejanos" },
+    ControlDoc { key: "F3 / R / T", action: "FPS (cuadros por segundo: mide la fluidez) · Calidad de imagen · Núcleos" },
+    ControlDoc { key: "C / K / P", action: "Ocultar caras traseras · Recalcular texturas de superficie · Guardar foto" },
+    ControlDoc { key: "A / D / R", action: "En galería: cambiar objeto · Reiniciar vista" },
+    ControlDoc { key: "Esc", action: "Volver al menú principal (en el menú: salir)" },
     ControlDoc { key: "H", action: "Mostrar u ocultar este panel de ayuda" },
 ];
 
@@ -329,45 +329,48 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     let mut lines: Vec<(String, Color)> = vec![
         (
             format!(
-                "FPS:{:5.1} ({:4.1}ms) | {}x{} {}h | Tiempo:{:.2}x{}",
+                "FPS: {:5.1} ({:4.1} ms) · Imagen: {}x{} · Núcleos: {} · Tiempo: {:.2}x{}",
                 hud.fps,
                 hud.total_ms,
                 hud.internal_width,
                 hud.internal_height,
                 hud.threads,
                 hud.time_scale,
-                if hud.paused { " PAUSA" } else { "" }
+                if hud.paused { " (PAUSA)" } else { "" }
             ),
             Color::new(140, 245, 175, 255),
         ),
         (
             format!(
-                "Modo: {} | Alt: {} | Vel:{:.2}",
+                "Vuelo: {} · Altura: {} · Velocidad: {:.2}",
                 hud.mode_summary, hud.altitude_summary, hud.speed
             ),
             Color::new(210, 230, 255, 255),
         ),
         (
             format!(
-                "Grav(G):{} ({:.2}) | Semilla(I/O):{} | Inst:{}/{}({})",
-                if hud.gravity_enabled { "ON" } else { "OFF" },
+                "Gravedad [G]: {} ({:.2}) · Semilla [I/O]: {} · Objetos: {}/{} ({})",
+                if hud.gravity_enabled { "SÍ" } else { "NO" },
                 hud.gravity_mag,
                 hud.surface_seed,
                 hud.instances_drawn,
                 hud.instances_total,
-                if hud.instance_culling { "ON" } else { "OFF" },
+                if hud.instance_culling { "ocultar lejanos" } else { "ver todos" },
             ),
             Color::new(210, 230, 255, 255),
         ),
         (
             format!(
-                "Cull(X):{} {}->{} tris | {} | {}",
-                if hud.frustum_culling { "ON" } else { "OFF" },
+                "Objetos descartados por no verse [X]: {} · {} -> {} triángulos · {}",
+                if hud.frustum_culling { "SÍ" } else { "NO" },
                 hud.tris_before_cull,
                 hud.tris_after_cull,
                 hud.ship_lod_summary,
-                hud.lod_summary,
             ),
+            Color::new(255, 220, 140, 255),
+        ),
+        (
+            hud.lod_summary.to_string(),
             Color::new(255, 220, 140, 255),
         ),
         (
@@ -379,7 +382,7 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     if hud.show_perf {
         lines.push((
             format!(
-                "Etapas ms -> V:{:.2} R:{:.2} S:{:.2} Pres:{:.2}",
+                "Tiempos (ms) — Vértices: {:.2} · Dibujo: {:.2} · Color: {:.2} · Pantalla: {:.2}",
                 hud.vertex_ms, hud.raster_ms, hud.shading_ms, hud.present_ms
             ),
             Color::new(255, 195, 110, 255),
@@ -387,13 +390,13 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     }
     if let Some(body_name) = hud.collision_body {
         lines.push((
-            format!("COLISION CON SUPERFICIE: {}", body_name),
+            format!("¡CONTACTO CON LA SUPERFICIE DE {}!", body_name),
             Color::new(255, 100, 100, 255),
         ));
     }
 
     let box_h = 12 + lines.len() as i32 * 16;
-    let box_w = (overlay.width as i32 - 20).min(640);
+    let box_w = (overlay.width as i32 - 20).min(700);
     overlay.fill_rect(10, 38, box_w, box_h, Color::new(8, 12, 20, 185));
     overlay.stroke_rect(10, 38, box_w, box_h, Color::new(55, 85, 115, 200));
     for (i, (text, color)) in lines.iter().enumerate() {
@@ -404,11 +407,11 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     if hud.show_help {
         let help_y = 44 + box_h + 6;
         let help_h = 26 + CONTROLS.len() as i32 * 13;
-        let help_w = (overlay.width as i32 - 20).min(560);
+        let help_w = (overlay.width as i32 - 20).min(680);
         overlay.fill_rect(10, help_y, help_w, help_h, Color::new(10, 14, 24, 215));
         overlay.stroke_rect(10, help_y, help_w, help_h, Color::new(110, 165, 220, 230));
         overlay.draw_text(
-            "CONTROLES (H para cerrar)",
+            "AYUDA Y CONTROLES (pulsa H para cerrar)",
             18,
             help_y + 6,
             1,
@@ -417,7 +420,7 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
         for (i, ctrl) in CONTROLS.iter().enumerate() {
             let row_y = help_y + 22 + i as i32 * 13;
             overlay.draw_text(ctrl.key, 18, row_y, 1, Color::new(140, 245, 175, 255));
-            overlay.draw_text(ctrl.action, 120, row_y, 1, Color::WHITE);
+            overlay.draw_text(ctrl.action, 134, row_y, 1, Color::WHITE);
         }
     }
 }
@@ -443,7 +446,7 @@ pub fn render_menu_overlay(
     let title = "SISTEMA SOLAR 3D";
     let (tw, _) = OverlayBuffer::measure_text(title, 3);
     overlay.draw_text(title, (w - tw) / 2, by + 18, 3, Color::new(255, 215, 130, 255));
-    let subtitle = "Renderizador por software en Rust";
+    let subtitle = "Simulador espacial 3D hecho desde cero en Rust";
     let (sw, _) = OverlayBuffer::measure_text(subtitle, 1);
     overlay.draw_text(subtitle, (w - sw) / 2, by + 46, 1, Color::new(160, 185, 215, 255));
 
@@ -489,7 +492,7 @@ pub fn render_menu_overlay(
         overlay.draw_text(&line, bx + 30, ey, 2, label_color);
 
         if disabled {
-            let tag = "en construccion";
+            let tag = "en construcción";
             let (tag_w, _) = OverlayBuffer::measure_text(tag, 1);
             overlay.draw_text(
                 tag,
@@ -501,7 +504,7 @@ pub fn render_menu_overlay(
         }
     }
 
-    let hint = "W/S o Flechas: navegar | Enter: elegir | Esc: salir";
+    let hint = "W/S o Flechas: moverse · Enter: elegir · Esc: salir";
     let (hw, _) = OverlayBuffer::measure_text(hint, 1);
     overlay.draw_text(
         hint,
@@ -512,7 +515,7 @@ pub fn render_menu_overlay(
     );
 
     if show_controls {
-        let cw = (w - 40).min(640);
+        let cw = (w - 40).min(680);
         let ch = (CONTROLS.len() as i32 * 13 + 56).min(h - 40);
         let cx = (w - cw) / 2;
         let cy = (h - ch) / 2;
@@ -525,10 +528,10 @@ pub fn render_menu_overlay(
                 break;
             }
             overlay.draw_text(c.key, cx + 16, row_y, 1, Color::new(255, 220, 120, 255));
-            overlay.draw_text(c.action, cx + 124, row_y, 1, Color::new(225, 232, 240, 255));
+            overlay.draw_text(c.action, cx + 132, row_y, 1, Color::new(225, 232, 240, 255));
         }
         overlay.draw_text(
-            "Enter / Backspace: volver",
+            "Enter o Retroceso: volver",
             cx + 16,
             cy + ch - 16,
             1,
@@ -620,15 +623,33 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
     overlay.fill_rect(10, 8, bar_w, 24, Color::new(8, 12, 20, 200));
     overlay.stroke_rect(10, 8, bar_w, 24, Color::new(70, 110, 150, 225));
     let header = format!(
-        "Galeria | A/D: cuerpo | Mouse/Flechas: girar | R: vista | 4/5: param | Esc: menu | {:.0} FPS",
+        "Galería de trofeos — A/D: cambiar objeto · Ratón o flechas: girar · R: reiniciar vista · 4/5: ajustar · Esc: menú · {:.0} FPS",
         g.fps
     );
     overlay.draw_text(&header, 16, 15, 1, Color::WHITE);
 
     // Ficha de datos (esquina inferior izquierda)
-    let card_w = 340.min(w - 20);
-    let desc_lines = wrap_words(g.entry.descripcion_es, 50);
-    let card_h = 128 + (desc_lines.len() as i32) * 11;
+    let card_w = 390.min(w - 20);
+    let lod_str = if g.lod_level >= 5 {
+        "máximo (5 de 5)".to_string()
+    } else {
+        format!("{} de 5", g.lod_level)
+    };
+    let mut rows = vec![
+        format!("Colección: {}", g.entry.sistema.display_name()),
+        format!("Tamaño: {:.2}", g.radius),
+        format!("Triángulos: {} · Nivel de detalle: {}", g.tris, lod_str),
+        format!("Estilo visual: {}", g.entry.nombre_visible),
+        format!(
+            "{}  [teclas 4 y 5]: {:.2}",
+            g.live_param_name, g.live_param_value
+        ),
+    ];
+    if let Some(insp) = g.entry.inspiracion {
+        rows.push(format!("Inspiración: {}", insp));
+    }
+    let desc_lines = wrap_text(g.entry.descripcion_es, card_w - 24, 1);
+    let card_h = 62 + (rows.len() as i32) * 13 + (desc_lines.len() as i32) * 11;
     let card_x = 10;
     let card_y = (h - card_h - 10).max(40);
     overlay.fill_rect(card_x, card_y, card_w, card_h, Color::new(8, 12, 22, 210));
@@ -636,26 +657,19 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
 
     overlay.draw_text(g.entry.nombre, card_x + 12, card_y + 10, 2, Color::new(255, 220, 130, 255));
     let mut ry = card_y + 32;
-    let rows = [
-        format!("Tipo: {} | Sistema: {}", g.entry.tipo, g.entry.sistema.display_name()),
-        format!("Radio: {:.2} u | Malla: {} tris (L{})", g.radius, g.tris, g.lod_level),
-        format!("Shader: {}", g.shader_name),
-        format!("{}(4/5): {:.2}", g.live_param_name, g.live_param_value),
-        format!("Inspiracion: {}", g.entry.inspiracion.unwrap_or("-")),
-    ];
     for row in &rows {
         overlay.draw_text(row, card_x + 12, ry, 1, Color::new(210, 224, 240, 255));
         ry += 13;
     }
     ry += 4;
-    overlay.draw_text("Descripcion:", card_x + 12, ry, 1, Color::new(140, 210, 255, 255));
+    overlay.draw_text("Descripción:", card_x + 12, ry, 1, Color::new(140, 210, 255, 255));
     ry += 12;
     for line in desc_lines {
         overlay.draw_text(&line, card_x + 12, ry, 1, Color::new(225, 232, 240, 255));
         ry += 11;
     }
 
-    // Lista de trofeos (derecha): los Placeholder aparecen atenuados con "en construccion"
+    // Lista de trofeos (derecha): los Placeholder aparecen atenuados con "en construcción"
     let list_w = 276.min(w - card_w - 30).max(180);
     let entries = crate::showcase::SHOWCASE_ENTRIES;
     let list_h = (entries.len() as i32 * 11 + 26).min(h - 50);
@@ -663,7 +677,7 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
     let list_y = 40;
     overlay.fill_rect(list_x, list_y, list_w, list_h, Color::new(8, 12, 22, 200));
     overlay.stroke_rect(list_x, list_y, list_w, list_h, Color::new(75, 120, 170, 220));
-    overlay.draw_text("Trofeos (Showcase)", list_x + 8, list_y + 6, 1, Color::new(150, 220, 255, 255));
+    overlay.draw_text("Trofeos", list_x + 8, list_y + 6, 1, Color::new(150, 220, 255, 255));
 
     for (i, item) in entries.iter().enumerate() {
         let iy = list_y + 20 + i as i32 * 11;
@@ -681,7 +695,7 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
         };
         let prefix = if is_active { ">" } else { " " };
         let line = if is_placeholder {
-            format!("{} {} (en construccion)", prefix, item.nombre)
+            format!("{} {} (en construcción)", prefix, item.nombre)
         } else {
             format!("{} {}", prefix, item.nombre)
         };
@@ -750,6 +764,7 @@ mod tests {
         }
         for e in crate::showcase::SHOWCASE_ENTRIES {
             texts.push(e.nombre);
+            texts.push(e.nombre_visible);
             texts.push(e.tipo);
             texts.push(e.descripcion_es);
             if let Some(insp) = e.inspiracion {
