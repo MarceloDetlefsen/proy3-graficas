@@ -658,6 +658,17 @@ fn main() {
     let mut app_ctrl = app::AppController::new();
     let mut should_exit = false;
     window.enable_cursor();
+    let audio = raylib::core::audio::RaylibAudio::init_audio_device().ok();
+    let bg_music_path = ["Souvlaki Space Station.mp3", "assets/Souvlaki Space Station.mp3"]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).exists());
+    let mut bg_music = audio.as_ref().and_then(|aud| {
+        let path = bg_music_path?;
+        let mut music = aud.new_music(path).ok()?;
+        music.set_looping(true);
+        music.play_stream();
+        Some(music)
+    });
     let icosphere_lods = icosphere::build_icosphere_lods();
     let prop_meshes = surface_props::load_surface_props();
     let mut flight_session: Option<FlightSession> = None;
@@ -699,6 +710,9 @@ fn main() {
     let mut render_buffers = RenderBuffers::new(vertex_array.len());
 
     while !window.window_should_close() && !should_exit {
+        if let Some(ref mut music) = bg_music {
+            music.update_stream();
+        }
         let frame_start = std::time::Instant::now();
         let dt = window.get_frame_time();
         if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
