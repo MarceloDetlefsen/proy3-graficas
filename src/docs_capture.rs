@@ -413,21 +413,21 @@ pub fn generate_docs_captures() {
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
     }
 
-    // 12. Galería de trofeos: cuerpos procedurales del sistema de favoritos.
-    for &(id, fname) in &[
-        ("phoenix_suns", "galeria_suns.png"),
-        ("spurs_crest", "galeria_spurs.png"),
-        ("airpods", "galeria_airpods.png"),
-        ("raqueta_tenis", "galeria_raqueta.png"),
-        ("cubo_rubik", "galeria_rubik.png"),
-        ("cubo_skweb", "galeria_skewb.png"),
-        ("megaminx", "galeria_megaminx.png"),
-        ("joycon_izquierdo", "galeria_joycon_izq.png"),
-        ("joycon_derecho", "galeria_joycon_der.png"),
-        ("trifuerza", "galeria_trifuerza.png"),
-        ("meteoro_ff7", "galeria_meteoro_ff7.png"),
-        ("casco_samus", "galeria_samus.png"),
-        ("la_bombonera", "galeria_bombonera.png"),
+    // 12. Galería de trofeos y capturas limpias (sin HUD) de los cuerpos del sistema de favoritos.
+    for &(id, fname, clean_fname) in &[
+        ("phoenix_suns", "galeria_suns.png", "fav_suns.png"),
+        ("spurs_crest", "galeria_spurs.png", "fav_spurs.png"),
+        ("airpods", "galeria_airpods.png", "fav_airpods.png"),
+        ("raqueta_tenis", "galeria_raqueta.png", "fav_raqueta.png"),
+        ("cubo_rubik", "galeria_rubik.png", "fav_rubik.png"),
+        ("cubo_skweb", "galeria_skewb.png", "fav_skewb.png"),
+        ("megaminx", "galeria_megaminx.png", "fav_megaminx.png"),
+        ("joycon_izquierdo", "galeria_joycon_izq.png", "fav_joycon_izq.png"),
+        ("joycon_derecho", "galeria_joycon_der.png", "fav_joycon_der.png"),
+        ("trifuerza", "galeria_trifuerza.png", "fav_trifuerza.png"),
+        ("meteoro_ff7", "galeria_meteoro_ff7.png", "fav_meteoro_ff7.png"),
+        ("casco_samus", "galeria_samus.png", "fav_samus.png"),
+        ("la_bombonera", "galeria_bombonera.png", "fav_bombonera.png"),
     ] {
         let showcase_idx = crate::showcase::SHOWCASE_ENTRIES
             .iter()
@@ -467,6 +467,7 @@ pub fn generate_docs_captures() {
             live_param_value: spec.default,
             fps: 60.0,
         };
+        compose_and_save(&fb, None, &out_dir.join(clean_fname));
         hud::render_gallery_overlay(&mut ov, &gsnap);
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
     }
@@ -575,5 +576,5 @@ pub fn generate_docs_captures() {
         compose_and_save(&fb, Some(&ov), &ui_dir.join(format!("galeria_{}.png", entry.id)));
     }
 
-    println!("Capturas oficiales generadas en docs/captures/ (32 principales + 26 de interfaz en docs/captures/ui/)");
+    println!("Capturas oficiales generadas en docs/captures/ (45 principales + 26 de interfaz en docs/captures/ui/)");
 }
