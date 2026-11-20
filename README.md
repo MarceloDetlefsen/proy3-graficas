@@ -99,6 +99,38 @@ Más detalle: [docs/arquitectura.md](docs/arquitectura.md).
 | ![Ardens](docs/captures/ardens.png)<br>**Ardens** (`Ardens`)<br>Placas basálticas Voronoi con relieve direccional y grietas de lava magenta-dorada que laten con géiseres emisivos. | ![Abismo](docs/captures/abismo.png)<br>**Abismo** (`Abismo`)<br>Océano 3D con 4 ondas direccionales, cáusticas Voronoi dobles, *maelstrom* polar de 4 brazos y bioluminiscencia nocturna. | ![Basquia](docs/captures/basquia.png)<br>**Basquia** (`Basquia`)<br>Lienzo negro con trazos gruesos de *oilstick*/crayón por rejilla 3D, coronas de 3 puntas y conteos animados a ~6 FPS. |
 | ![Vestigio](docs/captures/vestigio.png)<br>**Vestigio** (`Vestigio`)<br>Desierto oliva-rosa con dunas anisotrópicas 8×, 4 *dust devils* con estela, desfase cromático VHS, *scanlines* y grano. | ![Mural](docs/captures/mural.png)<br>**Mural** (`Mural`)<br>Muro de pintura descascarada en 3 capas `fbm` 3D (gris azulado, crema, rojo), grietas *ridge*, tinta y escamas animadas. | ![Fundido](docs/captures/fundido.png)<br>**Fundido** (`Fundido`)<br>Superficie en transición térmica con mitad superior salmón y bandas onduladas de magma naranja en el hemisferio sur. |
 
+## Menú principal y galería de trofeos
+
+Al iniciar el simulador se abre el menú principal sobre el sistema solar animado en tiempo real (`src/app.rs`, `src/hud.rs`):
+
+- **Sistema solar realista**: inicia el vuelo en el sistema de 9 cuerpos celestes (Sol + 8 planetas).
+- **Sistema de favoritos**: inicia el vuelo en el segundo sistema con el Sol de los Phoenix Suns al centro y 12 objetos favoritos en órbita.
+- **Galería de trofeos**: abre el visor individual para inspeccionar los 22 objetos listos (`SHOWCASE_ENTRIES`). Permite cambiar de objeto con `A`/`D`, rotar con el ratón o las flechas, hacer zoom con la rueda, reiniciar la vista con `R`, ajustar el parámetro visual en vivo con `4`/`5` y regresar al menú con `Esc`.
+- **Controles**: muestra la tabla completa de teclas directamente sobre el menú.
+- **Salir**: cierra la aplicación (o `Esc` desde el menú).
+
+| Menú principal | Controles en el menú | Galería de trofeos | Vuelo con ayuda (`H`) |
+|:---:|:---:|:---:|:---:|
+| ![Menú principal](docs/captures/ui/menu.png) | ![Menú controles](docs/captures/ui/menu_controles.png) | ![Galería](docs/captures/ui/galeria_casco_samus.png) | ![HUD ayuda](docs/captures/ui/hud_ayuda.png) |
+
+## Sistema de favoritos (13 cuerpos)
+
+![Sistema de favoritos](docs/captures/sistema_favoritos.png)
+
+| | | |
+|:---:|:---:|:---:|
+| ![Sol de los Phoenix Suns](docs/captures/galeria_suns.png)<br>**Sol de los Phoenix Suns**<br>Balón de basquetbol en relieve frente a un sol dorado con estela de rayos brillantes.<br><sub>*Técnica:* silueta y rayos medidos de referencia extruidos con bisel + esfera con costuras y oscilación `±30°` (`Shader::PhoenixSuns`).</sub> | ![Joy-Con izquierdo](docs/captures/galeria_joycon_izq.png)<br>**Joy-Con izquierdo**<br>Control izquierdo gris mate con riel azul neón, palanca y cruceta de cuatro botones.<br><sub>*Técnica:* caja redondeada estanca con primitivas y colores por vértice (`Shader::Chunky`, 3 niveles de detalle).</sub> | ![Joy-Con derecho](docs/captures/galeria_joycon_der.png)<br>**Joy-Con derecho**<br>Control derecho gris mate con riel rojo neón, palanca y los cuatro botones en rombo.<br><sub>*Técnica:* geometría espejada con botones ABXY, `+` y `Home` por color de vértice (`Shader::Chunky`).</sub> |
+| ![Cubo de Rubik](docs/captures/galeria_rubik.png)<br>**Cubo de Rubik**<br>Rompecabezas clásico formado por 27 piezas negras con sus seis caras de colores vivos.<br><sub>*Técnica:* 27 cubos con holgura y pegatinas elevadas por cara (`Shader::Chunky`, `108`/`324`/`3564` triángulos).</sub> | ![Raqueta de tenis](docs/captures/galeria_raqueta.png)<br>**Raqueta de tenis**<br>Raqueta con marco brillante en turquesa y azul, mango oscuro y cuerdas con la W roja al centro.<br><sub>*Técnica:* perfil y contorno medidos barridos con `sweep_profile`, barniz especular (`material_id = 1`) y cuerdas `11×13` de octaedros.</sub> | ![Cubo Skewb](docs/captures/galeria_skewb.png)<br>**Cubo Skewb**<br>Rompecabezas cúbico de giro diagonal con un rombo central y cuatro triángulos por cara.<br><sub>*Técnica:* cubo base con rombo y cuatro triángulos rectángulos elevados por cara (`Shader::Chunky`).</sub> |
+| ![Meteoro de FF7](docs/captures/galeria_meteoro_ff7.png)<br>**Meteoro de FF7**<br>Cometa verde azulado de cabeza brillante con trazos en espiral y cola alargada de pinceladas.<br><sub>*Técnica:* icosfera vítrea con espiral horneada, cola de pinceladas con degradado por vértice y orbe (`Shader::Meteor`).</sub> | ![Casco de Samus](docs/captures/galeria_samus.png)<br>**Casco de Samus**<br>Casco terracota con visor verde menta luminoso, franjas superiores, orejeras y tubos laterales.<br><sub>*Técnica:* domo ajustado al perfil radial medido, surcos adelgazados, visor emisivo curvo (`material_id = 2`) y tubos acanalados.</sub> | ![Trifuerza](docs/captures/galeria_trifuerza.png)<br>**Trifuerza**<br>Tres triángulos dorados con brillo metálico y un destello suave que recorre sus caras.<br><sub>*Técnica:* tres prismas triangulares equiláteros con centro hueco (`Shader::Triforce`, `24`/`42`/`78` triángulos).</sub> |
+| ![Megaminx](docs/captures/galeria_megaminx.png)<br>**Megaminx**<br>Rompecabezas de doce caras pentagonales con once piezas de colores distintos en cada lado.<br><sub>*Técnica:* dodecaedro regular con 11 pegatinas por cara en el esquema estándar de 12 colores DaYan (`Shader::Chunky`).</sub> | ![Cresta del Tottenham](docs/captures/galeria_spurs.png)<br>**Cresta del Tottenham**<br>Gallo azul marino en relieve posado sobre un balón con costuras y cordones blancos.<br><sub>*Técnica:* silueta medida extruida con bisel sobre balón 3D con parches y oscilación `±35°` (`Shader::Spurs`).</sub> | ![AirPods](docs/captures/galeria_airpods.png)<br>**AirPods**<br>Estuche blanco brillante con tapa entreabierta, luz frontal y par de auriculares en su interior.<br><sub>*Técnica:* caja redondeada con tapa abierta a `70°`, bisagra cilíndrica, LED y auriculares espejados (`Shader::Chunky`).</sub> |
+| ![La Bombonera](docs/captures/galeria_bombonera.png)<br>**La Bombonera**<br>Estadio en forma de D con tres lados de gradas azul y amarillo, edificio de palcos y cancha verde.<br><sub>*Técnica:* gradas escalonadas en D, letras con la fuente `5×7`, edificio de palcos con ventanas y cancha `105:68` (`Shader::Chunky`).</sub> | | |
+
+### Cómo se construyen los cuerpos del sistema de favoritos
+
+- **Constructor de mallas estancas (`src/mesh_builder.rs`)**: todos los cuerpos se ensamblan en código a partir de primitivas cerradas (`box_mesh`, `rounded_box`, `cylinder`, `cone`, `sphere`, `torus`, `extruded_prism`, `loft_rings`, `sweep_profile`, `raised_sticker`) con color por vértice interpolado en perspectiva y verificación topológica en pruebas (`is_watertight`, `outward_normal_ratio`).
+- **Niveles de detalle por reconstrucción (`LodMeshCache`)**: cada cuerpo implementa 3 niveles de detalle (`detail = 0, 1, 2`) que reconstruyen la geometría con distinta densidad de segmentos y detalles según la distancia en vuelo o el presupuesto de cuadro en la galería.
+- **Medición desde referencias locales (`tools/`)**: las siluetas, proporciones y paletas de los cuerpos basados en objetos reales se midieron con scripts propios (`tools/trace_logo.py`, `tools/measure_racket.py`, `tools/measure_samus_bombonera.py`) sobre imágenes de referencia locales en `refs/`. Las imágenes de `refs/` no se distribuyen en el repositorio (están ignoradas en `.gitignore`).
+
 ## Componentes principales
 
 ### Motor MVP y recorte
@@ -166,6 +198,7 @@ Dibuja la barra de título, telemetría, contadores de culling/LOD, selección d
 
 - **Total bruto**: **101 / 105**
 - **Total (`min(100, total)`)**: **100 / 100** (detalle completo en [docs/auditoria-rubrica.md](docs/auditoria-rubrica.md)).
+- **Nota sobre extras**: el menú principal, la galería de trofeos y el sistema de favoritos (13 cuerpos) son extras fuera de la rúbrica base y no alteran el total de la tabla de criterios.
 - **Características evaluables**: pipeline por software sin rasterizado/texto de Raylib, icosfera deformada con LOD y normales, frustum culling con contadores, navegación 6-DOF con gravedad y modo local, 9 shaders procedurales distintos con capa estática + viva, distribución Fibonacci + ruido sobre superficie, y HUD propio con ajuste de parámetros en vivo.
 
 ## Verificación de reglas
