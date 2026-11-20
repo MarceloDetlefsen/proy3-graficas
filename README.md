@@ -6,7 +6,6 @@ Simulador espacial 3D interactivo en el que piloteas una nave alrededor de dos s
 
 Renderizador 3D por software escrito en Rust que simula un sistema solar navegable con 9 cuerpos celestes (1 estrella y 8 planetas con shaders procedurales propios) y un segundo sistema de favoritos con 13 cuerpos procedurales. Implementa pipeline `MVP` propio en mano derecha, recorte en espacio de clip contra el plano cercano, *frustum culling* por esferas envolventes, *backface culling*, rasterizador por *tiles* de `64×64` con buffer de visibilidad y paralelismo mediante `std::thread::scope`, icosferas procedurales con deformación radial y *LOD* con histéresis, mapeo de normales en espacio tangente, distribución procedural sobre la superficie con espiral de Fibonacci y `SplitMix64`, física a paso fijo (`1/120 s`) con gravedad y modo local/global, constructor de mallas estancas y un HUD RGBA propio con fuente bitmap `5×7`.
 
-<!-- reemplazar con los GIF reales -->
 | Sistema solar realista | Sistema de favoritos | Galería de trofeos |
 |:---:|:---:|:---:|
 | ![Sistema solar realista](docs/gifs/sistema_realista.gif) | ![Sistema de favoritos](docs/gifs/sistema_favoritos.gif) | ![Galería de trofeos](docs/gifs/galeria.gif) |
@@ -21,7 +20,7 @@ Renderizador 3D por software escrito en Rust que simula un sistema solar navegab
 
 ## Demostración
 
-<<COMPLETAR: enlace al video>>
+[Ver video de demostración del simulador (Google Drive)](https://drive.google.com/file/d/1v4R0i3geqEnqmXdYmj5GmoXdZccOC9qH/view?usp=sharing)
 
 ## Requisitos
 
