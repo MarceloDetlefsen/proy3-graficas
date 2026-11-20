@@ -268,17 +268,17 @@ pub fn generate_docs_captures() {
     let cam_cull = Camera::new(Vector3::new(0.0, 12.0, 34.0), Vector3::new(15.0, 0.0, 0.0), 45.0_f32.to_radians(), 0.1, 400.0);
     for (cull, fname) in [(true, "culling_on.png"), (false, "culling_off.png")] {
         let (tb, ta, lod) = render_scene_frame(&bodies, &mut caches, &noise, &baked, &cam_cull, time, threads, TriangleMode::FilledBarycentric, cull, None, true, 42, false, &mut fb, &mut bufs);
-        let lod_str = format!("Max L{}", lod);
+        let lod_str = format!("Nivel de detalle [Z]: Automático (máximo {lod} de 5)");
         let snap = HudSnapshot {
-            title: "Sistema Solar | Frustum Culling",
+            title: "Sistema solar realista · Objetos fuera de vista",
             fps: 60.0, total_ms: 8.5, vertex_ms: 1.2, raster_ms: 1.1, shading_ms: 5.8, present_ms: 0.4,
             internal_width: 400, internal_height: 300, threads,
             tris_before_cull: tb, tris_after_cull: ta, frustum_culling: cull,
-            lod_summary: &lod_str, ship_lod_summary: "Nave:L0", mode_summary: "Global [Auto]",
-            gravity_enabled: true, gravity_mag: 0.45, speed: 4.2, altitude_summary: "12.4 u (Zebes)",
+            lod_summary: &lod_str, ship_lod_summary: "Nave: nivel 1 de 3 (3000 triángulos)", mode_summary: "Espacio libre (Automático)",
+            gravity_enabled: true, gravity_mag: 0.45, speed: 4.2, altitude_summary: "12.40 (Zebes)",
             time_scale: 1.0, paused: false, surface_seed: 42,
             instances_drawn: 0, instances_total: 0, instance_culling: true,
-            selected_summary: "Sel(Tab): Zebes | R:1.25", collision_body: None,
+            selected_summary: "Elegido [Tab]: Zebes · Tamaño [9/0]: 1.25", collision_body: None,
             show_perf: true, show_help: false,
         };
         hud::render_hud(&mut ov, &snap);
@@ -320,25 +320,30 @@ pub fn generate_docs_captures() {
     }
 
     // 9. Panel de ayuda (H) y Modo Local.
+    let ui_dir = out_dir.join("ui");
+    std::fs::create_dir_all(&ui_dir).expect("No se pudo crear docs/captures/ui");
+
     let (tb, ta, _) = render_scene_frame(&bodies, &mut caches, &noise, &baked, &cam_zebes, time, threads, TriangleMode::FilledBarycentric, true, Some(4), true, 42, true, &mut fb, &mut bufs);
     let help_snap = HudSnapshot {
-        title: "Sistema Solar | Ayuda (H)",
+        title: "Sistema solar realista (9 objetos) · Tiempo: 4.5s (1.00x) · Cámara [F]: Seguir nave · Ayuda [H]",
         fps: 68.4, total_ms: 14.6, vertex_ms: 2.1, raster_ms: 1.4, shading_ms: 10.7, present_ms: 0.4,
         internal_width: 400, internal_height: 300, threads,
         tris_before_cull: tb, tris_after_cull: ta, frustum_culling: true,
-        lod_summary: "Zeb:L4", ship_lod_summary: "Nave:L0", mode_summary: "Local(Zebes) [Auto]",
-        gravity_enabled: true, gravity_mag: 3.12, speed: 2.4, altitude_summary: "1.55 u (Zebes)",
+        lod_summary: "Nivel de detalle [Z]: Automático · Zeb:4/5(5120)", ship_lod_summary: "Nave: nivel 1 de 3 (3000 triángulos)", mode_summary: "Cerca de Zebes (Automático)",
+        gravity_enabled: true, gravity_mag: 3.12, speed: 2.4, altitude_summary: "1.55 (Zebes)",
         time_scale: 1.0, paused: false, surface_seed: 42,
         instances_drawn: 180, instances_total: 253, instance_culling: true,
-        selected_summary: "Sel(Tab): Zebes | R(9/0):1.25 | Contraste relieve(4/5):1.00",
+        selected_summary: "Elegido [Tab]: Zebes · Tamaño [9/0]: 1.25 · Contraste del relieve [4/5]: 1.00",
         collision_body: None, show_perf: true, show_help: true,
     };
     hud::render_hud(&mut ov, &help_snap);
     compose_and_save(&fb, Some(&ov), &out_dir.join("ayuda_hud.png"));
+    compose_and_save(&fb, Some(&ov), &ui_dir.join("hud_ayuda.png"));
 
-    let local_snap = HudSnapshot { show_help: false, title: "Sistema Solar | Modo Local(Zebes)", ..help_snap };
+    let local_snap = HudSnapshot { show_help: false, title: "Sistema solar realista · Vuelo cerca de Zebes", ..help_snap };
     hud::render_hud(&mut ov, &local_snap);
     compose_and_save(&fb, Some(&ov), &out_dir.join("modo_local.png"));
+    compose_and_save(&fb, Some(&ov), &ui_dir.join("hud_vuelo.png"));
 
     // 10. Menú principal con fondo orbital animado.
     let cam_menu = Camera::new(
@@ -368,6 +373,9 @@ pub fn generate_docs_captures() {
     let fav_ready = crate::showcase::is_favorites_system_ready(crate::showcase::SHOWCASE_ENTRIES);
     hud::render_menu_overlay(&mut ov, 0, fav_ready, false);
     compose_and_save(&fb, Some(&ov), &out_dir.join("menu_principal.png"));
+    compose_and_save(&fb, Some(&ov), &ui_dir.join("menu.png"));
+    hud::render_menu_overlay(&mut ov, 3, fav_ready, true);
+    compose_and_save(&fb, Some(&ov), &ui_dir.join("menu_controles.png"));
 
     // 11. Galería de trofeos (Zebes y Ardens).
     let mut gal_viewer = crate::gallery::GalleryViewer::new(bodies[1].radius);
@@ -405,21 +413,21 @@ pub fn generate_docs_captures() {
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
     }
 
-    // 12. Galería de trofeos: cuerpos procedurales del sistema de favoritos.
-    for &(id, fname) in &[
-        ("phoenix_suns", "galeria_suns.png"),
-        ("spurs_crest", "galeria_spurs.png"),
-        ("airpods", "galeria_airpods.png"),
-        ("raqueta_tenis", "galeria_raqueta.png"),
-        ("cubo_rubik", "galeria_rubik.png"),
-        ("cubo_skweb", "galeria_skewb.png"),
-        ("megaminx", "galeria_megaminx.png"),
-        ("joycon_izquierdo", "galeria_joycon_izq.png"),
-        ("joycon_derecho", "galeria_joycon_der.png"),
-        ("trifuerza", "galeria_trifuerza.png"),
-        ("meteoro_ff7", "galeria_meteoro_ff7.png"),
-        ("casco_samus", "galeria_samus.png"),
-        ("la_bombonera", "galeria_bombonera.png"),
+    // 12. Galería de trofeos y capturas limpias (sin HUD) de los cuerpos del sistema de favoritos.
+    for &(id, fname, clean_fname) in &[
+        ("phoenix_suns", "galeria_suns.png", "fav_suns.png"),
+        ("spurs_crest", "galeria_spurs.png", "fav_spurs.png"),
+        ("airpods", "galeria_airpods.png", "fav_airpods.png"),
+        ("raqueta_tenis", "galeria_raqueta.png", "fav_raqueta.png"),
+        ("cubo_rubik", "galeria_rubik.png", "fav_rubik.png"),
+        ("cubo_skweb", "galeria_skewb.png", "fav_skewb.png"),
+        ("megaminx", "galeria_megaminx.png", "fav_megaminx.png"),
+        ("joycon_izquierdo", "galeria_joycon_izq.png", "fav_joycon_izq.png"),
+        ("joycon_derecho", "galeria_joycon_der.png", "fav_joycon_der.png"),
+        ("trifuerza", "galeria_trifuerza.png", "fav_trifuerza.png"),
+        ("meteoro_ff7", "galeria_meteoro_ff7.png", "fav_meteoro_ff7.png"),
+        ("casco_samus", "galeria_samus.png", "fav_samus.png"),
+        ("la_bombonera", "galeria_bombonera.png", "fav_bombonera.png"),
     ] {
         let showcase_idx = crate::showcase::SHOWCASE_ENTRIES
             .iter()
@@ -459,6 +467,7 @@ pub fn generate_docs_captures() {
             live_param_value: spec.default,
             fps: 60.0,
         };
+        compose_and_save(&fb, None, &out_dir.join(clean_fname));
         hud::render_gallery_overlay(&mut ov, &gsnap);
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
     }
@@ -526,5 +535,46 @@ pub fn generate_docs_captures() {
         compose_and_save(&fb, None, &out_dir.join("sistema_favoritos.png"));
     }
 
-    println!("Capturas oficiales generadas en docs/captures/ (32 archivos)");
+    // 14. Capturas de interfaz de la galería para CADA cuerpo del registro en docs/captures/ui/.
+    for (showcase_idx, entry) in crate::showcase::SHOWCASE_ENTRIES.iter().enumerate() {
+        let Some(body) = crate::showcase::body_for_showcase(entry) else {
+            continue;
+        };
+        gal_viewer.reset_view_for(body.radius, entry.id);
+        if entry.sistema == crate::app::SystemId::Favoritos && entry.id != "meteoro_ff7" {
+            gal_viewer.yaw = 0.55;
+            gal_viewer.pitch = 0.35;
+        }
+        gal_viewer.lod_level = if entry.sistema == crate::app::SystemId::Realista { 4 } else { 5 };
+        let tris = gal_viewer.render_body(
+            showcase_idx,
+            entry.id,
+            &body,
+            entry.light_dir,
+            1.0,
+            time,
+            &noise,
+            &baked,
+            &mut fb,
+            &mut bufs,
+            TriangleMode::FilledBarycentric,
+            threads,
+        );
+        let spec = crate::shaders::live_param(body.shader);
+        let gsnap = hud::GalleryHudSnapshot {
+            entry,
+            active_showcase_idx: showcase_idx,
+            radius: body.radius,
+            tris,
+            lod_level: gal_viewer.lod_level,
+            shader_name: crate::shaders::shader_name(body.shader),
+            live_param_name: spec.name,
+            live_param_value: spec.default,
+            fps: 60.0,
+        };
+        hud::render_gallery_overlay(&mut ov, &gsnap);
+        compose_and_save(&fb, Some(&ov), &ui_dir.join(format!("galeria_{}.png", entry.id)));
+    }
+
+    println!("Capturas oficiales generadas en docs/captures/ (45 principales + 26 de interfaz en docs/captures/ui/)");
 }

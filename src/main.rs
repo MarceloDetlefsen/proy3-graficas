@@ -658,6 +658,17 @@ fn main() {
     let mut app_ctrl = app::AppController::new();
     let mut should_exit = false;
     window.enable_cursor();
+    let audio = raylib::core::audio::RaylibAudio::init_audio_device().ok();
+    let bg_music_path = ["Souvlaki Space Station.mp3", "assets/Souvlaki Space Station.mp3"]
+        .into_iter()
+        .find(|p| std::path::Path::new(p).exists());
+    let mut bg_music = audio.as_ref().and_then(|aud| {
+        let path = bg_music_path?;
+        let mut music = aud.new_music(path).ok()?;
+        music.set_looping(true);
+        music.play_stream();
+        Some(music)
+    });
     let icosphere_lods = icosphere::build_icosphere_lods();
     let prop_meshes = surface_props::load_surface_props();
     let mut flight_session: Option<FlightSession> = None;
@@ -699,6 +710,9 @@ fn main() {
     let mut render_buffers = RenderBuffers::new(vertex_array.len());
 
     while !window.window_should_close() && !should_exit {
+        if let Some(ref mut music) = bg_music {
+            music.update_stream();
+        }
         let frame_start = std::time::Instant::now();
         let dt = window.get_frame_time();
         if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
@@ -970,7 +984,7 @@ fn main() {
                 DEFAULT_BAKE_HEIGHT,
             ));
             println!(
-                "Mapas re-horneados ({}x{}) en {:.2} ms",
+                "Texturas de superficie recalculadas ({}x{}) en {:.2} ms.",
                 DEFAULT_BAKE_WIDTH,
                 DEFAULT_BAKE_HEIGHT,
                 t_bake.elapsed().as_secs_f64() * 1000.0
@@ -1474,34 +1488,34 @@ fn main() {
             println!("Captura guardada en {}", capture_path.display());
         }
         let label = format!(
-            "{} ({} cuerpos) | t={:.1}s ({:.2}x{}) | Cam(F): {} | Ayuda(H)",
+            "{} ({} objetos) · Tiempo: {:.1}s ({:.2}x{}) · Cámara [F]: {} · Ayuda [H]",
             session.system_id.display_name(),
             session.bodies.len(),
             session.sim_clock.time,
             session.sim_clock.scale,
             if session.sim_clock.paused { " PAUSA" } else { "" },
-            if session.follow_mode { "Seguir" } else { "Libre" },
+            if session.follow_mode { "Seguir nave" } else { "Libre" },
         );
         let mode_str = match session.nav_state.mode {
-            nav::NavMode::Global => "Global".to_string(),
-            nav::NavMode::Local(idx) => format!("Local({})", session.bodies[idx].name),
+            nav::NavMode::Global => "Espacio libre".to_string(),
+            nav::NavMode::Local(idx) => format!("Cerca de {}", session.bodies[idx].name),
         };
         let override_str = match session.nav_state.override_mode {
-            nav::NavOverride::Auto => "Auto",
-            nav::NavOverride::ForceLocal => "ForzarLocal",
-            nav::NavOverride::ForceGlobal => "ForzarGlobal",
+            nav::NavOverride::Auto => "Automático",
+            nav::NavOverride::ForceLocal => "Fijo cerca",
+            nav::NavOverride::ForceGlobal => "Fijo libre",
         };
         let alt_str = match session.nav_state.nearest {
             Some(n) => format!(
-                "{:.2} u ({})",
+                "{:.2} ({})",
                 n.altitude.max(0.0),
                 session.bodies[n.body_index].name
             ),
             None => "--".to_string(),
         };
         let lod_mode_str = match session.forced_lod {
-            None => "Auto".to_string(),
-            Some(l) => format!("Forzar L{l}"),
+            None => "Automático".to_string(),
+            Some(l) => format!("Fijo {l} de 5"),
         };
         let body_lod_summary: Vec<String> = session
             .bodies
@@ -1510,20 +1524,21 @@ fn main() {
             .map(|(i, b)| {
                 let lvl = session.body_lods[i];
                 let tris = icosphere_lods[lvl].len() / 3;
-                format!("{}:L{}({})", &b.name[..b.name.len().min(3)], lvl, tris)
+                let short: String = b.name.chars().take(3).collect();
+                format!("{short}:{lvl}/5({tris})")
             })
             .collect();
         let selected_summary = if let Some(sel_body) = session.bodies.get(session.selected_body) {
             let sel_spec = shaders::live_param(sel_body.shader);
             format!(
-                "Sel(Tab): {} | R(9/0):{:.2} | {}(4/5):{:.2}",
+                "Elegido [Tab]: {} · Tamaño [9/0]: {:.2} · {} [4/5]: {:.2}",
                 sel_body.name,
                 sel_body.radius,
                 sel_spec.name,
                 session.body_shader_params[session.selected_body]
             )
         } else {
-            "Sin cuerpos".to_string()
+            "Sin objetos".to_string()
         };
         let avg = perf_stats.average();
         let fps = if avg.total_ms > 0.0 {
@@ -1534,15 +1549,15 @@ fn main() {
         let win_w = window.get_screen_width().max(1) as u32;
         let win_h = window.get_screen_height().max(1) as u32;
         overlay_buf.resize(win_w, win_h);
-        let mode_full = format!("{} [{}]", mode_str, override_str);
+        let mode_full = format!("{} ({})", mode_str, override_str);
         let lod_full = format!(
-            "LOD(Z):{} {}",
+            "Nivel de detalle [Z]: {} · {}",
             lod_mode_str,
             body_lod_summary.join(" ")
         );
         let ship_lod_str = format!(
-            "Nave:L{}({})",
-            session.ship_lod,
+            "Nave: nivel {} de 3 ({} triángulos)",
+            session.ship_lod + 1,
             ship_vertex_arrays[session.ship_lod].len() / 3
         );
         let hud_snap = hud::HudSnapshot {

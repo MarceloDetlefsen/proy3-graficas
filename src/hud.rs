@@ -24,7 +24,7 @@ pub fn glyph_5x7(ch: char) -> Option<[u8; 7]> {
         '*' => [0x00, 0x04, 0x15, 0x0E, 0x15, 0x04, 0x00],
         '+' => [0x00, 0x04, 0x04, 0x1F, 0x04, 0x04, 0x00],
         ',' => [0x00, 0x00, 0x00, 0x00, 0x04, 0x04, 0x08],
-        '-' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
+        '-' => [0x00, 0x00, 0x00, 0x0E, 0x00, 0x00, 0x00],
         '.' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x0C, 0x0C],
         '/' => [0x01, 0x02, 0x02, 0x04, 0x08, 0x08, 0x10],
         '0' => [0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E],
@@ -82,17 +82,17 @@ pub fn glyph_5x7(ch: char) -> Option<[u8; 7]> {
         'd' => [0x01, 0x01, 0x0F, 0x11, 0x11, 0x11, 0x0F],
         'e' => [0x00, 0x00, 0x0E, 0x11, 0x1F, 0x10, 0x0E],
         'f' => [0x06, 0x08, 0x1E, 0x08, 0x08, 0x08, 0x08],
-        'g' => [0x00, 0x0F, 0x11, 0x11, 0x0F, 0x01, 0x0E],
+        'g' => [0x00, 0x0E, 0x11, 0x11, 0x0F, 0x01, 0x1E],
         'h' => [0x10, 0x10, 0x1E, 0x11, 0x11, 0x11, 0x11],
         'i' => [0x04, 0x00, 0x0C, 0x04, 0x04, 0x04, 0x0E],
         'j' => [0x02, 0x00, 0x06, 0x02, 0x02, 0x12, 0x0C],
         'k' => [0x10, 0x10, 0x12, 0x14, 0x18, 0x14, 0x12],
-        'l' => [0x0C, 0x04, 0x04, 0x04, 0x04, 0x04, 0x0E],
+        'l' => [0x08, 0x08, 0x08, 0x08, 0x08, 0x08, 0x06],
         'm' => [0x00, 0x00, 0x1A, 0x15, 0x15, 0x11, 0x11],
         'n' => [0x00, 0x00, 0x1E, 0x11, 0x11, 0x11, 0x11],
         'o' => [0x00, 0x00, 0x0E, 0x11, 0x11, 0x11, 0x0E],
-        'p' => [0x00, 0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10],
-        'q' => [0x00, 0x0F, 0x11, 0x11, 0x0F, 0x01, 0x01],
+        'p' => [0x00, 0x00, 0x1E, 0x11, 0x1E, 0x10, 0x10],
+        'q' => [0x00, 0x0E, 0x12, 0x12, 0x0E, 0x02, 0x03],
         'r' => [0x00, 0x00, 0x16, 0x19, 0x10, 0x10, 0x10],
         's' => [0x00, 0x00, 0x0F, 0x10, 0x0E, 0x01, 0x1E],
         't' => [0x08, 0x08, 0x1E, 0x08, 0x08, 0x09, 0x06],
@@ -110,17 +110,22 @@ pub fn glyph_5x7(ch: char) -> Option<[u8; 7]> {
         'á' => [0x02, 0x04, 0x0E, 0x01, 0x0F, 0x11, 0x0F],
         'é' => [0x02, 0x04, 0x0E, 0x11, 0x1F, 0x10, 0x0E],
         'í' => [0x02, 0x04, 0x0C, 0x04, 0x04, 0x04, 0x0E],
-        'ó' => [0x02, 0x04, 0x0E, 0x11, 0x11, 0x11, 0x0E],
+        'ó' => [0x02, 0x04, 0x00, 0x0E, 0x11, 0x11, 0x0E],
         'ú' => [0x02, 0x04, 0x11, 0x11, 0x11, 0x13, 0x0D],
+        'ü' => [0x0A, 0x00, 0x11, 0x11, 0x11, 0x13, 0x0D],
         'ñ' => [0x0D, 0x12, 0x1E, 0x11, 0x11, 0x11, 0x11],
         'Á' => [0x02, 0x04, 0x0E, 0x11, 0x1F, 0x11, 0x11],
         'É' => [0x02, 0x04, 0x1F, 0x10, 0x1E, 0x10, 0x1F],
         'Í' => [0x02, 0x04, 0x0E, 0x04, 0x04, 0x04, 0x0E],
         'Ó' => [0x02, 0x04, 0x0E, 0x11, 0x11, 0x11, 0x0E],
         'Ú' => [0x02, 0x04, 0x11, 0x11, 0x11, 0x11, 0x0E],
+        'Ü' => [0x0A, 0x00, 0x11, 0x11, 0x11, 0x11, 0x0E],
         'Ñ' => [0x0D, 0x12, 0x11, 0x19, 0x15, 0x13, 0x11],
         '¿' => [0x04, 0x00, 0x04, 0x0C, 0x10, 0x11, 0x0E],
         '¡' => [0x04, 0x00, 0x04, 0x04, 0x04, 0x04, 0x04],
+        '·' => [0x00, 0x00, 0x06, 0x06, 0x00, 0x00, 0x00],
+        '—' => [0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00],
+        '…' => [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x15],
         _ => return None,
     };
     Some(rows)
@@ -256,25 +261,25 @@ pub struct ControlDoc {
 
 /// Única tabla de verdad para el panel de ayuda (H) y la documentación.
 pub const CONTROLS: &[ControlDoc] = &[
-    ControlDoc { key: "W / S", action: "Empuje adelante / atrás" },
-    ControlDoc { key: "Shift", action: "Impulso (boost)" },
-    ControlDoc { key: "Espacio", action: "Frenado progresivo" },
-    ControlDoc { key: "Mouse/Flechas", action: "Cabeceo y guiñada (cámara en Libre)" },
-    ControlDoc { key: "Q / E", action: "Alabeo (roll)" },
-    ControlDoc { key: "F / Backspace", action: "Cámara Seguir/Libre / Recentrar" },
-    ControlDoc { key: "L / G", action: "Modo control (Auto/Local/Global) / Gravedad" },
-    ControlDoc { key: "Enter / - =", action: "Pausar simulación / Escala de tiempo" },
-    ControlDoc { key: "Tab", action: "Seleccionar cuerpo siguiente" },
-    ControlDoc { key: "9 / 0", action: "Ajustar radio del cuerpo seleccionado" },
-    ControlDoc { key: "4 / 5", action: "Ajustar parámetro en vivo del shader" },
-    ControlDoc { key: ", . / [ ]", action: "Amplitud / Frecuencia de deformación" },
-    ControlDoc { key: "I / O", action: "Cambiar semilla de distribución" },
-    ControlDoc { key: "Z / X / M", action: "Forzar LOD / Frustum culling / Wireframe" },
-    ControlDoc { key: "B / Y / /", action: "Normal map / Debug normales / Cull instancias" },
-    ControlDoc { key: "F3 / R / T", action: "Métricas / Resolución interna / Hilos" },
-    ControlDoc { key: "C / K / P", action: "Backface culling / Re-hornear / Captura PNG" },
-    ControlDoc { key: "A / D / R", action: "Galería: cambiar cuerpo / reiniciar vista" },
-    ControlDoc { key: "Esc", action: "Volver al menú (en menú: salir)" },
+    ControlDoc { key: "W / S", action: "Acelerar hacia adelante o atrás" },
+    ControlDoc { key: "Shift", action: "Turbo para ir más rápido" },
+    ControlDoc { key: "Espacio", action: "Frenar poco a poco" },
+    ControlDoc { key: "Ratón / Flechas", action: "Girar la vista (en cámara libre)" },
+    ControlDoc { key: "Q / E", action: "Inclinar la nave a izquierda o derecha" },
+    ControlDoc { key: "F / Retroceso", action: "Cambiar cámara (seguir / libre) · Recentrar" },
+    ControlDoc { key: "L / G", action: "Control de vuelo (Auto/Cerca/Libre) · Gravedad" },
+    ControlDoc { key: "Enter / - =", action: "Pausar el tiempo · Velocidad del tiempo" },
+    ControlDoc { key: "Tab", action: "Elegir el siguiente objeto del sistema" },
+    ControlDoc { key: "9 / 0", action: "Cambiar tamaño del objeto elegido" },
+    ControlDoc { key: "4 / 5", action: "Ajustar el efecto visual del objeto elegido" },
+    ControlDoc { key: ", . / [ ]", action: "Altura y detalle del relieve del planeta" },
+    ControlDoc { key: "I / O", action: "Semilla (cambia el reparto aleatorio de objetos)" },
+    ControlDoc { key: "Z / X / M", action: "Nivel de detalle · Descartar fuera de vista · Ver la malla (alambre)" },
+    ControlDoc { key: "B / Y / /", action: "Relieve fino (normal map) · Ver relieve · Ocultar objetos lejanos" },
+    ControlDoc { key: "F3 / R / T", action: "FPS (cuadros por segundo: mide la fluidez) · Calidad de imagen · Núcleos" },
+    ControlDoc { key: "C / K / P", action: "Ocultar caras traseras · Recalcular texturas de superficie · Guardar foto" },
+    ControlDoc { key: "A / D / R", action: "En galería: cambiar objeto · Reiniciar vista" },
+    ControlDoc { key: "Esc", action: "Volver al menú principal (en el menú: salir)" },
     ControlDoc { key: "H", action: "Mostrar u ocultar este panel de ayuda" },
 ];
 
@@ -318,51 +323,61 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     let bar_w = (overlay.width as i32 - 20).max(100);
     overlay.fill_rect(10, 8, bar_w, 24, Color::new(8, 12, 20, 195));
     overlay.stroke_rect(10, 8, bar_w, 24, Color::new(70, 110, 150, 220));
-    overlay.draw_text(hud.title, 18, 13, 2, Color::WHITE);
+    let title_scale = if OverlayBuffer::measure_text(hud.title, 2).0 <= bar_w - 16 {
+        2
+    } else {
+        1
+    };
+    let title_text = fit_text_with_ellipsis(hud.title, bar_w - 16, title_scale);
+    let title_y = 8 + (24 - GLYPH_HEIGHT as i32 * title_scale) / 2;
+    overlay.draw_text(&title_text, 18, title_y, title_scale, Color::WHITE);
 
     // Panel principal de telemetría y contadores (esquina superior izquierda).
-    let mut lines: Vec<(String, Color)> = vec![
+    let raw_lines: Vec<(String, Color)> = vec![
         (
             format!(
-                "FPS:{:5.1} ({:4.1}ms) | {}x{} {}h | Tiempo:{:.2}x{}",
+                "FPS: {:5.1} ({:4.1} ms) · Imagen: {}x{} · Núcleos: {} · Tiempo: {:.2}x{}",
                 hud.fps,
                 hud.total_ms,
                 hud.internal_width,
                 hud.internal_height,
                 hud.threads,
                 hud.time_scale,
-                if hud.paused { " PAUSA" } else { "" }
+                if hud.paused { " (PAUSA)" } else { "" }
             ),
             Color::new(140, 245, 175, 255),
         ),
         (
             format!(
-                "Modo: {} | Alt: {} | Vel:{:.2}",
+                "Vuelo: {} · Altura: {} · Velocidad: {:.2}",
                 hud.mode_summary, hud.altitude_summary, hud.speed
             ),
             Color::new(210, 230, 255, 255),
         ),
         (
             format!(
-                "Grav(G):{} ({:.2}) | Semilla(I/O):{} | Inst:{}/{}({})",
-                if hud.gravity_enabled { "ON" } else { "OFF" },
+                "Gravedad [G]: {} ({:.2}) · Semilla [I/O]: {} · Objetos: {}/{} ({})",
+                if hud.gravity_enabled { "SÍ" } else { "NO" },
                 hud.gravity_mag,
                 hud.surface_seed,
                 hud.instances_drawn,
                 hud.instances_total,
-                if hud.instance_culling { "ON" } else { "OFF" },
+                if hud.instance_culling { "ocultar lejanos" } else { "ver todos" },
             ),
             Color::new(210, 230, 255, 255),
         ),
         (
             format!(
-                "Cull(X):{} {}->{} tris | {} | {}",
-                if hud.frustum_culling { "ON" } else { "OFF" },
+                "Objetos descartados por no verse [X]: {} · {} -> {} triángulos · {}",
+                if hud.frustum_culling { "SÍ" } else { "NO" },
                 hud.tris_before_cull,
                 hud.tris_after_cull,
                 hud.ship_lod_summary,
-                hud.lod_summary,
             ),
+            Color::new(255, 220, 140, 255),
+        ),
+        (
+            hud.lod_summary.to_string(),
             Color::new(255, 220, 140, 255),
         ),
         (
@@ -371,39 +386,56 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
         ),
     ];
 
+    let mut all_raw = raw_lines;
     if hud.show_perf {
-        lines.push((
+        all_raw.push((
             format!(
-                "Etapas ms -> V:{:.2} R:{:.2} S:{:.2} Pres:{:.2}",
+                "Tiempos (ms) — Vértices: {:.2} · Dibujo: {:.2} · Color: {:.2} · Pantalla: {:.2}",
                 hud.vertex_ms, hud.raster_ms, hud.shading_ms, hud.present_ms
             ),
             Color::new(255, 195, 110, 255),
         ));
     }
     if let Some(body_name) = hud.collision_body {
-        lines.push((
-            format!("COLISION CON SUPERFICIE: {}", body_name),
+        all_raw.push((
+            format!("¡CONTACTO CON LA SUPERFICIE DE {}!", body_name),
             Color::new(255, 100, 100, 255),
         ));
     }
 
-    let box_h = 12 + lines.len() as i32 * 16;
-    let box_w = (overlay.width as i32 - 20).min(640);
+    let box_w = (overlay.width as i32 - 20).min(760);
+    let mut lines: Vec<(String, Color)> = Vec::new();
+    for (text, color) in all_raw {
+        for wrapped in wrap_text(&text, box_w - 16, 1) {
+            lines.push((wrapped, color));
+        }
+    }
+    let max_box_h = (overlay.height as i32 - 54).max(32);
+    let max_lines = ((max_box_h - 12) / 14).max(1) as usize;
+    if lines.len() > max_lines {
+        lines.truncate(max_lines);
+        if let Some((last, _)) = lines.last_mut() {
+            *last = fit_text_with_ellipsis(&format!("{last}…"), box_w - 16, 1);
+        }
+    }
+
+    let box_h = 12 + lines.len() as i32 * 14;
     overlay.fill_rect(10, 38, box_w, box_h, Color::new(8, 12, 20, 185));
     overlay.stroke_rect(10, 38, box_w, box_h, Color::new(55, 85, 115, 200));
     for (i, (text, color)) in lines.iter().enumerate() {
-        overlay.draw_text(text, 18, 44 + i as i32 * 16, 1, *color);
+        overlay.draw_text(text, 18, 44 + i as i32 * 14, 1, *color);
     }
 
     // Panel de ayuda (H) generado desde CONTROLS.
     if hud.show_help {
         let help_y = 44 + box_h + 6;
-        let help_h = 26 + CONTROLS.len() as i32 * 13;
-        let help_w = (overlay.width as i32 - 20).min(560);
+        let help_h = (26 + CONTROLS.len() as i32 * 13).min((overlay.height as i32 - help_y - 8).max(40));
+        let help_w = (overlay.width as i32 - 20).min(700);
         overlay.fill_rect(10, help_y, help_w, help_h, Color::new(10, 14, 24, 215));
         overlay.stroke_rect(10, help_y, help_w, help_h, Color::new(110, 165, 220, 230));
+        let help_title = fit_text_with_ellipsis("AYUDA Y CONTROLES (pulsa H para cerrar)", help_w - 16, 1);
         overlay.draw_text(
-            "CONTROLES (H para cerrar)",
+            &help_title,
             18,
             help_y + 6,
             1,
@@ -411,8 +443,12 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
         );
         for (i, ctrl) in CONTROLS.iter().enumerate() {
             let row_y = help_y + 22 + i as i32 * 13;
+            if row_y + GLYPH_HEIGHT as i32 > help_y + help_h - 4 {
+                break;
+            }
+            let act = fit_text_with_ellipsis(ctrl.action, help_w - 142, 1);
             overlay.draw_text(ctrl.key, 18, row_y, 1, Color::new(140, 245, 175, 255));
-            overlay.draw_text(ctrl.action, 120, row_y, 1, Color::WHITE);
+            overlay.draw_text(&act, 134, row_y, 1, Color::WHITE);
         }
     }
 }
@@ -427,7 +463,7 @@ pub fn render_menu_overlay(
 
     let w = overlay.width as i32;
     let h = overlay.height as i32;
-    let box_w = 480.min(w - 40).max(260);
+    let box_w = 520.min(w - 40).max(260);
     let box_h = 270;
     let bx = (w - box_w) / 2;
     let by = (h - box_h) / 2;
@@ -438,7 +474,7 @@ pub fn render_menu_overlay(
     let title = "SISTEMA SOLAR 3D";
     let (tw, _) = OverlayBuffer::measure_text(title, 3);
     overlay.draw_text(title, (w - tw) / 2, by + 18, 3, Color::new(255, 215, 130, 255));
-    let subtitle = "Renderizador por software en Rust";
+    let subtitle = "Simulador espacial 3D hecho desde cero en Rust";
     let (sw, _) = OverlayBuffer::measure_text(subtitle, 1);
     overlay.draw_text(subtitle, (w - sw) / 2, by + 46, 1, Color::new(160, 185, 215, 255));
 
@@ -484,7 +520,7 @@ pub fn render_menu_overlay(
         overlay.draw_text(&line, bx + 30, ey, 2, label_color);
 
         if disabled {
-            let tag = "en construccion";
+            let tag = "en construcción";
             let (tag_w, _) = OverlayBuffer::measure_text(tag, 1);
             overlay.draw_text(
                 tag,
@@ -496,7 +532,7 @@ pub fn render_menu_overlay(
         }
     }
 
-    let hint = "W/S o Flechas: navegar | Enter: elegir | Esc: salir";
+    let hint = "W/S o Flechas: moverse · Enter: elegir · Esc: salir";
     let (hw, _) = OverlayBuffer::measure_text(hint, 1);
     overlay.draw_text(
         hint,
@@ -507,7 +543,7 @@ pub fn render_menu_overlay(
     );
 
     if show_controls {
-        let cw = (w - 40).min(640);
+        let cw = (w - 40).min(700);
         let ch = (CONTROLS.len() as i32 * 13 + 56).min(h - 40);
         let cx = (w - cw) / 2;
         let cy = (h - ch) / 2;
@@ -519,11 +555,12 @@ pub fn render_menu_overlay(
             if row_y + 12 >= cy + ch - 18 {
                 break;
             }
+            let act = fit_text_with_ellipsis(c.action, cw - 144, 1);
             overlay.draw_text(c.key, cx + 16, row_y, 1, Color::new(255, 220, 120, 255));
-            overlay.draw_text(c.action, cx + 124, row_y, 1, Color::new(225, 232, 240, 255));
+            overlay.draw_text(&act, cx + 132, row_y, 1, Color::new(225, 232, 240, 255));
         }
         overlay.draw_text(
-            "Enter / Backspace: volver",
+            "Enter o Retroceso: volver",
             cx + 16,
             cy + ch - 16,
             1,
@@ -544,24 +581,83 @@ pub struct GalleryHudSnapshot<'a> {
     pub fps: f64,
 }
 
-fn wrap_words(text: &str, max_chars: usize) -> Vec<String> {
+/// Envuelve `text` por palabras para que ninguna línea supere `max_width_px` a la escala dada.
+pub fn wrap_text(text: &str, max_width_px: i32, scale: i32) -> Vec<String> {
+    let s = scale.max(1);
+    let advance = (GLYPH_WIDTH as i32 + 1) * s;
+    let char_w = GLYPH_WIDTH as i32 * s;
+    let max_chars = if max_width_px < char_w {
+        1
+    } else {
+        ((max_width_px - char_w) / advance + 1) as usize
+    };
     let mut lines = Vec::new();
     let mut current = String::new();
     for word in text.split_whitespace() {
+        let word_len = word.chars().count();
         if current.is_empty() {
-            current.push_str(word);
-        } else if current.chars().count() + 1 + word.chars().count() <= max_chars {
+            if word_len <= max_chars {
+                current.push_str(word);
+            } else {
+                let mut chunk = String::new();
+                for ch in word.chars() {
+                    if chunk.chars().count() >= max_chars {
+                        lines.push(chunk);
+                        chunk = String::new();
+                    }
+                    chunk.push(ch);
+                }
+                current = chunk;
+            }
+        } else if current.chars().count() + 1 + word_len <= max_chars {
             current.push(' ');
             current.push_str(word);
         } else {
             lines.push(current);
-            current = word.to_string();
+            current = String::new();
+            if word_len <= max_chars {
+                current.push_str(word);
+            } else {
+                let mut chunk = String::new();
+                for ch in word.chars() {
+                    if chunk.chars().count() >= max_chars {
+                        lines.push(chunk);
+                        chunk = String::new();
+                    }
+                    chunk.push(ch);
+                }
+                current = chunk;
+            }
         }
     }
     if !current.is_empty() {
         lines.push(current);
     }
     lines
+}
+
+/// Acorta `text` con `"…"` al final si supera `max_width_px` a la escala dada.
+pub fn fit_text_with_ellipsis(text: &str, max_width_px: i32, scale: i32) -> String {
+    if OverlayBuffer::measure_text(text, scale).0 <= max_width_px {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    for ch in text.chars() {
+        let mut candidate = out.clone();
+        candidate.push(ch);
+        candidate.push('…');
+        if OverlayBuffer::measure_text(&candidate, scale).0 > max_width_px {
+            break;
+        }
+        out.push(ch);
+    }
+    out.push('…');
+    out
+}
+
+fn wrap_words(text: &str, max_chars: usize) -> Vec<String> {
+    let max_px = (max_chars.max(1) as i32) * (GLYPH_WIDTH as i32 + 1) - 1;
+    wrap_text(text, max_px, 1)
 }
 
 pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapshot<'_>) {
@@ -574,43 +670,74 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
     let bar_w = (w - 20).max(100);
     overlay.fill_rect(10, 8, bar_w, 24, Color::new(8, 12, 20, 200));
     overlay.stroke_rect(10, 8, bar_w, 24, Color::new(70, 110, 150, 225));
-    let header = format!(
-        "Galeria | A/D: cuerpo | Mouse/Flechas: girar | R: vista | 4/5: param | Esc: menu | {:.0} FPS",
+    let header_raw = format!(
+        "Galería de trofeos — A/D: cambiar objeto · Ratón o flechas: girar · R: reiniciar vista · 4/5: ajustar · Esc: menú · {:.0} FPS",
         g.fps
     );
+    let header = fit_text_with_ellipsis(&header_raw, bar_w - 12, 1);
     overlay.draw_text(&header, 16, 15, 1, Color::WHITE);
 
     // Ficha de datos (esquina inferior izquierda)
-    let card_w = 340.min(w - 20);
-    let desc_lines = wrap_words(g.entry.descripcion_es, 50);
-    let card_h = 128 + (desc_lines.len() as i32) * 11;
+    let card_w = 390.min(w - 20);
+    let inner_w = card_w - 24;
+    let lod_str = if g.lod_level >= 5 {
+        "máximo (5 de 5)".to_string()
+    } else {
+        format!("{} de 5", g.lod_level)
+    };
+    let mut raw_rows = vec![
+        format!("Colección: {}", g.entry.sistema.display_name()),
+        format!("Tamaño: {:.2}", g.radius),
+        format!("Triángulos: {} · Nivel de detalle: {}", g.tris, lod_str),
+        format!("Estilo visual: {}", g.entry.nombre_visible),
+        format!(
+            "{}  [teclas 4 y 5]: {:.2}",
+            g.live_param_name, g.live_param_value
+        ),
+    ];
+    if let Some(insp) = g.entry.inspiracion {
+        raw_rows.push(format!("Inspiración: {}", insp));
+    }
+    let mut rows: Vec<String> = Vec::new();
+    for r in raw_rows {
+        rows.extend(wrap_text(&r, inner_w, 1));
+    }
+    let mut desc_lines = wrap_text(g.entry.descripcion_es, inner_w, 1);
+    let max_card_h = (h - 50).max(80);
+    let max_desc = ((max_card_h - 62 - (rows.len() as i32) * 13) / 11).max(1) as usize;
+    if desc_lines.len() > max_desc {
+        desc_lines.truncate(max_desc);
+        if let Some(last) = desc_lines.last_mut() {
+            *last = fit_text_with_ellipsis(&format!("{last}…"), inner_w, 1);
+        }
+    }
+    let card_h = 62 + (rows.len() as i32) * 13 + (desc_lines.len() as i32) * 11;
     let card_x = 10;
     let card_y = (h - card_h - 10).max(40);
     overlay.fill_rect(card_x, card_y, card_w, card_h, Color::new(8, 12, 22, 210));
     overlay.stroke_rect(card_x, card_y, card_w, card_h, Color::new(90, 150, 210, 230));
 
-    overlay.draw_text(g.entry.nombre, card_x + 12, card_y + 10, 2, Color::new(255, 220, 130, 255));
+    let title_scale = if OverlayBuffer::measure_text(g.entry.nombre, 2).0 <= inner_w {
+        2
+    } else {
+        1
+    };
+    let title_txt = fit_text_with_ellipsis(g.entry.nombre, inner_w, title_scale);
+    overlay.draw_text(&title_txt, card_x + 12, card_y + 10, title_scale, Color::new(255, 220, 130, 255));
     let mut ry = card_y + 32;
-    let rows = [
-        format!("Tipo: {} | Sistema: {}", g.entry.tipo, g.entry.sistema.display_name()),
-        format!("Radio: {:.2} u | Malla: {} tris (L{})", g.radius, g.tris, g.lod_level),
-        format!("Shader: {}", g.shader_name),
-        format!("{}(4/5): {:.2}", g.live_param_name, g.live_param_value),
-        format!("Inspiracion: {}", g.entry.inspiracion.unwrap_or("-")),
-    ];
     for row in &rows {
         overlay.draw_text(row, card_x + 12, ry, 1, Color::new(210, 224, 240, 255));
         ry += 13;
     }
     ry += 4;
-    overlay.draw_text("Descripcion:", card_x + 12, ry, 1, Color::new(140, 210, 255, 255));
+    overlay.draw_text("Descripción:", card_x + 12, ry, 1, Color::new(140, 210, 255, 255));
     ry += 12;
     for line in desc_lines {
         overlay.draw_text(&line, card_x + 12, ry, 1, Color::new(225, 232, 240, 255));
         ry += 11;
     }
 
-    // Lista de trofeos (derecha): los Placeholder aparecen atenuados con "en construccion"
+    // Lista de trofeos (derecha): los Placeholder aparecen atenuados con "en construcción"
     let list_w = 276.min(w - card_w - 30).max(180);
     let entries = crate::showcase::SHOWCASE_ENTRIES;
     let list_h = (entries.len() as i32 * 11 + 26).min(h - 50);
@@ -618,7 +745,7 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
     let list_y = 40;
     overlay.fill_rect(list_x, list_y, list_w, list_h, Color::new(8, 12, 22, 200));
     overlay.stroke_rect(list_x, list_y, list_w, list_h, Color::new(75, 120, 170, 220));
-    overlay.draw_text("Trofeos (Showcase)", list_x + 8, list_y + 6, 1, Color::new(150, 220, 255, 255));
+    overlay.draw_text("Trofeos", list_x + 8, list_y + 6, 1, Color::new(150, 220, 255, 255));
 
     for (i, item) in entries.iter().enumerate() {
         let iy = list_y + 20 + i as i32 * 11;
@@ -636,12 +763,11 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
         };
         let prefix = if is_active { ">" } else { " " };
         let line = if is_placeholder {
-            format!("{} {} (en construccion)", prefix, item.nombre)
+            format!("{} {} (en construcción)", prefix, item.nombre)
         } else {
             format!("{} {}", prefix, item.nombre)
         };
-        let max_len = ((list_w - 12) / 6).max(8) as usize;
-        let truncated: String = line.chars().take(max_len).collect();
+        let truncated = fit_text_with_ellipsis(&line, list_w - 12, 1);
         overlay.draw_text(&truncated, list_x + 6, iy, 1, color);
     }
 }
@@ -665,9 +791,74 @@ mod tests {
                 );
             }
         }
-        for ch in ['á', 'é', 'í', 'ó', 'ú', 'ñ', '¿', '¡', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ñ'] {
+        for ch in [
+            'á', 'é', 'í', 'ó', 'ú', 'ü', 'ñ', '¿', '¡', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ü', 'Ñ',
+            '·', '—', '…',
+        ] {
             let glyph = glyph_5x7(ch).unwrap_or_else(|| panic!("Falta glifo para {ch:?}"));
             assert!(glyph.iter().any(|&r| r != 0));
+        }
+    }
+
+    #[test]
+    fn all_glyphs_have_distinct_bitmaps() {
+        let mut seen: std::collections::HashMap<[u8; 7], char> = std::collections::HashMap::new();
+        let extras = [
+            'á', 'é', 'í', 'ó', 'ú', 'ü', 'ñ', '¿', '¡', 'Á', 'É', 'Í', 'Ó', 'Ú', 'Ü', 'Ñ',
+            '·', '—', '…',
+        ];
+        for ch in (32_u8..=126_u8).map(|c| c as char).chain(extras) {
+            let glyph = glyph_5x7(ch).unwrap_or_else(|| panic!("Falta glifo para {ch:?}"));
+            if let Some(&prev) = seen.get(&glyph) {
+                panic!("Glifos idénticos para {prev:?} y {ch:?}: {glyph:?}");
+            }
+            seen.insert(glyph, ch);
+        }
+    }
+
+    #[test]
+    fn all_program_ui_strings_have_glyph_coverage() {
+        let mut texts: Vec<&str> = Vec::new();
+        for entry in crate::app::MENU_ENTRIES {
+            texts.push(entry.label());
+        }
+        for sys in [crate::app::SystemId::Realista, crate::app::SystemId::Favoritos] {
+            texts.push(sys.display_name());
+        }
+        for c in CONTROLS {
+            texts.push(c.key);
+            texts.push(c.action);
+        }
+        for e in crate::showcase::SHOWCASE_ENTRIES {
+            texts.push(e.nombre);
+            texts.push(e.nombre_visible);
+            texts.push(e.tipo);
+            texts.push(e.descripcion_es);
+            if let Some(insp) = e.inspiracion {
+                texts.push(insp);
+            }
+            if let Some(sh) = e.shader {
+                texts.push(crate::shaders::shader_name(sh));
+                texts.push(crate::shaders::live_param(sh).name);
+            }
+        }
+        for text in texts {
+            for ch in text.chars() {
+                assert!(
+                    glyph_5x7(ch).is_some(),
+                    "Carácter sin glifo {ch:?} en texto {text:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wrap_text_respects_max_width() {
+        let lines = wrap_text("Uno dos tres cuatro cinco seis siete", 70, 1);
+        assert!(lines.len() >= 3);
+        for line in &lines {
+            let (w, _) = OverlayBuffer::measure_text(line, 1);
+            assert!(w <= 70, "Línea excede 70px ({w}px): {line:?}");
         }
     }
 
@@ -724,5 +915,127 @@ mod tests {
         };
         render_gallery_overlay(&mut ov, &snap);
         assert_eq!(ov.pixels.len(), 800 * 600 * 4);
+    }
+
+    #[test]
+    fn all_ui_screens_and_extreme_hud_fit_boxes_and_800x600_window() {
+        let mut ov = OverlayBuffer::new(800, 600);
+        let w = 800_i32;
+        let _h = 600_i32;
+
+        // 1. Menú con todas sus entradas y subpanel de controles
+        let box_w = 520.min(w - 40).max(260);
+        let bx = (w - box_w) / 2;
+        for entry in crate::app::MENU_ENTRIES {
+            let line = format!("> {}", entry.label());
+            let (lw, lh) = OverlayBuffer::measure_text(&line, 2);
+            assert!(
+                bx + 30 + lw <= bx + box_w - 10,
+                "Entrada de menú excede recuadro: {line:?}"
+            );
+            assert!(ov.text_fits_window(&line, bx + 30, 200, 2));
+            let _ = lh;
+        }
+        let cw = (w - 40).min(700);
+        for (i, c) in CONTROLS.iter().enumerate() {
+            let row_y = 60 + i as i32 * 13;
+            let (kw, _) = OverlayBuffer::measure_text(c.key, 1);
+            assert!(16 + kw < 132, "Tecla de control invade columna: {}", c.key);
+            let act = fit_text_with_ellipsis(c.action, cw - 144, 1);
+            let (aw, _) = OverlayBuffer::measure_text(&act, 1);
+            assert!(132 + aw <= cw - 8, "Acción excede recuadro: {act:?}");
+            assert!(ov.text_fits_window(&act, (w - cw) / 2 + 132, row_y, 1));
+        }
+        render_menu_overlay(&mut ov, 1, false, false);
+        render_menu_overlay(&mut ov, 3, true, true);
+
+        // 2. Galería con CADA cuerpo del registro
+        let bar_w = w - 20;
+        let card_w = 390.min(w - 20);
+        let inner_w = card_w - 24;
+        let list_w = 276.min(w - card_w - 30).max(180);
+        for (idx, entry) in crate::showcase::SHOWCASE_ENTRIES.iter().enumerate() {
+            let sh = entry.shader.unwrap_or(crate::shaders::Shader::Chunky);
+            let spec = crate::shaders::live_param(sh);
+            let snap = GalleryHudSnapshot {
+                entry,
+                active_showcase_idx: idx,
+                radius: 1.0,
+                tris: 999999,
+                lod_level: 5,
+                shader_name: crate::shaders::shader_name(sh),
+                live_param_name: spec.name,
+                live_param_value: spec.default,
+                fps: 9999.0,
+            };
+            render_gallery_overlay(&mut ov, &snap);
+
+            let header = fit_text_with_ellipsis(
+                "Galería de trofeos — A/D: cambiar objeto · Ratón o flechas: girar · R: reiniciar vista · 4/5: ajustar · Esc: menú · 9999 FPS",
+                bar_w - 12,
+                1,
+            );
+            let (hw, _) = OverlayBuffer::measure_text(&header, 1);
+            assert!(16 + hw <= 10 + bar_w, "Header galería excede barra");
+            assert!(ov.text_fits_window(&header, 16, 15, 1));
+
+            let desc_lines = wrap_text(entry.descripcion_es, inner_w, 1);
+            assert!(!desc_lines.is_empty(), "Descripción vacía en {}", entry.id);
+            for line in &desc_lines {
+                let (lw, _) = OverlayBuffer::measure_text(line, 1);
+                assert!(lw <= inner_w, "Línea de ficha excede recuadro en {}: {line:?}", entry.id);
+            }
+            let list_line = fit_text_with_ellipsis(&format!("> {}", entry.nombre), list_w - 12, 1);
+            let (llw, _) = OverlayBuffer::measure_text(&list_line, 1);
+            assert!(llw <= list_w - 12, "Lista excede recuadro en {}", entry.id);
+        }
+
+        // 3. HUD de vuelo con valores extremos (9999 FPS, 999999 triángulos, nombres largos)
+        let extreme_title = "Sistema de favoritos (13 objetos) · Tiempo: 999.9s (2.00x PAUSA) · Cámara [F]: Seguir nave · Ayuda [H]";
+        let extreme_hud = HudSnapshot {
+            title: extreme_title,
+            fps: 9999.9,
+            total_ms: 99.9,
+            vertex_ms: 12.34,
+            raster_ms: 23.45,
+            shading_ms: 34.56,
+            present_ms: 4.56,
+            internal_width: 800,
+            internal_height: 600,
+            threads: 16,
+            tris_before_cull: 999999,
+            tris_after_cull: 999999,
+            frustum_culling: true,
+            lod_summary: "Nivel de detalle [Z]: Automático · Sol:5/5(20480) Cre:5/5(3999) Cas:5/5(2660) La :5/5(3252) Raq:5/5(3800) Meg:5/5(1800)",
+            ship_lod_summary: "Nave: nivel 1 de 3 (3000 triángulos)",
+            mode_summary: "Cerca de Sol de los Phoenix Suns (Automático)",
+            gravity_enabled: true,
+            gravity_mag: 9.81,
+            speed: 99.99,
+            altitude_summary: "999.99 (Cresta del Tottenham)",
+            time_scale: 2.0,
+            paused: true,
+            surface_seed: 999999,
+            instances_drawn: 9999,
+            instances_total: 9999,
+            instance_culling: true,
+            selected_summary: "Elegido [Tab]: Sol de los Phoenix Suns · Tamaño [9/0]: 99.99 · Velocidad de giro [4/5]: 2.00",
+            collision_body: Some("Sol de los Phoenix Suns"),
+            show_perf: true,
+            show_help: true,
+        };
+        render_hud(&mut ov, &extreme_hud);
+        let hud_box_w = (w - 20).min(760);
+        for wrapped in wrap_text(extreme_hud.lod_summary, hud_box_w - 16, 1) {
+            let (ww, _) = OverlayBuffer::measure_text(&wrapped, 1);
+            assert!(ww <= hud_box_w - 16, "HUD envuelto excede recuadro: {wrapped:?}");
+            assert!(ov.text_fits_window(&wrapped, 18, 100, 1));
+        }
+        let help_w = (w - 20).min(700);
+        for c in CONTROLS {
+            let act = fit_text_with_ellipsis(c.action, help_w - 142, 1);
+            let (aw, _) = OverlayBuffer::measure_text(&act, 1);
+            assert!(134 + aw <= 10 + help_w, "Ayuda HUD excede recuadro: {act:?}");
+        }
     }
 }

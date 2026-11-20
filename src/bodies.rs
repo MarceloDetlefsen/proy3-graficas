@@ -401,45 +401,110 @@ pub fn build_skewb_mesh(detail: usize) -> Mesh {
     mesh
 }
 
-fn megaminx_face_color(dir: Vector3) -> Vector3 {
-    // Paleta de 12 colores con los 5 visibles en refs/megaminx.webp en su posición relativa:
-    // blanco (frente-arriba), rojo (abajo-izq), azul (abajo-der), verde (arriba-izq), amarillo (arriba-der).
-    let palette: [(Vector3, Vector3); 12] = [
-        (Vector3::new(0.0, 0.53, 0.85), WHITE),                              // Frente-arriba: Blanco
-        (Vector3::new(-0.85, -0.53, 0.0), RED),                              // Izq-abajo: Rojo
-        (Vector3::new(0.85, -0.53, 0.0), BLUE),                              // Der-abajo: Azul
-        (Vector3::new(-0.53, 0.85, 0.0), GREEN),                             // Arriba-izq: Verde
-        (Vector3::new(0.53, 0.85, 0.0), YELLOW),                             // Arriba-der: Amarillo
-        (Vector3::new(0.0, -0.53, 0.85), Vector3::new(0.58, 0.24, 0.78)),    // Morado
-        (Vector3::new(0.0, 0.53, -0.85), Vector3::new(0.55, 0.58, 0.62)),    // Gris
-        (Vector3::new(0.0, -0.53, -0.85), Vector3::new(0.95, 0.45, 0.72)),   // Rosa
-        (Vector3::new(-0.85, 0.53, 0.0), Vector3::new(0.25, 0.82, 0.92)),    // Celeste
-        (Vector3::new(0.85, 0.53, 0.0), ORANGE),                             // Naranja
-        (Vector3::new(-0.53, -0.85, 0.0), Vector3::new(0.10, 0.42, 0.20)),   // Verde oscuro
-        (Vector3::new(0.53, -0.85, 0.0), Vector3::new(0.92, 0.84, 0.65)),    // Crema
+/// Paleta de 12 colores del Megaminx (esquema estándar DaYan medido de `refs/megaminx_colores.gif`).
+const MEGAMINX_WHITE: Vector3 = Vector3 { x: 1.000, y: 1.000, z: 1.000 };       // #FFFFFF
+const MEGAMINX_GRAY: Vector3 = Vector3 { x: 0.761, y: 0.757, z: 0.757 };        // #C2C1C1
+const MEGAMINX_PURPLE: Vector3 = Vector3 { x: 95.0 / 255.0, y: 81.0 / 255.0, z: 155.0 / 255.0 };      // #5F519B
+const MEGAMINX_GOLD: Vector3 = Vector3 { x: 0.976, y: 0.765, z: 0.004 };        // #F9C301
+const MEGAMINX_BLUE: Vector3 = Vector3 { x: 0.020, y: 0.231, z: 0.725 };        // #053BB9
+const MEGAMINX_RED: Vector3 = Vector3 { x: 0.859, y: 0.145, z: 0.114 };         // #DB251D
+const MEGAMINX_DARK_GREEN: Vector3 = Vector3 { x: 0.000, y: 0.400, z: 0.000 };  // #006600
+const MEGAMINX_ORANGE: Vector3 = Vector3 { x: 0.984, y: 0.420, z: 0.012 };      // #FB6B03
+const MEGAMINX_LIGHT_BLUE: Vector3 = Vector3 { x: 0.459, y: 0.773, z: 0.945 };  // #75C5F1
+const MEGAMINX_PALE_YELLOW: Vector3 = Vector3 { x: 1.000, y: 0.984, z: 0.616 }; // #FFFB9D
+const MEGAMINX_PINK: Vector3 = Vector3 { x: 0.945, y: 0.608, z: 0.749 };        // #F19BBF
+const MEGAMINX_LIGHT_GREEN: Vector3 = Vector3 { x: 0.725, y: 0.859, z: 0.490 }; // #B9DB7D
+
+fn megaminx_face_colors(faces: &[[Vector3; 5]]) -> [Vector3; 12] {
+    assert_eq!(faces.len(), 12);
+    let centers: [Vector3; 12] = std::array::from_fn(|i| {
+        ((faces[i][0] + faces[i][1] + faces[i][2] + faces[i][3] + faces[i][4]) * 0.2).normalize()
+    });
+
+    // 1. Cara blanca al frente-arriba; gris exactamente opuesta.
+    let front_top = Vector3::new(0.0, 0.53, 0.85).normalize();
+    let white_idx = (0..12)
+        .max_by(|&a, &b| centers[a].dot(front_top).total_cmp(&centers[b].dot(front_top)))
+        .unwrap();
+    let gray_idx = (0..12)
+        .min_by(|&a, &b| centers[a].dot(centers[white_idx]).total_cmp(&centers[b].dot(centers[white_idx])))
+        .unwrap();
+
+    // 2. Base ortonormal en el plano tangente de la cara blanca para ordenar sus 5 vecinas en sentido horario.
+    let w_n = centers[white_idx];
+    let ref_up = if w_n.y.abs() < 0.95 {
+        Vector3::new(0.0, 1.0, 0.0)
+    } else {
+        Vector3::new(0.0, 0.0, -1.0)
+    };
+    let u_axis = ref_up.cross(w_n).normalize();
+    let v_axis = w_n.cross(u_axis).normalize();
+
+    let mut white_ring: Vec<usize> = (0..12)
+        .filter(|&i| i != white_idx && centers[i].dot(w_n) > 0.2)
+        .collect();
+    assert_eq!(white_ring.len(), 5);
+    // Orden horario visto desde fuera: Morado (arr-izq), Dorado (arr-der), Azul (der), Rojo (abajo), Verde oscuro (izq).
+    white_ring.sort_by(|&a, &b| {
+        let ang_a = (-centers[a].dot(u_axis)).atan2(centers[a].dot(v_axis));
+        let ang_b = (-centers[b].dot(u_axis)).atan2(centers[b].dot(v_axis));
+        ang_a.total_cmp(&ang_b)
+    });
+    // Rotar para que el primer vecino (Morado) sea el de arriba-izquierda (u < 0, v > 0).
+    let start_pos = white_ring
+        .iter()
+        .position(|&i| centers[i].dot(u_axis) < 0.0 && centers[i].dot(v_axis) > 0.0)
+        .unwrap_or(0);
+    white_ring.rotate_left(start_pos);
+
+    let mut colors = [MEGAMINX_WHITE; 12];
+    colors[white_idx] = MEGAMINX_WHITE;
+    colors[gray_idx] = MEGAMINX_GRAY;
+
+    let white_ring_colors = [
+        MEGAMINX_PURPLE,
+        MEGAMINX_GOLD,
+        MEGAMINX_BLUE,
+        MEGAMINX_RED,
+        MEGAMINX_DARK_GREEN,
     ];
-    let n = dir.normalize();
-    let mut best_idx = 0;
-    let mut best_dot = -2.0_f32;
-    for (i, (ref_dir, _)) in palette.iter().enumerate() {
-        let d = n.dot(ref_dir.normalize());
-        if d > best_dot {
-            best_dot = d;
-            best_idx = i;
-        }
+    for (k, &f_idx) in white_ring.iter().enumerate() {
+        colors[f_idx] = white_ring_colors[k];
     }
-    palette[best_idx].1
+
+    // 3. Cada vecina de Gris está entre dos vecinas consecutivas de Blanco.
+    let gap_colors = [
+        MEGAMINX_ORANGE,       // entre Morado y Dorado
+        MEGAMINX_LIGHT_GREEN,  // entre Dorado y Azul
+        MEGAMINX_PINK,         // entre Azul y Rojo
+        MEGAMINX_PALE_YELLOW,  // entre Rojo y Verde oscuro
+        MEGAMINX_LIGHT_BLUE,   // entre Verde oscuro y Morado
+    ];
+    let gray_ring: Vec<usize> = (0..12)
+        .filter(|&i| i != gray_idx && centers[i].dot(centers[gray_idx]) > 0.2)
+        .collect();
+    assert_eq!(gray_ring.len(), 5);
+    for k in 0..5 {
+        let a = white_ring[k];
+        let b = white_ring[(k + 1) % 5];
+        let gap_idx = *gray_ring
+            .iter()
+            .find(|&&g| centers[g].dot(centers[a]) > 0.2 && centers[g].dot(centers[b]) > 0.2)
+            .expect("Cada par consecutivo del anillo blanco comparte una vecina del anillo gris");
+        colors[gap_idx] = gap_colors[k];
+    }
+    colors
 }
 
 /// Construye el Megaminx sobre un dodecaedro regular de circunradio 1 con 11
 /// pegatinas por cara (pentágono central, 5 cuadriláteros de arista y 5 cometas de esquina).
 pub fn build_megaminx_mesh(detail: usize) -> Mesh {
     let faces = dodecahedron_faces(1.0);
+    let face_colors = megaminx_face_colors(&faces);
     if detail == 0 {
         let mut mesh = Mesh::new();
-        for face in faces {
-            let center = (face[0] + face[1] + face[2] + face[3] + face[4]) * 0.2;
-            let color = megaminx_face_color(center);
+        for (f_idx, face) in faces.into_iter().enumerate() {
+            let color = face_colors[f_idx];
             mesh.merge(&flat_polygon_mesh(&face, color));
         }
         return mesh;
@@ -449,9 +514,9 @@ pub fn build_megaminx_mesh(detail: usize) -> Mesh {
     mesh.set_color(BLACK);
     let thickness = if detail >= 2 { 0.015 } else { 0.0 };
 
-    for face in faces {
+    for (f_idx, face) in faces.into_iter().enumerate() {
         let c = (face[0] + face[1] + face[2] + face[3] + face[4]) * 0.2;
-        let color = megaminx_face_color(c);
+        let color = face_colors[f_idx];
         let p: [Vector3; 5] = std::array::from_fn(|i| c + (face[i] - c) * 0.38);
         let ea: [Vector3; 5] =
             std::array::from_fn(|i| face[i] + (face[(i + 1) % 5] - face[i]) * 0.31);
@@ -1716,6 +1781,66 @@ mod tests {
         for m in [&m0, &m1, &m2] {
             assert!(m.indices.iter().all(|&idx| idx < m.positions.len()));
         }
+    }
+
+    #[test]
+    fn megaminx_has_12_distinct_colors_and_uniform_stickers_per_face() {
+        let faces = dodecahedron_faces(1.0);
+        let colors = megaminx_face_colors(&faces);
+        let centers: Vec<Vector3> = faces
+            .iter()
+            .map(|f| ((f[0] + f[1] + f[2] + f[3] + f[4]) * 0.2).normalize())
+            .collect();
+
+        // 12 colores distintos
+        for i in 0..12 {
+            for j in (i + 1)..12 {
+                assert!(
+                    (colors[i] - colors[j]).length() > 0.05,
+                    "Caras {i} y {j} repiten color: {:?}",
+                    colors[i]
+                );
+            }
+        }
+        // Ninguna cara comparte color con una vecina
+        for i in 0..12 {
+            for j in 0..12 {
+                if i != j && centers[i].dot(centers[j]) > 0.2 {
+                    assert!(
+                        (colors[i] - colors[j]).length() > 0.05,
+                        "Caras vecinas {i} y {j} tienen el mismo color"
+                    );
+                }
+            }
+        }
+        // Cada cara en detalle 2 tiene un único color en todas sus pegatinas (excluyendo negro del cuerpo)
+        let m2 = build_megaminx_mesh(2);
+        let mut seen_per_face = [None::<Vector3>; 12];
+        for tri in m2.indices.as_chunks::<3>().0 {
+            let c0 = m2.colors[tri[0]];
+            if (c0 - BLACK).length() < 0.05 {
+                continue; // cuerpo negro
+            }
+            let pos = (m2.positions[tri[0]] + m2.positions[tri[1]] + m2.positions[tri[2]]) * (1.0 / 3.0);
+            let dir = pos.normalize();
+            let f_idx = (0..12)
+                .max_by(|&a, &b| dir.dot(centers[a]).total_cmp(&dir.dot(centers[b])))
+                .unwrap();
+            if let Some(prev) = seen_per_face[f_idx] {
+                assert!(
+                    (prev - c0).length() < 1e-4,
+                    "Cara {f_idx} mezcla colores: {prev:?} vs {c0:?}"
+                );
+            } else {
+                seen_per_face[f_idx] = Some(c0);
+                assert!(
+                    (colors[f_idx] - c0).length() < 1e-4,
+                    "f_idx={f_idx} expected={:?} got={c0:?} pos={pos:?}",
+                    colors[f_idx]
+                );
+            }
+        }
+        assert!(seen_per_face.iter().all(|c| c.is_some()));
     }
 
     #[test]

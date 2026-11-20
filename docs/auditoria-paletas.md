@@ -29,3 +29,41 @@ Análisis automático del tono dominante (espacio HSV, excluyendo el fondo estel
 | `Zebes` ↔ `Basquia` | 28° ↔ 49° | **21°** | Superficie planetaria rocosa vs. lienzo negro con trazos primarios. |
 
 > **Nota**: No se modificaron los colores de ningún shader en esta auditoría.
+
+---
+
+## Sistema de favoritos (13 cuerpos)
+
+Medición automática del tono dominante (espacio HSV ponderado por `S·V`, excluyendo el fondo estelar y los paneles de interfaz) sobre las capturas de galería `docs/captures/galeria_*.png` (`800×600`).
+
+| Cuerpo | Shader | Captura | Tono dominante (H°) | Color promedio del objeto | Píxeles analizados |
+|---|---|---|---:|---|---:|
+| Sol de los Phoenix Suns | `PhoenixSuns` | [galeria_suns.png](captures/galeria_suns.png) | **37°** (dorado/naranja solar) | `#9F5931` | 65 416 |
+| Joy-Con izquierdo | `Chunky` | [galeria_joycon_izq.png](captures/galeria_joycon_izq.png) | **321°** (residuo neón/fondo)* | `#3F3D4E` | 119 322 |
+| Joy-Con derecho | `Chunky` | [galeria_joycon_der.png](captures/galeria_joycon_der.png) | **321°** (residuo neón/fondo)* | `#4C3344` | 114 750 |
+| Cubo de Rubik | `Chunky` | [galeria_rubik.png](captures/galeria_rubik.png) | **0°** (rojo dominante) | `#99392E` | 168 172 |
+| Raqueta de tenis | `Chunky` | [galeria_raqueta.png](captures/galeria_raqueta.png) | **321°** (residuo/aro)* | `#6D4D65` | 125 146 |
+| Cubo Skewb | `Chunky` | [galeria_skewb.png](captures/galeria_skewb.png) | **321°** (residuo/blanco)* | `#887376` | 108 234 |
+| Meteoro de FF7 | `Meteor` | [galeria_meteoro_ff7.png](captures/galeria_meteoro_ff7.png) | **194°** (verde azulado / turquesa) | `#4D6976` | 81 862 |
+| Casco de Samus | `Chunky` | [galeria_samus.png](captures/galeria_samus.png) | **14°** (terracota/salmón) | `#856A5C` | 122 818 |
+| Trifuerza | `Triforce` | [galeria_trifuerza.png](captures/galeria_trifuerza.png) | **43°** (dorado metálico) | `#9C7756` | 123 962 |
+| Megaminx | `Chunky` | [galeria_megaminx.png](captures/galeria_megaminx.png) | **0°** (cara roja/esquema 12 colores) | `#827371` | 110 490 |
+| Cresta del Tottenham | `Spurs` | [galeria_spurs.png](captures/galeria_spurs.png) | **221°** (azul marino) | `#2C2A4F` | 92 318 |
+| AirPods | `Chunky` | [galeria_airpods.png](captures/galeria_airpods.png) | **321°** (estuche blanco + brillo)* | `#8A7382` | 122 706 |
+| La Bombonera | `Chunky` | [galeria_bombonera.png](captures/galeria_bombonera.png) | **224°** (azul gradas + gris palcos) | `#625C67` | 148 146 |
+
+\* *En objetos predominantemente acromáticos (grises, blancos o negros: `AirPods`, `Joy-Con`, `Cubo Skewb`, `Raqueta de tenis`), la baja saturación del propio objeto hace que el pico de `S·V` caiga en el halo púrpura del cielo estelar (~321°) que rodea la silueta.*
+
+### Pares con distancia de tono menor a 25° (Sistema de favoritos)
+
+| Par | Tonos (H°) | Distancia angular | Nota visual |
+|---|---:|---:|---|
+| `Sol de los Phoenix Suns` ↔ `Trifuerza` | 37° ↔ 43° | **6°** | Ambos dominan en dorado/naranja cálido; se distinguen por la silueta plana con rayos de los Suns frente a los tres prismas huecos de la Trifuerza. |
+| `Sol de los Phoenix Suns` ↔ `Casco de Samus` | 37° ↔ 14° | **23°** | Naranja/dorado solar frente a terracota rojizo con visor verde menta. |
+| `Cubo de Rubik` ↔ `Megaminx` | 0° ↔ 0° | **0°** | Ambos comparten cara roja visible y cuerpo negro con pegatinas de colores; se distinguen por geometría (cubo de 27 piezas vs. dodecaedro de 12 caras). |
+| `Cubo de Rubik` ↔ `Casco de Samus` | 0° ↔ 14° | **14°** | Rojo vivo de la cara frontal vs. terracota mate/satinado del casco. |
+| `Casco de Samus` ↔ `Megaminx` | 14° ↔ 0° | **14°** | Terracota con visor menta vs. dodecaedro multicolor. |
+| `Cresta del Tottenham` ↔ `La Bombonera` | 221° ↔ 224° | **3°** | Ambos comparten azul marino/oscuro como tono dominante; se distinguen claramente por silueta (gallo sobre balón vs. estadio en D con franja amarilla y cancha verde). |
+| Grupo acromático (`Joy-Con izq/der`, `Raqueta`, `Skewb`, `AirPods`) | 321° ↔ 321° | **0°** | El pico medido refleja el halo de fondo por baja saturación promedio; visualmente sus acentos (riel azul/rojo neón, aro turquesa, estuche blanco) los separan entre sí. |
+
+> **Nota**: No se modificaron los colores de ningún cuerpo ni shader; esta lista queda documentada para decisión del autor.

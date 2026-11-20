@@ -155,7 +155,7 @@ impl PropMeshSet {
     }
 }
 
-fn load_or_fallback(kind: SurfacePropKind, path: &str) -> PropMeshLod {
+fn load_or_fallback(kind: SurfacePropKind, path: &str, used_fallback: &mut bool) -> PropMeshLod {
     if Path::new(path).exists() {
         let obj = load_obj(path).expect("No se pudo cargar modelo de superficie");
         let (verts, idxs) = obj.to_indexed_mesh();
@@ -168,7 +168,7 @@ fn load_or_fallback(kind: SurfacePropKind, path: &str) -> PropMeshLod {
         };
         return PropMeshLod { high, low };
     }
-    println!("Aviso: no se encontró {path}; usando marcador procedural de respaldo.");
+    *used_fallback = true;
     PropMeshLod {
         high: placeholder_mesh(kind),
         low: low_placeholder_mesh(kind),
@@ -177,10 +177,15 @@ fn load_or_fallback(kind: SurfacePropKind, path: &str) -> PropMeshLod {
 
 /// Carga los modelos de superficie desde `assets/surface/` con respaldo procedural.
 pub fn load_surface_props() -> PropMeshSet {
-    PropMeshSet {
-        tree: load_or_fallback(SurfacePropKind::Tree, "assets/surface/tree.obj"),
-        rock: load_or_fallback(SurfacePropKind::Rock, "assets/surface/rock.obj"),
-        building: load_or_fallback(SurfacePropKind::Building, "assets/surface/building.obj"),
-        monument: load_or_fallback(SurfacePropKind::Monument, "assets/surface/monument.obj"),
+    let mut used_fallback = false;
+    let set = PropMeshSet {
+        tree: load_or_fallback(SurfacePropKind::Tree, "assets/surface/tree.obj", &mut used_fallback),
+        rock: load_or_fallback(SurfacePropKind::Rock, "assets/surface/rock.obj", &mut used_fallback),
+        building: load_or_fallback(SurfacePropKind::Building, "assets/surface/building.obj", &mut used_fallback),
+        monument: load_or_fallback(SurfacePropKind::Monument, "assets/surface/monument.obj", &mut used_fallback),
+    };
+    if used_fallback {
+        println!("Nota: se usan figuras generadas para los detalles de superficie (no hay modelos externos en assets/surface/).");
     }
+    set
 }

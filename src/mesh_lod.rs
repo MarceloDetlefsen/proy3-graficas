@@ -186,7 +186,7 @@ pub fn load_ship_lods() -> ShipLods {
     let l1 = load_level(specs[1].0, specs[1].1);
     let l2 = load_level(specs[2].0, specs[2].1);
     println!(
-        "LODs de nave listos (desde_archivo={from_file}, respaldo_decimacion={from_fallback}): lod0={} tris, lod1={} tris, lod2={} tris",
+        "Modelos de la nave listos (desde archivo={from_file}, generados={from_fallback}): alto {} triángulos, medio {} triángulos, bajo {} triángulos.",
         l0.1.len() / 3,
         l1.1.len() / 3,
         l2.1.len() / 3,
