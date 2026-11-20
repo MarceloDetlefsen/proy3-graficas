@@ -323,10 +323,17 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     let bar_w = (overlay.width as i32 - 20).max(100);
     overlay.fill_rect(10, 8, bar_w, 24, Color::new(8, 12, 20, 195));
     overlay.stroke_rect(10, 8, bar_w, 24, Color::new(70, 110, 150, 220));
-    overlay.draw_text(hud.title, 18, 13, 2, Color::WHITE);
+    let title_scale = if OverlayBuffer::measure_text(hud.title, 2).0 <= bar_w - 16 {
+        2
+    } else {
+        1
+    };
+    let title_text = fit_text_with_ellipsis(hud.title, bar_w - 16, title_scale);
+    let title_y = 8 + (24 - GLYPH_HEIGHT as i32 * title_scale) / 2;
+    overlay.draw_text(&title_text, 18, title_y, title_scale, Color::WHITE);
 
     // Panel principal de telemetría y contadores (esquina superior izquierda).
-    let mut lines: Vec<(String, Color)> = vec![
+    let raw_lines: Vec<(String, Color)> = vec![
         (
             format!(
                 "FPS: {:5.1} ({:4.1} ms) · Imagen: {}x{} · Núcleos: {} · Tiempo: {:.2}x{}",
@@ -379,8 +386,9 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
         ),
     ];
 
+    let mut all_raw = raw_lines;
     if hud.show_perf {
-        lines.push((
+        all_raw.push((
             format!(
                 "Tiempos (ms) — Vértices: {:.2} · Dibujo: {:.2} · Color: {:.2} · Pantalla: {:.2}",
                 hud.vertex_ms, hud.raster_ms, hud.shading_ms, hud.present_ms
@@ -389,29 +397,45 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
         ));
     }
     if let Some(body_name) = hud.collision_body {
-        lines.push((
+        all_raw.push((
             format!("¡CONTACTO CON LA SUPERFICIE DE {}!", body_name),
             Color::new(255, 100, 100, 255),
         ));
     }
 
-    let box_h = 12 + lines.len() as i32 * 16;
-    let box_w = (overlay.width as i32 - 20).min(700);
+    let box_w = (overlay.width as i32 - 20).min(760);
+    let mut lines: Vec<(String, Color)> = Vec::new();
+    for (text, color) in all_raw {
+        for wrapped in wrap_text(&text, box_w - 16, 1) {
+            lines.push((wrapped, color));
+        }
+    }
+    let max_box_h = (overlay.height as i32 - 54).max(32);
+    let max_lines = ((max_box_h - 12) / 14).max(1) as usize;
+    if lines.len() > max_lines {
+        lines.truncate(max_lines);
+        if let Some((last, _)) = lines.last_mut() {
+            *last = fit_text_with_ellipsis(&format!("{last}…"), box_w - 16, 1);
+        }
+    }
+
+    let box_h = 12 + lines.len() as i32 * 14;
     overlay.fill_rect(10, 38, box_w, box_h, Color::new(8, 12, 20, 185));
     overlay.stroke_rect(10, 38, box_w, box_h, Color::new(55, 85, 115, 200));
     for (i, (text, color)) in lines.iter().enumerate() {
-        overlay.draw_text(text, 18, 44 + i as i32 * 16, 1, *color);
+        overlay.draw_text(text, 18, 44 + i as i32 * 14, 1, *color);
     }
 
     // Panel de ayuda (H) generado desde CONTROLS.
     if hud.show_help {
         let help_y = 44 + box_h + 6;
-        let help_h = 26 + CONTROLS.len() as i32 * 13;
-        let help_w = (overlay.width as i32 - 20).min(680);
+        let help_h = (26 + CONTROLS.len() as i32 * 13).min((overlay.height as i32 - help_y - 8).max(40));
+        let help_w = (overlay.width as i32 - 20).min(700);
         overlay.fill_rect(10, help_y, help_w, help_h, Color::new(10, 14, 24, 215));
         overlay.stroke_rect(10, help_y, help_w, help_h, Color::new(110, 165, 220, 230));
+        let help_title = fit_text_with_ellipsis("AYUDA Y CONTROLES (pulsa H para cerrar)", help_w - 16, 1);
         overlay.draw_text(
-            "AYUDA Y CONTROLES (pulsa H para cerrar)",
+            &help_title,
             18,
             help_y + 6,
             1,
@@ -419,8 +443,12 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
         );
         for (i, ctrl) in CONTROLS.iter().enumerate() {
             let row_y = help_y + 22 + i as i32 * 13;
+            if row_y + GLYPH_HEIGHT as i32 > help_y + help_h - 4 {
+                break;
+            }
+            let act = fit_text_with_ellipsis(ctrl.action, help_w - 142, 1);
             overlay.draw_text(ctrl.key, 18, row_y, 1, Color::new(140, 245, 175, 255));
-            overlay.draw_text(ctrl.action, 134, row_y, 1, Color::WHITE);
+            overlay.draw_text(&act, 134, row_y, 1, Color::WHITE);
         }
     }
 }
@@ -435,7 +463,7 @@ pub fn render_menu_overlay(
 
     let w = overlay.width as i32;
     let h = overlay.height as i32;
-    let box_w = 480.min(w - 40).max(260);
+    let box_w = 520.min(w - 40).max(260);
     let box_h = 270;
     let bx = (w - box_w) / 2;
     let by = (h - box_h) / 2;
@@ -515,7 +543,7 @@ pub fn render_menu_overlay(
     );
 
     if show_controls {
-        let cw = (w - 40).min(680);
+        let cw = (w - 40).min(700);
         let ch = (CONTROLS.len() as i32 * 13 + 56).min(h - 40);
         let cx = (w - cw) / 2;
         let cy = (h - ch) / 2;
@@ -527,8 +555,9 @@ pub fn render_menu_overlay(
             if row_y + 12 >= cy + ch - 18 {
                 break;
             }
+            let act = fit_text_with_ellipsis(c.action, cw - 144, 1);
             overlay.draw_text(c.key, cx + 16, row_y, 1, Color::new(255, 220, 120, 255));
-            overlay.draw_text(c.action, cx + 132, row_y, 1, Color::new(225, 232, 240, 255));
+            overlay.draw_text(&act, cx + 132, row_y, 1, Color::new(225, 232, 240, 255));
         }
         overlay.draw_text(
             "Enter o Retroceso: volver",
@@ -607,6 +636,25 @@ pub fn wrap_text(text: &str, max_width_px: i32, scale: i32) -> Vec<String> {
     lines
 }
 
+/// Acorta `text` con `"…"` al final si supera `max_width_px` a la escala dada.
+pub fn fit_text_with_ellipsis(text: &str, max_width_px: i32, scale: i32) -> String {
+    if OverlayBuffer::measure_text(text, scale).0 <= max_width_px {
+        return text.to_string();
+    }
+    let mut out = String::new();
+    for ch in text.chars() {
+        let mut candidate = out.clone();
+        candidate.push(ch);
+        candidate.push('…');
+        if OverlayBuffer::measure_text(&candidate, scale).0 > max_width_px {
+            break;
+        }
+        out.push(ch);
+    }
+    out.push('…');
+    out
+}
+
 fn wrap_words(text: &str, max_chars: usize) -> Vec<String> {
     let max_px = (max_chars.max(1) as i32) * (GLYPH_WIDTH as i32 + 1) - 1;
     wrap_text(text, max_px, 1)
@@ -622,20 +670,22 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
     let bar_w = (w - 20).max(100);
     overlay.fill_rect(10, 8, bar_w, 24, Color::new(8, 12, 20, 200));
     overlay.stroke_rect(10, 8, bar_w, 24, Color::new(70, 110, 150, 225));
-    let header = format!(
+    let header_raw = format!(
         "Galería de trofeos — A/D: cambiar objeto · Ratón o flechas: girar · R: reiniciar vista · 4/5: ajustar · Esc: menú · {:.0} FPS",
         g.fps
     );
+    let header = fit_text_with_ellipsis(&header_raw, bar_w - 12, 1);
     overlay.draw_text(&header, 16, 15, 1, Color::WHITE);
 
     // Ficha de datos (esquina inferior izquierda)
     let card_w = 390.min(w - 20);
+    let inner_w = card_w - 24;
     let lod_str = if g.lod_level >= 5 {
         "máximo (5 de 5)".to_string()
     } else {
         format!("{} de 5", g.lod_level)
     };
-    let mut rows = vec![
+    let mut raw_rows = vec![
         format!("Colección: {}", g.entry.sistema.display_name()),
         format!("Tamaño: {:.2}", g.radius),
         format!("Triángulos: {} · Nivel de detalle: {}", g.tris, lod_str),
@@ -646,16 +696,34 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
         ),
     ];
     if let Some(insp) = g.entry.inspiracion {
-        rows.push(format!("Inspiración: {}", insp));
+        raw_rows.push(format!("Inspiración: {}", insp));
     }
-    let desc_lines = wrap_text(g.entry.descripcion_es, card_w - 24, 1);
+    let mut rows: Vec<String> = Vec::new();
+    for r in raw_rows {
+        rows.extend(wrap_text(&r, inner_w, 1));
+    }
+    let mut desc_lines = wrap_text(g.entry.descripcion_es, inner_w, 1);
+    let max_card_h = (h - 50).max(80);
+    let max_desc = ((max_card_h - 62 - (rows.len() as i32) * 13) / 11).max(1) as usize;
+    if desc_lines.len() > max_desc {
+        desc_lines.truncate(max_desc);
+        if let Some(last) = desc_lines.last_mut() {
+            *last = fit_text_with_ellipsis(&format!("{last}…"), inner_w, 1);
+        }
+    }
     let card_h = 62 + (rows.len() as i32) * 13 + (desc_lines.len() as i32) * 11;
     let card_x = 10;
     let card_y = (h - card_h - 10).max(40);
     overlay.fill_rect(card_x, card_y, card_w, card_h, Color::new(8, 12, 22, 210));
     overlay.stroke_rect(card_x, card_y, card_w, card_h, Color::new(90, 150, 210, 230));
 
-    overlay.draw_text(g.entry.nombre, card_x + 12, card_y + 10, 2, Color::new(255, 220, 130, 255));
+    let title_scale = if OverlayBuffer::measure_text(g.entry.nombre, 2).0 <= inner_w {
+        2
+    } else {
+        1
+    };
+    let title_txt = fit_text_with_ellipsis(g.entry.nombre, inner_w, title_scale);
+    overlay.draw_text(&title_txt, card_x + 12, card_y + 10, title_scale, Color::new(255, 220, 130, 255));
     let mut ry = card_y + 32;
     for row in &rows {
         overlay.draw_text(row, card_x + 12, ry, 1, Color::new(210, 224, 240, 255));
@@ -699,8 +767,7 @@ pub fn render_gallery_overlay(overlay: &mut OverlayBuffer, g: &GalleryHudSnapsho
         } else {
             format!("{} {}", prefix, item.nombre)
         };
-        let max_len = ((list_w - 12) / 6).max(8) as usize;
-        let truncated: String = line.chars().take(max_len).collect();
+        let truncated = fit_text_with_ellipsis(&line, list_w - 12, 1);
         overlay.draw_text(&truncated, list_x + 6, iy, 1, color);
     }
 }
@@ -848,5 +915,127 @@ mod tests {
         };
         render_gallery_overlay(&mut ov, &snap);
         assert_eq!(ov.pixels.len(), 800 * 600 * 4);
+    }
+
+    #[test]
+    fn all_ui_screens_and_extreme_hud_fit_boxes_and_800x600_window() {
+        let mut ov = OverlayBuffer::new(800, 600);
+        let w = 800_i32;
+        let _h = 600_i32;
+
+        // 1. Menú con todas sus entradas y subpanel de controles
+        let box_w = 520.min(w - 40).max(260);
+        let bx = (w - box_w) / 2;
+        for entry in crate::app::MENU_ENTRIES {
+            let line = format!("> {}", entry.label());
+            let (lw, lh) = OverlayBuffer::measure_text(&line, 2);
+            assert!(
+                bx + 30 + lw <= bx + box_w - 10,
+                "Entrada de menú excede recuadro: {line:?}"
+            );
+            assert!(ov.text_fits_window(&line, bx + 30, 200, 2));
+            let _ = lh;
+        }
+        let cw = (w - 40).min(700);
+        for (i, c) in CONTROLS.iter().enumerate() {
+            let row_y = 60 + i as i32 * 13;
+            let (kw, _) = OverlayBuffer::measure_text(c.key, 1);
+            assert!(16 + kw < 132, "Tecla de control invade columna: {}", c.key);
+            let act = fit_text_with_ellipsis(c.action, cw - 144, 1);
+            let (aw, _) = OverlayBuffer::measure_text(&act, 1);
+            assert!(132 + aw <= cw - 8, "Acción excede recuadro: {act:?}");
+            assert!(ov.text_fits_window(&act, (w - cw) / 2 + 132, row_y, 1));
+        }
+        render_menu_overlay(&mut ov, 1, false, false);
+        render_menu_overlay(&mut ov, 3, true, true);
+
+        // 2. Galería con CADA cuerpo del registro
+        let bar_w = w - 20;
+        let card_w = 390.min(w - 20);
+        let inner_w = card_w - 24;
+        let list_w = 276.min(w - card_w - 30).max(180);
+        for (idx, entry) in crate::showcase::SHOWCASE_ENTRIES.iter().enumerate() {
+            let sh = entry.shader.unwrap_or(crate::shaders::Shader::Chunky);
+            let spec = crate::shaders::live_param(sh);
+            let snap = GalleryHudSnapshot {
+                entry,
+                active_showcase_idx: idx,
+                radius: 1.0,
+                tris: 999999,
+                lod_level: 5,
+                shader_name: crate::shaders::shader_name(sh),
+                live_param_name: spec.name,
+                live_param_value: spec.default,
+                fps: 9999.0,
+            };
+            render_gallery_overlay(&mut ov, &snap);
+
+            let header = fit_text_with_ellipsis(
+                "Galería de trofeos — A/D: cambiar objeto · Ratón o flechas: girar · R: reiniciar vista · 4/5: ajustar · Esc: menú · 9999 FPS",
+                bar_w - 12,
+                1,
+            );
+            let (hw, _) = OverlayBuffer::measure_text(&header, 1);
+            assert!(16 + hw <= 10 + bar_w, "Header galería excede barra");
+            assert!(ov.text_fits_window(&header, 16, 15, 1));
+
+            let desc_lines = wrap_text(entry.descripcion_es, inner_w, 1);
+            assert!(!desc_lines.is_empty(), "Descripción vacía en {}", entry.id);
+            for line in &desc_lines {
+                let (lw, _) = OverlayBuffer::measure_text(line, 1);
+                assert!(lw <= inner_w, "Línea de ficha excede recuadro en {}: {line:?}", entry.id);
+            }
+            let list_line = fit_text_with_ellipsis(&format!("> {}", entry.nombre), list_w - 12, 1);
+            let (llw, _) = OverlayBuffer::measure_text(&list_line, 1);
+            assert!(llw <= list_w - 12, "Lista excede recuadro en {}", entry.id);
+        }
+
+        // 3. HUD de vuelo con valores extremos (9999 FPS, 999999 triángulos, nombres largos)
+        let extreme_title = "Sistema de favoritos (13 objetos) · Tiempo: 999.9s (2.00x PAUSA) · Cámara [F]: Seguir nave · Ayuda [H]";
+        let extreme_hud = HudSnapshot {
+            title: extreme_title,
+            fps: 9999.9,
+            total_ms: 99.9,
+            vertex_ms: 12.34,
+            raster_ms: 23.45,
+            shading_ms: 34.56,
+            present_ms: 4.56,
+            internal_width: 800,
+            internal_height: 600,
+            threads: 16,
+            tris_before_cull: 999999,
+            tris_after_cull: 999999,
+            frustum_culling: true,
+            lod_summary: "Nivel de detalle [Z]: Automático · Sol:5/5(20480) Cre:5/5(3999) Cas:5/5(2660) La :5/5(3252) Raq:5/5(3800) Meg:5/5(1800)",
+            ship_lod_summary: "Nave: nivel 1 de 3 (3000 triángulos)",
+            mode_summary: "Cerca de Sol de los Phoenix Suns (Automático)",
+            gravity_enabled: true,
+            gravity_mag: 9.81,
+            speed: 99.99,
+            altitude_summary: "999.99 (Cresta del Tottenham)",
+            time_scale: 2.0,
+            paused: true,
+            surface_seed: 999999,
+            instances_drawn: 9999,
+            instances_total: 9999,
+            instance_culling: true,
+            selected_summary: "Elegido [Tab]: Sol de los Phoenix Suns · Tamaño [9/0]: 99.99 · Velocidad de giro [4/5]: 2.00",
+            collision_body: Some("Sol de los Phoenix Suns"),
+            show_perf: true,
+            show_help: true,
+        };
+        render_hud(&mut ov, &extreme_hud);
+        let hud_box_w = (w - 20).min(760);
+        for wrapped in wrap_text(extreme_hud.lod_summary, hud_box_w - 16, 1) {
+            let (ww, _) = OverlayBuffer::measure_text(&wrapped, 1);
+            assert!(ww <= hud_box_w - 16, "HUD envuelto excede recuadro: {wrapped:?}");
+            assert!(ov.text_fits_window(&wrapped, 18, 100, 1));
+        }
+        let help_w = (w - 20).min(700);
+        for c in CONTROLS {
+            let act = fit_text_with_ellipsis(c.action, help_w - 142, 1);
+            let (aw, _) = OverlayBuffer::measure_text(&act, 1);
+            assert!(134 + aw <= 10 + help_w, "Ayuda HUD excede recuadro: {act:?}");
+        }
     }
 }
