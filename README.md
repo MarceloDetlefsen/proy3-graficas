@@ -74,15 +74,21 @@ Tabla generada desde `CONTROLS` (`src/hud.rs`):
 
 ```mermaid
 flowchart LR
-    A["Entrada y Reloj (SimClock)"] --> B["Física paso fijo 1/120s y Navegación"]
-    B --> C["Escena: Frustum Culling y LOD"]
-    C --> D["Vértices: MVP y Clip Near"]
-    D --> E["Rasterización por Tiles 64x64 (Visibilidad)"]
-    E --> F["Sombreado: Mapas horneados y Normales"]
-    E --> G["Cielo estelar y Halo solar"]
-    F --> H["Framebuffer interno + Escalado + HUD RGBA"]
-    G --> H
-    H --> I["Raylib (solo presentación)"]
+    M["Menú principal (AppState::Menu)"] -->|Enter: Realista o Favoritos| V["Vuelo en un sistema (AppState::Flight)"]
+    M -->|Enter: Galería de trofeos| GL["Galería de trofeos (AppState::Gallery)"]
+    V -->|Esc| M
+    GL -->|Esc| M
+    subgraph Pipeline por cuadro
+        A["Entrada y Reloj (SimClock)"] --> B["Física paso fijo 1/120s y Navegación"]
+        B --> C["Escena: Frustum Culling y LOD"]
+        C --> D["Vértices: MVP y Clip Near"]
+        D --> E["Rasterización por Tiles 64x64 (Visibilidad)"]
+        E --> F["Sombreado: Mapas horneados y Normales"]
+        E --> G["Cielo estelar y Halo solar"]
+        F --> H["Framebuffer interno + Escalado + HUD RGBA"]
+        G --> H
+        H --> I["Raylib (solo presentación)"]
+    end
 ```
 
 - **Buffer de visibilidad por tiles (`TILE_SIZE = 64`)**: primero se rasterizan todos los triángulos guardando `depth_buffer` y `tri_id_buffer`; el sombreado se ejecuta una sola vez por píxel visible, eliminando el *overdraw* de 2×.
@@ -216,29 +222,41 @@ proy3-graficas/
 ├── .github/workflows/ci.yml
 ├── assets/
 │   ├── ship.obj
+│   ├── ship_lod0.obj
+│   ├── ship_lod1.obj
+│   ├── ship_lod2.obj
 │   └── sphere.obj
 ├── docs/
-│   ├── captures/                # 23 capturas oficiales (--docs)
+│   ├── captures/                # Capturas oficiales (--docs: 32 principales + 26 de interfaz en ui/)
+│   ├── gifs/                    # Espacio reservado para los GIF de portada
 │   ├── arquitectura.md
 │   ├── auditoria-paletas.md
 │   ├── auditoria-rubrica.md
 │   ├── blender.md
 │   ├── defensa.md
 │   ├── guion-video.md
+│   ├── medidas-raqueta.md
+│   ├── medidas-samus-bombonera.md
 │   ├── rendimiento.md
-│   └── reuse-audit.md
+│   ├── reuse-audit.md
+│   └── textos-interfaz.md
 ├── src/
+│   ├── app.rs
+│   ├── bodies.rs
 │   ├── camera.rs
 │   ├── clipping.rs
 │   ├── culling.rs
 │   ├── docs_capture.rs
 │   ├── fragment.rs
 │   ├── framebuffer.rs
+│   ├── gallery.rs
 │   ├── hud.rs
 │   ├── icosphere.rs
 │   ├── lod.rs
+│   ├── logo_data.rs
 │   ├── main.rs
 │   ├── math.rs
+│   ├── mesh_builder.rs
 │   ├── mesh_lod.rs
 │   ├── nav.rs
 │   ├── noise.rs
@@ -246,28 +264,36 @@ proy3-graficas/
 │   ├── perf.rs
 │   ├── physics.rs
 │   ├── primitive.rs
+│   ├── racket_data.rs
 │   ├── rasterizer.rs
 │   ├── rng.rs
+│   ├── samus_bombonera_data.rs
 │   ├── scene.rs
 │   ├── scene_config.rs
-│   ├── shaders/                 # star, rocky, gas_giant, ardens, abismo, basquia, vestigio, mural, fundido, ship
+│   ├── shaders/                 # abismo, ardens, basquia, chunky, fundido, gas_giant, meteor,
+│   │                            # mural, rocky, ship, spurs, star, suns, triforce, vestigio
 │   ├── shaders.rs
 │   ├── ship.rs
+│   ├── showcase.rs
 │   ├── sim.rs
 │   ├── sky.rs
 │   ├── surface_map.rs
 │   ├── surface_props.rs
 │   ├── surface_scatter.rs
 │   └── vertex.rs
+├── tools/
+│   ├── make_ship_lods.py
+│   ├── measure_racket.py
+│   ├── measure_samus_bombonera.py
+│   └── trace_logo.py
 ├── Cargo.toml
 └── README.md
 ```
 
 ## Limitaciones conocidas
 
-- Los 4 modelos `.obj` de superficie (`assets/surface/{tree,rock,building,monument}.obj`) no han sido agregados aún; el motor utiliza los marcadores procedurales de respaldo de `src/surface_props.rs`.
-- Los LOD de la nave (`assets/ship_lod0.obj`, `ship_lod1.obj`, `ship_lod2.obj`, con `3000`/`800`/`610` triángulos) ya se cargan desde archivo; el respaldo por decimación en `src/mesh_lod.rs::load_ship_lods` se mantiene únicamente si faltaran.
-- El menú principal, la galería de trofeos y el vuelo en ambos sistemas (`Sistema solar realista` y `Sistema de favoritos`) están activos (`FAVORITES_FLIGHT_ENABLED = true`). El sistema de favoritos cuenta con 13 cuerpos `Ready` (`Sol de los Phoenix Suns` al centro más 12 cuerpos en órbita sin solapamientos: `Cubo de Rubik`, `Cubo Skewb`, `Trifuerza`, `Joy-Con izquierdo`, `Joy-Con derecho`, `AirPods`, `Casco de Samus`, `Megaminx`, `Raqueta de tenis`, `La Bombonera`, `Cresta del Tottenham` y `Meteoro de FF7`).
+- Los 4 modelos `.obj` de superficie (`assets/surface/{tree,rock,building,monument}.obj`) no están presentes en el repositorio; el motor utiliza las figuras generadas de respaldo de `src/surface_props.rs`.
+- Las imágenes de referencia usadas para medir siluetas y colores (`refs/`) están excluidas del repositorio por `.gitignore`; las mediciones exportadas residen en `src/logo_data.rs`, `src/racket_data.rs` y `src/samus_bombonera_data.rs`.
 
 ## Dependencias principales
 
@@ -276,6 +302,8 @@ proy3-graficas/
 
 ## Uso de IA y recursos externos
 
+- **Asistencia de IA**: <<COMPLETAR: herramientas de IA usadas>>. El autor revisó, probó y puede explicar el código entregado.
+- **Recursos externos**: `raylib` (ventana, entrada y presentación), Blender (generación de niveles de detalle de la nave `assets/ship_lod{0,1,2}.obj`), laboratorios 4 y 6 del curso como base del rasterizador y shaders, imágenes de referencia usadas únicamente de forma local para medir siluetas y colores, y las herramientas propias de trazado y medición en `tools/`.
 - Los logotipos, escudos, personajes, consolas y marcas comerciales representados en la galería y el sistema de favoritos (Phoenix Suns, Tottenham Hotspur, Apple AirPods, Nintendo Switch Joy-Con, Rubik, The Legend of Zelda, Final Fantasy VII, Wilson, Metroid y Boca Juniors) pertenecen a sus respectivos dueños y se utilizan únicamente con fines académicos y de demostración gráfica.
 
 ## Autor
