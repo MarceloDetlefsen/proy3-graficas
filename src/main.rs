@@ -655,6 +655,7 @@ fn main() {
     });
     let mut overlay_buf = hud::OverlayBuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32);
     let mut show_help = false;
+    let mut show_hud = true;
     let mut app_ctrl = app::AppController::new();
     let mut should_exit = false;
     window.enable_cursor();
@@ -968,6 +969,9 @@ fn main() {
         }
         if window.is_key_pressed(KeyboardKey::KEY_F3) {
             perf_stats.enabled = !perf_stats.enabled;
+        }
+        if window.is_key_pressed(KeyboardKey::KEY_F4) {
+            show_hud = !show_hud;
         }
         if window.is_key_pressed(KeyboardKey::KEY_C) {
             backface_culling = !backface_culling;
@@ -1450,6 +1454,8 @@ fn main() {
                     threads,
                     scene_config::solar_halo_for_system(session.system_id),
                 );
+                let vp = uniforms.projection_matrix * uniforms.view_matrix;
+                rasterizer::draw_orbit_lines(&session.bodies, session.selected_body, &vp, &mut framebuffer);
                 let shading_ms = t_shade.elapsed().as_secs_f64() * 1000.0;
                 (raster_ms, shading_ms, writes, calls, visible)
             }
@@ -1560,6 +1566,43 @@ fn main() {
             session.ship_lod + 1,
             ship_vertex_arrays[session.ship_lod].len() / 3
         );
+        let ship_fwd = session.ship.forward;
+        let minimap_max_r = session
+            .bodies
+            .iter()
+            .map(|b| b.orbit_radius)
+            .fold(10.0_f32, f32::max);
+        let minimap_bodies: Vec<hud::MinimapBody> = session
+            .bodies
+            .iter()
+            .enumerate()
+            .map(|(i, b)| {
+                let p = body_position_at(b, session.sim_clock.time);
+                let col = match b.shader {
+                    Shader::Star | Shader::PhoenixSuns => Color::new(255, 205, 80, 255),
+                    Shader::Rocky => Color::new(85, 210, 165, 255),
+                    Shader::GasGiant => Color::new(150, 210, 110, 255),
+                    Shader::Ardens => Color::new(255, 110, 65, 255),
+                    Shader::Abismo => Color::new(70, 175, 235, 255),
+                    Shader::Basquia => Color::new(240, 200, 60, 255),
+                    Shader::Vestigio => Color::new(200, 165, 120, 255),
+                    Shader::Mural => Color::new(210, 110, 95, 255),
+                    Shader::Fundido => Color::new(245, 145, 90, 255),
+                    Shader::Meteor => Color::new(90, 225, 200, 255),
+                    Shader::Triforce => Color::new(255, 220, 75, 255),
+                    Shader::Spurs => Color::new(120, 155, 235, 255),
+                    _ => Color::new(205, 215, 235, 255),
+                };
+                hud::MinimapBody {
+                    x: p.x,
+                    z: p.z,
+                    orbit_radius: b.orbit_radius,
+                    color: col,
+                    is_star: b.orbit_radius <= 0.0,
+                    is_selected: i == session.selected_body,
+                }
+            })
+            .collect();
         let hud_snap = hud::HudSnapshot {
             title: &label,
             fps,
@@ -1591,6 +1634,15 @@ fn main() {
             collision_body: collision_body.map(|idx| session.bodies[idx].name),
             show_perf: perf_stats.enabled,
             show_help,
+            show_hud,
+            minimap: Some(hud::MinimapSnapshot {
+                bodies: &minimap_bodies,
+                ship_x: session.ship.position.x,
+                ship_z: session.ship.position.z,
+                ship_dir_x: ship_fwd.x,
+                ship_dir_z: ship_fwd.z,
+                max_radius: minimap_max_r,
+            }),
         };
         hud::render_hud(&mut overlay_buf, &hud_snap);
         let t_pres = std::time::Instant::now();

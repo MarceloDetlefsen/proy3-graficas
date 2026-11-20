@@ -20,7 +20,7 @@ Renderizador 3D por software escrito en Rust que simula un sistema solar navegab
 
 ## Demostración
 
-[Ver video de demostración del simulador (Google Drive)](https://drive.google.com/file/d/1v4R0i3geqEnqmXdYmj5GmoXdZccOC9qH/view?usp=sharing)
+[Ver video de demostración del simulador (Google Drive)](https://drive.google.com/file/d/10qNXZhuC4UUl5eaudeuo3g06rUjyHh6Y/view?usp=sharing)
 
 ## Requisitos
 

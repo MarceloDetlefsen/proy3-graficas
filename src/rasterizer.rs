@@ -697,6 +697,123 @@ pub fn render_wireframe(
     (calls, framebuffer.visible_pixel_count())
 }
 
+/// Dibuja las trayectorias orbitales 3D de todos los cuerpos con `orbit_radius > 0`
+/// respetando el `depth_buffer` para que los planetas ocluyan la línea detrás de ellos.
+pub fn draw_orbit_lines(
+    bodies: &[crate::scene::Body],
+    selected_idx: usize,
+    vp: &crate::math::Mat4,
+    framebuffer: &mut Framebuffer,
+) {
+    use crate::math::Vec4;
+
+    let w = framebuffer.width as i32;
+    let h = framebuffer.height as i32;
+    if w <= 0 || h <= 0 {
+        return;
+    }
+    let wf = w as f32;
+    let hf = h as f32;
+    const ORBIT_SEGMENTS: usize = 128;
+    const W_NEAR: f32 = 0.08;
+
+    for (b_idx, body) in bodies.iter().enumerate() {
+        if body.orbit_radius <= 0.0 {
+            continue;
+        }
+        let is_sel = b_idx == selected_idx;
+        let (cr, cg, cb, alpha): (f32, f32, f32, f32) = if is_sel {
+            (130.0, 225.0, 255.0, 0.72)
+        } else {
+            (175.0, 200.0, 230.0, 0.36)
+        };
+        let inc_s = body.orbit_inclination.sin();
+        let inc_c = body.orbit_inclination.cos();
+
+        for seg in 0..ORBIT_SEGMENTS {
+            let a0 = std::f32::consts::TAU * (seg as f32 / ORBIT_SEGMENTS as f32);
+            let a1 = std::f32::consts::TAU * ((seg + 1) as f32 / ORBIT_SEGMENTS as f32);
+            let p0 = Vector3::new(
+                body.orbit_radius * a0.cos(),
+                body.orbit_radius * a0.sin() * inc_s,
+                body.orbit_radius * a0.sin() * inc_c,
+            );
+            let p1 = Vector3::new(
+                body.orbit_radius * a1.cos(),
+                body.orbit_radius * a1.sin() * inc_s,
+                body.orbit_radius * a1.sin() * inc_c,
+            );
+            let mut c0 = *vp * Vec4::from_point(p0);
+            let mut c1 = *vp * Vec4::from_point(p1);
+            if c0.w < W_NEAR && c1.w < W_NEAR {
+                continue;
+            }
+            let lerp_v4 = |a: Vec4, b: Vec4, t: f32| {
+                Vec4::new(
+                    a.x + (b.x - a.x) * t,
+                    a.y + (b.y - a.y) * t,
+                    a.z + (b.z - a.z) * t,
+                    a.w + (b.w - a.w) * t,
+                )
+            };
+            if c0.w < W_NEAR {
+                let t = (W_NEAR - c0.w) / (c1.w - c0.w);
+                c0 = lerp_v4(c0, c1, t);
+            } else if c1.w < W_NEAR {
+                let t = (W_NEAR - c1.w) / (c0.w - c1.w);
+                c1 = lerp_v4(c1, c0, t);
+            }
+
+            let sx0 = ((c0.x / c0.w) * 0.5 + 0.5) * wf;
+            let sy0 = (0.5 - (c0.y / c0.w) * 0.5) * hf;
+            let sz0 = (c0.z / c0.w) * 0.5 + 0.5;
+            let sx1 = ((c1.x / c1.w) * 0.5 + 0.5) * wf;
+            let sy1 = (0.5 - (c1.y / c1.w) * 0.5) * hf;
+            let sz1 = (c1.z / c1.w) * 0.5 + 0.5;
+
+            let dx = sx1 - sx0;
+            let dy = sy1 - sy0;
+            let steps = dx.abs().max(dy.abs()).ceil() as i32;
+            if steps <= 0 || steps > 600 {
+                continue;
+            }
+            if (sx0 < -wf && sx1 < -wf)
+                || (sx0 > wf * 2.0 && sx1 > wf * 2.0)
+                || (sy0 < -hf && sy1 < -hf)
+                || (sy0 > hf * 2.0 && sy1 > hf * 2.0)
+            {
+                continue;
+            }
+            for step in 0..=steps {
+                if !is_sel && (step % 3 == 2) {
+                    continue;
+                }
+                let t = step as f32 / steps as f32;
+                let px = (sx0 + dx * t).round() as i32;
+                let py = (sy0 + dy * t).round() as i32;
+                if px < 0 || py < 0 || px >= w || py >= h {
+                    continue;
+                }
+                let depth = sz0 + (sz1 - sz0) * t;
+                if !(0.0..=1.0).contains(&depth) {
+                    continue;
+                }
+                let idx = py as usize * framebuffer.width as usize + px as usize;
+                if depth - 1e-4 < framebuffer.depth_buffer[idx] {
+                    let p = idx * 4;
+                    let inv = 1.0 - alpha;
+                    framebuffer.color_pixels[p] =
+                        (framebuffer.color_pixels[p] as f32 * inv + cr * alpha) as u8;
+                    framebuffer.color_pixels[p + 1] =
+                        (framebuffer.color_pixels[p + 1] as f32 * inv + cg * alpha) as u8;
+                    framebuffer.color_pixels[p + 2] =
+                        (framebuffer.color_pixels[p + 2] as f32 * inv + cb * alpha) as u8;
+                }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

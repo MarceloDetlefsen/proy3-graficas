@@ -179,6 +179,8 @@ fn render_scene_frame(
                 &uniforms,
                 threads,
             );
+            let scene_vp = uniforms.projection_matrix * uniforms.view_matrix;
+            crate::rasterizer::draw_orbit_lines(bodies, usize::MAX, &scene_vp, fb);
         }
         TriangleMode::Wireframe => {
             render_wireframe(&bufs.screen_triangles, fb, Shader::Rocky, &uniforms);
@@ -279,7 +281,7 @@ pub fn generate_docs_captures() {
             time_scale: 1.0, paused: false, surface_seed: 42,
             instances_drawn: 0, instances_total: 0, instance_culling: true,
             selected_summary: "Elegido [Tab]: Zebes · Tamaño [9/0]: 1.25", collision_body: None,
-            show_perf: true, show_help: false,
+            show_perf: true, show_help: false, show_hud: true, minimap: None,
         };
         hud::render_hud(&mut ov, &snap);
         compose_and_save(&fb, Some(&ov), &out_dir.join(fname));
@@ -324,6 +326,26 @@ pub fn generate_docs_captures() {
     std::fs::create_dir_all(&ui_dir).expect("No se pudo crear docs/captures/ui");
 
     let (tb, ta, _) = render_scene_frame(&bodies, &mut caches, &noise, &baked, &cam_zebes, time, threads, TriangleMode::FilledBarycentric, true, Some(4), true, 42, true, &mut fb, &mut bufs);
+    let minimap_bodies: Vec<hud::MinimapBody> = bodies
+        .iter()
+        .enumerate()
+        .map(|(i, b)| {
+            let p = body_position_at(b, time);
+            hud::MinimapBody {
+                x: p.x,
+                z: p.z,
+                orbit_radius: b.orbit_radius,
+                color: if b.orbit_radius <= 0.0 {
+                    raylib::prelude::Color::new(255, 205, 80, 255)
+                } else {
+                    raylib::prelude::Color::new(110, 210, 255, 255)
+                },
+                is_star: b.orbit_radius <= 0.0,
+                is_selected: i == 1,
+            }
+        })
+        .collect();
+    let minimap_max_r = bodies.iter().map(|b| b.orbit_radius).fold(10.0_f32, f32::max);
     let help_snap = HudSnapshot {
         title: "Sistema solar realista (9 objetos) · Tiempo: 4.5s (1.00x) · Cámara [F]: Seguir nave · Ayuda [H]",
         fps: 68.4, total_ms: 14.6, vertex_ms: 2.1, raster_ms: 1.4, shading_ms: 10.7, present_ms: 0.4,
@@ -334,7 +356,15 @@ pub fn generate_docs_captures() {
         time_scale: 1.0, paused: false, surface_seed: 42,
         instances_drawn: 180, instances_total: 253, instance_culling: true,
         selected_summary: "Elegido [Tab]: Zebes · Tamaño [9/0]: 1.25 · Contraste del relieve [4/5]: 1.00",
-        collision_body: None, show_perf: true, show_help: true,
+        collision_body: None, show_perf: true, show_help: true, show_hud: true,
+        minimap: Some(hud::MinimapSnapshot {
+            bodies: &minimap_bodies,
+            ship_x: zebes_pos.x - 2.4,
+            ship_z: zebes_pos.z + 1.8,
+            ship_dir_x: 0.6,
+            ship_dir_z: -0.8,
+            max_radius: minimap_max_r,
+        }),
     };
     hud::render_hud(&mut ov, &help_snap);
     compose_and_save(&fb, Some(&ov), &out_dir.join("ayuda_hud.png"));
@@ -532,6 +562,8 @@ pub fn generate_docs_captures() {
             threads,
             crate::scene_config::solar_halo_for_system(crate::app::SystemId::Favoritos),
         );
+        let fav_vp = fav_u.projection_matrix * fav_u.view_matrix;
+        crate::rasterizer::draw_orbit_lines(&fav_bodies, 0, &fav_vp, &mut fb);
         compose_and_save(&fb, None, &out_dir.join("sistema_favoritos.png"));
     }
 

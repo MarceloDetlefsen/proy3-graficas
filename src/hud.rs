@@ -277,11 +277,32 @@ pub const CONTROLS: &[ControlDoc] = &[
     ControlDoc { key: "Z / X / M", action: "Nivel de detalle · Descartar fuera de vista · Ver la malla (alambre)" },
     ControlDoc { key: "B / Y / /", action: "Relieve fino (normal map) · Ver relieve · Ocultar objetos lejanos" },
     ControlDoc { key: "F3 / R / T", action: "FPS (cuadros por segundo: mide la fluidez) · Calidad de imagen · Núcleos" },
+    ControlDoc { key: "F4", action: "Ocultar o mostrar la interfaz de medición" },
     ControlDoc { key: "C / K / P", action: "Ocultar caras traseras · Recalcular texturas de superficie · Guardar foto" },
     ControlDoc { key: "A / D / R", action: "En galería: cambiar objeto · Reiniciar vista" },
     ControlDoc { key: "Esc", action: "Volver al menú principal (en el menú: salir)" },
     ControlDoc { key: "H", action: "Mostrar u ocultar este panel de ayuda" },
 ];
+
+#[derive(Clone, Copy, Debug)]
+pub struct MinimapBody {
+    pub x: f32,
+    pub z: f32,
+    pub orbit_radius: f32,
+    pub color: Color,
+    pub is_star: bool,
+    pub is_selected: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct MinimapSnapshot<'a> {
+    pub bodies: &'a [MinimapBody],
+    pub ship_x: f32,
+    pub ship_z: f32,
+    pub ship_dir_x: f32,
+    pub ship_dir_z: f32,
+    pub max_radius: f32,
+}
 
 pub struct HudSnapshot<'a> {
     pub title: &'a str,
@@ -314,10 +335,102 @@ pub struct HudSnapshot<'a> {
     pub collision_body: Option<&'a str>,
     pub show_perf: bool,
     pub show_help: bool,
+    pub show_hud: bool,
+    pub minimap: Option<MinimapSnapshot<'a>>,
+}
+
+fn draw_overlay_line(overlay: &mut OverlayBuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: Color) {
+    let dx = (x1 - x0) as f32;
+    let dy = (y1 - y0) as f32;
+    let steps = dx.abs().max(dy.abs()).ceil() as i32;
+    if steps <= 0 {
+        overlay.blend_pixel(x0, y0, color);
+        return;
+    }
+    for s in 0..=steps {
+        let t = s as f32 / steps as f32;
+        overlay.blend_pixel((x0 as f32 + dx * t).round() as i32, (y0 as f32 + dy * t).round() as i32, color);
+    }
+}
+
+fn render_minimap(overlay: &mut OverlayBuffer, map: &MinimapSnapshot<'_>, top_y: i32) {
+    let size = 148_i32.min(overlay.width as i32 / 3).max(96);
+    let mx = overlay.width as i32 - size - 10;
+    let my = top_y;
+    overlay.fill_rect(mx, my, size, size, Color::new(6, 10, 18, 190));
+    overlay.stroke_rect(mx, my, size, size, Color::new(80, 130, 185, 225));
+
+    let cx = mx + size / 2;
+    let cy = my + size / 2;
+    let scale = (size as f32 * 0.43) / map.max_radius.max(1.0);
+    let inner_min_x = mx + 3;
+    let inner_max_x = mx + size - 4;
+    let inner_min_y = my + 3;
+    let inner_max_y = my + size - 4;
+
+    // Anillos de órbita tenues
+    let orbit_color = Color::new(85, 115, 150, 95);
+    for b in map.bodies {
+        if b.orbit_radius > 0.0 {
+            let r_px = b.orbit_radius * scale;
+            let segs = 48;
+            for i in 0..segs {
+                let a = std::f32::consts::TAU * (i as f32 / segs as f32);
+                let px = cx + (r_px * a.cos()).round() as i32;
+                let py = cy + (r_px * a.sin()).round() as i32;
+                if px >= inner_min_x && px <= inner_max_x && py >= inner_min_y && py <= inner_max_y {
+                    overlay.blend_pixel(px, py, orbit_color);
+                }
+            }
+        }
+    }
+
+    // Planetas y estrella
+    for b in map.bodies {
+        let px = (cx + (b.x * scale).round() as i32).clamp(inner_min_x, inner_max_x);
+        let py = (cy + (b.z * scale).round() as i32).clamp(inner_min_y, inner_max_y);
+        let r = if b.is_star { 3 } else { 2 };
+        overlay.fill_rect(px - r, py - r, r * 2 + 1, r * 2 + 1, b.color);
+        if b.is_selected {
+            overlay.stroke_rect(px - r - 2, py - r - 2, r * 2 + 5, r * 2 + 5, Color::new(130, 225, 255, 240));
+        }
+    }
+
+    // Nave (flecha direccional brillante)
+    let sx = (cx + (map.ship_x * scale).round() as i32).clamp(inner_min_x + 2, inner_max_x - 2);
+    let sy = (cy + (map.ship_z * scale).round() as i32).clamp(inner_min_y + 2, inner_max_y - 2);
+    let len = (map.ship_dir_x * map.ship_dir_x + map.ship_dir_z * map.ship_dir_z).sqrt();
+    let (fx, fz) = if len > 1e-4 {
+        (map.ship_dir_x / len, map.ship_dir_z / len)
+    } else {
+        (0.0, -1.0)
+    };
+    let rx = -fz;
+    let rz = fx;
+    let tip_x = sx + (fx * 6.0).round() as i32;
+    let tip_y = sy + (fz * 6.0).round() as i32;
+    let left_x = sx + (-fx * 4.0 + rx * 3.5).round() as i32;
+    let left_y = sy + (-fz * 4.0 + rz * 3.5).round() as i32;
+    let right_x = sx + (-fx * 4.0 - rx * 3.5).round() as i32;
+    let right_y = sy + (-fz * 4.0 - rz * 3.5).round() as i32;
+    let ship_col = Color::new(255, 255, 255, 255);
+    draw_overlay_line(overlay, tip_x, tip_y, left_x, left_y, ship_col);
+    draw_overlay_line(overlay, tip_x, tip_y, right_x, right_y, ship_col);
+    draw_overlay_line(overlay, left_x, left_y, right_x, right_y, Color::new(130, 235, 255, 245));
+    overlay.fill_rect(sx - 1, sy - 1, 3, 3, Color::new(130, 235, 255, 255));
 }
 
 pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
     overlay.clear();
+
+    if let Some(ref map) = hud.minimap {
+        let map_y = if hud.show_hud { 38 } else { 10 };
+        render_minimap(overlay, map, map_y);
+    }
+
+    if !hud.show_hud {
+        return;
+    }
 
     // Barra superior de título.
     let bar_w = (overlay.width as i32 - 20).max(100);
@@ -403,7 +516,12 @@ pub fn render_hud(overlay: &mut OverlayBuffer, hud: &HudSnapshot<'_>) {
         ));
     }
 
-    let box_w = (overlay.width as i32 - 20).min(760);
+    let max_box_w = if hud.minimap.is_some() {
+        (overlay.width as i32 - 180).max(260)
+    } else {
+        (overlay.width as i32 - 20).min(760)
+    };
+    let box_w = max_box_w;
     let mut lines: Vec<(String, Color)> = Vec::new();
     for (text, color) in all_raw {
         for wrapped in wrap_text(&text, box_w - 16, 1) {
@@ -1023,6 +1141,8 @@ mod tests {
             collision_body: Some("Sol de los Phoenix Suns"),
             show_perf: true,
             show_help: true,
+            show_hud: true,
+            minimap: None,
         };
         render_hud(&mut ov, &extreme_hud);
         let hud_box_w = (w - 20).min(760);

@@ -10,9 +10,9 @@ use raylib::prelude::Vector3;
 use crate::math::{Mat4, Vec4};
 
 pub const SPACE_BG: Vector3 = Vector3 {
-    x: 0.015,
+    x: 0.014,
     y: 0.020,
-    z: 0.045,
+    z: 0.036,
 };
 
 #[inline]
@@ -28,6 +28,48 @@ fn hash_cell(ix: i32, iy: i32, iz: i32, seed: u32) -> u32 {
 #[inline]
 fn hash_to_f32(h: u32) -> f32 {
     (h & 0x00FF_FFFF) as f32 / 16_777_215.0
+}
+
+#[inline]
+fn value_noise_3d(p: Vector3, seed: u32) -> f32 {
+    let ix = p.x.floor() as i32;
+    let iy = p.y.floor() as i32;
+    let iz = p.z.floor() as i32;
+    let fx = p.x - ix as f32;
+    let fy = p.y - iy as f32;
+    let fz = p.z - iz as f32;
+    let ux = fx * fx * (3.0 - 2.0 * fx);
+    let uy = fy * fy * (3.0 - 2.0 * fy);
+    let uz = fz * fz * (3.0 - 2.0 * fz);
+
+    let c000 = hash_to_f32(hash_cell(ix, iy, iz, seed));
+    let c100 = hash_to_f32(hash_cell(ix + 1, iy, iz, seed));
+    let c010 = hash_to_f32(hash_cell(ix, iy + 1, iz, seed));
+    let c110 = hash_to_f32(hash_cell(ix + 1, iy + 1, iz, seed));
+    let c001 = hash_to_f32(hash_cell(ix, iy, iz + 1, seed));
+    let c101 = hash_to_f32(hash_cell(ix + 1, iy, iz + 1, seed));
+    let c011 = hash_to_f32(hash_cell(ix, iy + 1, iz + 1, seed));
+    let c111 = hash_to_f32(hash_cell(ix + 1, iy + 1, iz + 1, seed));
+
+    let x00 = c000 + (c100 - c000) * ux;
+    let x10 = c010 + (c110 - c010) * ux;
+    let x01 = c001 + (c101 - c001) * ux;
+    let x11 = c011 + (c111 - c011) * ux;
+    let y0 = x00 + (x10 - x00) * uy;
+    let y1 = x01 + (x11 - x01) * uy;
+    y0 + (y1 - y0) * uz
+}
+
+#[inline]
+fn fbm3(mut p: Vector3, seed: u32) -> f32 {
+    let mut sum = 0.0_f32;
+    let mut amp = 0.55_f32;
+    for oct in 0..3 {
+        sum += amp * value_noise_3d(p, seed.wrapping_add(oct * 97));
+        p *= 2.07;
+        amp *= 0.48;
+    }
+    sum
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -123,19 +165,53 @@ pub fn star_twinkle(hash: u32, time: f32) -> f32 {
     0.78 + 0.22 * (time * speed + phase).sin()
 }
 
-/// Evalúa el color final del fondo estelar en `dir` con temperatura y parpadeo.
+/// Evalúa el color final del fondo espacial en `dir`: nebulosa volumétrica cálida/fría,
+/// franja galáctica, filamentos oscuros de polvo y múltiples capas de estrellas.
 pub fn sample_sky(dir: Vector3, seed: u32, time: f32) -> Vector3 {
+    let d = dir.normalize();
+
+    // Plano galáctico inclinado para concentrar las nubes interestelares.
+    let band_n = Vector3::new(0.28, 0.88, -0.38).normalize();
+    let band_dist = d.dot(band_n).abs();
+    let galactic_band = (-band_dist * band_dist * 5.2).exp();
+
+    // Domain warp 3D rápido para nubes orgánicas de polvo y gas.
+    let wx = fbm3(d * 1.9 + Vector3::new(1.7, 3.1, -2.3), seed.wrapping_add(101));
+    let wy = fbm3(d * 1.9 + Vector3::new(-4.2, 0.8, 2.9), seed.wrapping_add(211));
+    let wz = fbm3(d * 1.9 + Vector3::new(2.5, -3.7, 1.1), seed.wrapping_add(307));
+    let warp = Vector3::new(wx - 0.5, wy - 0.5, wz - 0.5) * 1.35;
+
+    let n_warm = fbm3(d * 2.4 + warp, seed.wrapping_add(401));
+    let n_cool = fbm3(d * 2.8 - warp * 0.85, seed.wrapping_add(503));
+    let n_dust = fbm3(d * 5.2 + warp * 1.4, seed.wrapping_add(607));
+
+    let warm_mask = ((n_warm - 0.34) * 2.1).clamp(0.0, 1.0).powf(1.5) * (0.35 + 0.65 * galactic_band);
+    let cool_mask = ((n_cool - 0.36) * 2.0).clamp(0.0, 1.0).powf(1.6) * (0.40 + 0.60 * galactic_band);
+    let dust_lane = ((n_dust - 0.46) * 2.6).clamp(0.0, 0.78);
+
+    let warm_col = Vector3::new(0.56, 0.23, 0.07);
+    let amber_core = Vector3::new(0.78, 0.38, 0.14);
+    let cool_col = Vector3::new(0.07, 0.21, 0.34);
+    let cyan_glow = Vector3::new(0.14, 0.34, 0.48);
+
     let mut color = SPACE_BG;
+    color += Vector3::new(0.025, 0.035, 0.055) * galactic_band;
+    color += warm_col * (warm_mask * 0.62) + amber_core * (warm_mask * warm_mask * 0.42);
+    color += cool_col * (cool_mask * 0.65) + cyan_glow * (cool_mask * cool_mask * 0.35);
+    color *= 1.0 - dust_lane * 0.72;
+
+    let star_atten = 1.0 - dust_lane * 0.55;
     for (layer_seed, grid, density, radius, gain) in [
-        (seed, 110.0, 0.045, 0.22, 0.75),
-        (seed.wrapping_add(17), 55.0, 0.025, 0.20, 1.25),
+        (seed, 135.0, 0.060, 0.24, 0.68),
+        (seed.wrapping_add(17), 72.0, 0.032, 0.22, 1.10),
+        (seed.wrapping_add(53), 34.0, 0.016, 0.26, 1.55),
     ] {
-        let star = star_layer_sample(dir, layer_seed, grid, density, radius);
+        let star = star_layer_sample(d, layer_seed, grid, density, radius);
         if star.intensity > 0.0 {
             let temp = hash_to_f32(star.hash ^ (star.hash >> 5));
             let tint = star_temperature_color(temp);
             let twinkle = star_twinkle(star.hash, time);
-            color += tint * (star.intensity * gain * twinkle);
+            color += tint * (star.intensity * gain * twinkle * star_atten);
         }
     }
     Vector3::new(
