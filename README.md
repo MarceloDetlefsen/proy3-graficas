@@ -119,9 +119,7 @@ Al iniciar el simulador se abre el menú principal sobre el sistema solar animad
 |:---:|:---:|:---:|:---:|
 | ![Menú principal](docs/captures/ui/menu.png) | ![Menú controles](docs/captures/ui/menu_controles.png) | ![Galería](docs/captures/ui/galeria_casco_samus.png) | ![HUD ayuda](docs/captures/ui/hud_ayuda.png) |
 
-## Sistema de favoritos (13 cuerpos)
-
-![Sistema de favoritos](docs/captures/sistema_favoritos.png)
+## Cuerpos del sistema solar (13)
 
 | | | |
 |:---:|:---:|:---:|
@@ -165,7 +163,9 @@ Integra movimiento 6-DOF y gravedad a paso fijo (`FIXED_DT`) independiente del F
 Orquesta los 9 cuerpos celestes con configuración centralizada (escalado de órbitas para un recorrido de ~1 min, atenuación solar con ambiente mínimo, halo solar en píxeles vacíos y brillo atmosférico Fresnel por planeta) y parámetro en vivo por shader.
 - **Variable en código**: `ORBIT_DISTANCE_SCALE = 0.65`, `ORBIT_SPEED_SCALE = 1.15`, `MIN_AMBIENT = 0.14`, `SOLAR_ATTENUATION_K = 0.00055` (`src/scene_config.rs`) y `live_param` (`src/shaders.rs`, teclas `4`/`5`).
 
-![Sistema completo](docs/captures/sistema_completo.png)
+| Sistema solar completo | Sistema de favoritos |
+|:---:|:---:|
+| ![Sistema completo](docs/captures/sistema_completo.png) | ![Sistema de favoritos](docs/captures/sistema_favoritos.png) |
 
 ### Relieve y normales
 Genera icosferas procedurales (`0..=5`) deformadas por la misma función `height_at` del horneado, selecciona el nivel LOD según el radio proyectado en pantalla con histéresis y perturba las normales en espacio tangente en `Zebes`.
@@ -314,11 +314,6 @@ proy3-graficas/
 - `raylib = "6.0.0"` (con `SUPPORT_IMAGE_GENERATION`): ventana, lectura de teclado/ratón, carga/actualización de textura y exportación de PNG.
 - Biblioteca estándar de Rust (`std::thread::scope`): paralelismo por bandas/tiles sin dependencias externas.
 
-## Uso de IA y recursos externos
-
-- **Asistencia de IA**: <<COMPLETAR: herramientas de IA usadas>>. El autor revisó, probó y puede explicar el código entregado.
-- **Recursos externos**: `raylib` (ventana, entrada y presentación), Blender (generación de niveles de detalle de la nave `assets/ship_lod{0,1,2}.obj`), laboratorios 4 y 6 del curso como base del rasterizador y shaders, imágenes de referencia usadas únicamente de forma local para medir siluetas y colores, y las herramientas propias de trazado y medición en `tools/`.
-- Los logotipos, escudos, personajes, consolas y marcas comerciales representados en la galería y el sistema de favoritos (Phoenix Suns, Tottenham Hotspur, Apple AirPods, Nintendo Switch Joy-Con, Rubik, The Legend of Zelda, Final Fantasy VII, Wilson, Metroid y Boca Juniors) pertenecen a sus respectivos dueños y se utilizan únicamente con fines académicos y de demostración gráfica.
 
 ## Autor
 
